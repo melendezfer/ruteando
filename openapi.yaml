@@ -148,8 +148,71 @@ paths:
     post:
       tags: [Autenticación]
       summary: Invalidar el refresh token actual
+      # NOTA (Épica 1, CLAUDE.md): esta ruta no tenía requestBody en la
+      # especificación original — sin el refreshToken no hay forma de saber
+      # cuál token revocar. Se agrega aquí junto con su definición OpenAPI,
+      # mismo patrón que RF-025 en la Épica 2. Ver CLAUDE.md, sección 10.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
       responses:
         "204": { description: Sesión cerrada }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/forgot-password:
+    post:
+      tags: [Autenticación]
+      summary: Solicitar recuperación de contraseña (RF-003)
+      # NOTA (Épica 1, CLAUDE.md): RF-003 no tenía ruta en la especificación
+      # original. Se agrega aquí junto con su definición OpenAPI, mismo
+      # patrón que RF-025 en la Épica 2. Ver CLAUDE.md, sección 10.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202":
+          description: >
+            Si el correo está registrado, se envía un enlace de recuperación
+            de un solo uso con expiración corta. Respuesta idéntica exista o
+            no la cuenta, para no permitir enumeración de usuarios.
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /auth/reset-password:
+    post:
+      tags: [Autenticación]
+      summary: Completar la recuperación de contraseña con el token recibido (RF-003)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        "204": { description: Contraseña actualizada; todas las sesiones existentes quedan revocadas }
+        "401":
+          description: Token de recuperación inválido, expirado o ya usado
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetails" }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
   /users/me:
     get:

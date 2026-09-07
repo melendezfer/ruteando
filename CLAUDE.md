@@ -348,6 +348,19 @@ alguien tiene que cerrar durante la implementación:
   corresponda, ver sección 6): endpoint para suspender un usuario,
   endpoint para reportar negocio desactualizado, endpoint de exportación de
   reportes.
+- Épica 1: `POST /auth/logout` no tenía `requestBody` en `openapi.yaml`
+  pese a que su propósito es "invalidar el refresh token actual" — sin el
+  token en el body no hay forma de saber cuál revocar. Se le agregó
+  `{refreshToken}` al body (ahora revoca solo ese token, no todos los del
+  usuario).
+- Épica 1: RF-003 (recuperación de contraseña) no tenía rutas en
+  `openapi.yaml` ni estaba en la lista de rutas de la Épica 1. Se agregaron
+  `POST /auth/forgot-password` y `POST /auth/reset-password`. Como todavía
+  no hay proveedor de correo elegido (no está en la tabla de variables del
+  Documento 14), el envío real de email queda pendiente: por ahora el
+  enlace/token se registra en el log estructurado (pino) en vez de
+  enviarse — ver comentario `TODO` en `src/services/passwordReset.service.js`
+  cuando se implemente.
 - El plan de pruebas no incluye pruebas de carga/estrés — agregarlas para
   la Épica 4 como mínimo.
 - El trabajo de campo con vendedores y consumidores reales de Ciudad Verde

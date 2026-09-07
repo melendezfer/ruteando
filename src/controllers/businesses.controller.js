@@ -47,6 +47,7 @@ async function reportOutdated(req, res) {
   const report = await reporteNegocioService.crear({
     negocioId: req.params.businessId,
     usuarioId: req.user?.id,
+    ip: req.ip,
     reason: req.body.reason,
   });
   res.status(201).json(report);

@@ -454,7 +454,43 @@ paths:
               items: { $ref: "#/components/schemas/ScheduleDay" }
       responses:
         "200": { description: Horario actualizado }
-  
+
+  /businesses/{businessId}/outdated-reports:
+    post:
+      tags: [Negocios]
+      summary: Reportar información desactualizada de un negocio (RF-025)
+      # NOTA (Épica 2, CLAUDE.md): RF-025 no tenía ruta ni tabla en la
+      # especificación original. Se agrega aquí junto con su definición
+      # OpenAPI, mismo patrón que RF-003 en la Épica 1. Ver CLAUDE.md,
+      # sección 10. "Cualquier usuario" (no solo autenticado) puede
+      # reportar — security: [] a nivel de spec, pero si el cliente manda
+      # un Bearer token válido, el reporte queda asociado a ese usuario.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/BusinessId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "201":
+          description: Reporte registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  businessId: { type: string, format: uuid }
+                  reason: { type: string }
+                  createdAt: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
   /businesses/{businessId}/products:
     post:

@@ -361,6 +361,17 @@ alguien tiene que cerrar durante la implementación:
   enlace/token se registra en el log estructurado (pino) en vez de
   enviarse — ver comentario `TODO` en `src/services/passwordReset.service.js`
   cuando se implemente.
+- Épica 2: la prosa de la sección 6 dice "PATCH /businesses/{businessId}/location"
+  y "POST /businesses/{businessId}/schedule", pero `openapi.yaml` define
+  ambos como `PUT` (con su `GET` correspondiente para leer el valor
+  vigente). Se implementó el contrato real (`PUT`), no la prosa — si en
+  algún momento se vuelve a citar esta sección, corregir la cita.
+- Épica 2: RF-025 (reportar negocio con información desactualizada) no
+  tenía ruta ni tabla en la especificación original. Se agregó
+  `POST /businesses/{businessId}/outdated-reports` (público; si el
+  cliente manda un Bearer token válido, el reporte queda asociado a ese
+  usuario) y la tabla `reportes_negocio`, con `atendido_en` nullable para
+  que la Épica 9 pueda marcarlo atendido sin otra migración.
 - El plan de pruebas no incluye pruebas de carga/estrés — agregarlas para
   la Épica 4 como mínimo.
 - El trabajo de campo con vendedores y consumidores reales de Ciudad Verde

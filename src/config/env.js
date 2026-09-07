@@ -6,24 +6,36 @@ require('dotenv').config({
   quiet: true,
 });
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+// Nombres y significado exactos: Documento 14, sección 1.4.
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+    PORT: z.coerce.number().int().positive().default(3000),
 
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatorio'),
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatorio'),
 
-  JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET debe tener al menos 16 caracteres'),
-  JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
-  JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET debe tener al menos 16 caracteres'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
+    JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET debe tener al menos 16 caracteres'),
+    JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET debe tener al menos 16 caracteres'),
 
-  S3_ENDPOINT: z.string().optional(),
-  S3_REGION: z.string().optional(),
-  S3_BUCKET: z.string().optional(),
-  S3_ACCESS_KEY_ID: z.string().optional(),
-  S3_SECRET_ACCESS_KEY: z.string().optional(),
-});
+    STORAGE_ENDPOINT: z.string().min(1, 'STORAGE_ENDPOINT es obligatorio'),
+    STORAGE_BUCKET: z.string().min(1, 'STORAGE_BUCKET es obligatorio'),
+    STORAGE_ACCESS_KEY: z.string().min(1, 'STORAGE_ACCESS_KEY es obligatorio'),
+    STORAGE_SECRET_KEY: z.string().min(1, 'STORAGE_SECRET_KEY es obligatorio'),
+
+    SENTRY_DSN: z.string().optional(),
+
+    CORS_ORIGIN: z.string().min(1, 'CORS_ORIGIN es obligatorio'),
+
+    RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
+  })
+  .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
+    message: 'JWT_REFRESH_SECRET debe ser distinto de JWT_ACCESS_SECRET',
+    path: ['JWT_REFRESH_SECRET'],
+  })
+  .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.SENTRY_DSN), {
+    message: 'SENTRY_DSN es obligatorio en production (registro de errores centralizado)',
+    path: ['SENTRY_DSN'],
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

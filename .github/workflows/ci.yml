@@ -26,13 +26,15 @@ jobs:
           --health-retries 5
 
     env:
-      NODE_ENV: test
+      NODE_ENV: development
       DATABASE_URL: postgres://ruteando:ci_password@localhost:5432/ruteando_test
       JWT_ACCESS_SECRET: ci-only-access-secret-not-for-real-use
-      JWT_ACCESS_EXPIRES_IN: 15m
-      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-real-use
-      JWT_REFRESH_EXPIRES_IN: 30d
-      LOG_LEVEL: silent
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-real-use-distinct
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_BUCKET: ruteando-media-ci
+      STORAGE_ACCESS_KEY: ci-placeholder
+      STORAGE_SECRET_KEY: ci-placeholder
+      CORS_ORIGIN: http://localhost:5173
 
     steps:
       - uses: actions/checkout@v4

@@ -361,6 +361,39 @@ alguien tiene que cerrar durante la implementación:
   enlace/token se registra en el log estructurado (pino) en vez de
   enviarse — ver comentario `TODO` en `src/services/passwordReset.service.js`
   cuando se implemente.
+- Épica 2: la prosa de la sección 6 dice "PATCH /businesses/{businessId}/location"
+  y "POST /businesses/{businessId}/schedule", pero `openapi.yaml` define
+  ambos como `PUT` (con su `GET` correspondiente para leer el valor
+  vigente). Se implementó el contrato real (`PUT`), no la prosa — si en
+  algún momento se vuelve a citar esta sección, corregir la cita.
+- Épica 2: RF-025 (reportar negocio con información desactualizada) no
+  tenía ruta ni tabla en la especificación original. Se agregó
+  `POST /businesses/{businessId}/outdated-reports` (público; si el
+  cliente manda un Bearer token válido, el reporte queda asociado a ese
+  usuario) y la tabla `reportes_negocio`, con `atendido_en` nullable para
+  que la Épica 9 pueda marcarlo atendido sin otra migración. Además, es
+  público sin límite de abuso por defecto — se agregó un límite de 3
+  reportes por negocio + origen (usuario autenticado, o IP si es anónimo)
+  cada 10 minutos (`OUTDATED_REPORT_RATE_LIMIT_MAX`/`_WINDOW_MINUTES` en
+  `src/config/constants.js`), respaldado en base de datos (columna
+  `ip_origen` en `reportes_negocio`, mismo tipo que `consentimientos`) en
+  vez de un limitador en memoria, para que sobreviva reinicios y funcione
+  igual con más de una instancia corriendo. Requirió `app.set('trust
+  proxy', 1)` en `src/app.js` para que `req.ip` sea la IP real del
+  cliente detrás del proxy de Render/Railway.
+- Hallazgo preexistente en `openapi.yaml` (ya estaba en el primer commit,
+  `6f7debc`, antes de la Épica 1): el archivo tenía **dos claves
+  `components:` de nivel superior** (una con `securitySchemes`,
+  `parameters` y `responses`; otra, más abajo, solo con `schemas`). YAML
+  no fusiona claves duplicadas — la segunda pisaba completamente a la
+  primera, así que **todos** los `$ref` a `#/components/parameters/*` y
+  `#/components/responses/*`, y el propio `security: [bearerAuth: []]`
+  global, apuntaban a algo que un parser estricto no encontraría. Se
+  fusionaron ambos bloques en una sola clave `components:` (sección 6,
+  Épica 2) y se verificó programáticamente que los 30 `$ref` del
+  documento resuelven. Si algún PR anterior citó rutas/parámetros de
+  `openapi.yaml` asumiendo que esto ya funcionaba, no fue así hasta este
+  fix.
 - El plan de pruebas no incluye pruebas de carga/estrés — agregarlas para
   la Épica 4 como mínimo.
 - El trabajo de campo con vendedores y consumidores reales de Ciudad Verde

@@ -35,6 +35,13 @@ class ConflictError extends ProblemDetailsError {
   }
 }
 
+class TooManyRequestsError extends ProblemDetailsError {
+  constructor(detail = 'Demasiadas solicitudes, intente de nuevo más tarde') {
+    super({ status: 429, title: 'Límite de solicitudes excedido', detail });
+    this.name = 'TooManyRequestsError';
+  }
+}
+
 module.exports = {
   ProblemDetailsError,
   ValidationError,
@@ -42,4 +49,5 @@ module.exports = {
   ForbiddenError,
   NotFoundError,
   ConflictError,
+  TooManyRequestsError,
 };

@@ -70,6 +70,216 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/ProblemDetails" }
+    TooManyRequests:
+      description: Límite de solicitudes excedido
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        role: { type: string, enum: [consumer, vendor, administrator] }
+        profilePhotoUrl: { type: string, format: uri, nullable: true }
+        createdAt: { type: string, format: date-time }
+        active: { type: boolean }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        icon: { type: string, nullable: true }
+        displayOrder: { type: integer }
+
+    Business:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ownerId: { type: string, format: uuid }
+        categoryId: { type: integer }
+        name: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [pending, active, suspended, closed] }
+        contactPhone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BusinessInput:
+      type: object
+      required: [name, categoryId]
+      properties:
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        categoryId: { type: integer }
+        contactPhone: { type: string }
+
+    Location:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
+        referenceAddress: { type: string, nullable: true }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        isCurrent: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    LocationInput:
+      type: object
+      required: [type, latitude, longitude]
+      properties:
+        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
+        referenceAddress: { type: string }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+
+    ScheduleDay:
+      type: object
+      required: [day]
+      properties:
+        day: { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+        openTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
+        closeTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
+        closed: { type: boolean, default: false }
+  
+
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        categoryId: { type: integer, nullable: true }
+        name: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        price: { type: number, format: double, minimum: 0 }
+        available: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ProductInput:
+      type: object
+      required: [name, price]
+      properties:
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        categoryId: { type: integer }
+        available: { type: boolean, default: true }
+
+    Photo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid, nullable: true }
+        productId: { type: string, format: uuid, nullable: true }
+        type: { type: string, enum: [business, product] }
+        url: { type: string, format: uri }
+        displayOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        moderationStatus: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string, format: date-time }
+
+    ReviewInput:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 1000 }
+
+    Promotion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        title: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        active: { type: boolean }
+
+    PromotionInput:
+      type: object
+      required: [title, startDate, endDate]
+      properties:
+        title: { type: string, maxLength: 150 }
+        description: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+
+    EventInput:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [search, business_view, product_view, contact_click, favorite_added, review_created, business_registered]
+        businessId: { type: string, format: uuid, nullable: true }
+        metadata: { type: object, additionalProperties: true }
+
+    ConsentInput:
+      type: object
+      required: [type, textVersion]
+      properties:
+        type:
+          type: string
+          enum: [data_processing, terms_conditions, assisted_registration, notifications]
+        businessId: { type: string, format: uuid, nullable: true }
+        textVersion: { type: string }
+        grantedByThirdParty: { type: boolean, default: false }
+
+    Consent:
+      allOf:
+        - { $ref: "#/components/schemas/ConsentInput" }
+        - type: object
+          properties:
+            id: { type: integer }
+            userId: { type: string, format: uuid, nullable: true }
+            grantedAt: { type: string, format: date-time }
+
+    AuthTokens:
+      type: object
+      properties:
+        accessToken: { type: string, description: "JWT, vigente 15 minutos" }
+        refreshToken: { type: string, description: "Vigente 30 días, un solo uso" }
+        tokenType: { type: string, default: Bearer }
+        user: { $ref: "#/components/schemas/User" }
+
+    Pagination:
+      type: object
+      properties:
+        nextCursor: { type: string, nullable: true }
+        hasMore: { type: boolean }
+
+    ProblemDetails:
+      type: object
+      description: "RFC 9457 — Problem Details for HTTP APIs"
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
   
 
 paths:
@@ -454,7 +664,44 @@ paths:
               items: { $ref: "#/components/schemas/ScheduleDay" }
       responses:
         "200": { description: Horario actualizado }
-  
+
+  /businesses/{businessId}/outdated-reports:
+    post:
+      tags: [Negocios]
+      summary: Reportar información desactualizada de un negocio (RF-025)
+      # NOTA (Épica 2, CLAUDE.md): RF-025 no tenía ruta ni tabla en la
+      # especificación original. Se agrega aquí junto con su definición
+      # OpenAPI, mismo patrón que RF-003 en la Épica 1. Ver CLAUDE.md,
+      # sección 10. "Cualquier usuario" (no solo autenticado) puede
+      # reportar — security: [] a nivel de spec, pero si el cliente manda
+      # un Bearer token válido, el reporte queda asociado a ese usuario.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/BusinessId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "201":
+          description: Reporte registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  businessId: { type: string, format: uuid }
+                  reason: { type: string }
+                  createdAt: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /businesses/{businessId}/products:
     post:
@@ -813,210 +1060,3 @@ paths:
               schema: { $ref: "#/components/schemas/Business" }
   
 
-components:
-  schemas:
-    User:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        fullName: { type: string }
-        email: { type: string, format: email }
-        phone: { type: string, nullable: true }
-        role: { type: string, enum: [consumer, vendor, administrator] }
-        profilePhotoUrl: { type: string, format: uri, nullable: true }
-        createdAt: { type: string, format: date-time }
-        active: { type: boolean }
-
-    Category:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        icon: { type: string, nullable: true }
-        displayOrder: { type: integer }
-
-    Business:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        ownerId: { type: string, format: uuid }
-        categoryId: { type: integer }
-        name: { type: string, maxLength: 150 }
-        description: { type: string, nullable: true }
-        status: { type: string, enum: [pending, active, suspended, closed] }
-        contactPhone: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-
-    BusinessInput:
-      type: object
-      required: [name, categoryId]
-      properties:
-        name: { type: string, maxLength: 150 }
-        description: { type: string }
-        categoryId: { type: integer }
-        contactPhone: { type: string }
-
-    Location:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        businessId: { type: string, format: uuid }
-        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
-        referenceAddress: { type: string, nullable: true }
-        latitude: { type: number, format: double }
-        longitude: { type: number, format: double }
-        isCurrent: { type: boolean }
-        createdAt: { type: string, format: date-time }
-
-    LocationInput:
-      type: object
-      required: [type, latitude, longitude]
-      properties:
-        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
-        referenceAddress: { type: string }
-        latitude: { type: number, format: double }
-        longitude: { type: number, format: double }
-
-    ScheduleDay:
-      type: object
-      required: [day]
-      properties:
-        day: { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
-        openTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
-        closeTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
-        closed: { type: boolean, default: false }
-  
-
-    Product:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        businessId: { type: string, format: uuid }
-        categoryId: { type: integer, nullable: true }
-        name: { type: string, maxLength: 150 }
-        description: { type: string, nullable: true }
-        price: { type: number, format: double, minimum: 0 }
-        available: { type: boolean }
-        createdAt: { type: string, format: date-time }
-
-    ProductInput:
-      type: object
-      required: [name, price]
-      properties:
-        name: { type: string, maxLength: 150 }
-        description: { type: string }
-        price: { type: number, minimum: 0 }
-        categoryId: { type: integer }
-        available: { type: boolean, default: true }
-
-    Photo:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        businessId: { type: string, format: uuid, nullable: true }
-        productId: { type: string, format: uuid, nullable: true }
-        type: { type: string, enum: [business, product] }
-        url: { type: string, format: uri }
-        displayOrder: { type: integer }
-        createdAt: { type: string, format: date-time }
-
-    Review:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        businessId: { type: string, format: uuid }
-        userId: { type: string, format: uuid }
-        rating: { type: integer, minimum: 1, maximum: 5 }
-        comment: { type: string, nullable: true }
-        moderationStatus: { type: string, enum: [pending, approved, rejected] }
-        createdAt: { type: string, format: date-time }
-
-    ReviewInput:
-      type: object
-      required: [rating]
-      properties:
-        rating: { type: integer, minimum: 1, maximum: 5 }
-        comment: { type: string, maxLength: 1000 }
-
-    Promotion:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        businessId: { type: string, format: uuid }
-        title: { type: string, maxLength: 150 }
-        description: { type: string, nullable: true }
-        startDate: { type: string, format: date-time }
-        endDate: { type: string, format: date-time }
-        active: { type: boolean }
-
-    PromotionInput:
-      type: object
-      required: [title, startDate, endDate]
-      properties:
-        title: { type: string, maxLength: 150 }
-        description: { type: string }
-        startDate: { type: string, format: date-time }
-        endDate: { type: string, format: date-time }
-
-    EventInput:
-      type: object
-      required: [type]
-      properties:
-        type:
-          type: string
-          enum: [search, business_view, product_view, contact_click, favorite_added, review_created, business_registered]
-        businessId: { type: string, format: uuid, nullable: true }
-        metadata: { type: object, additionalProperties: true }
-
-    ConsentInput:
-      type: object
-      required: [type, textVersion]
-      properties:
-        type:
-          type: string
-          enum: [data_processing, terms_conditions, assisted_registration, notifications]
-        businessId: { type: string, format: uuid, nullable: true }
-        textVersion: { type: string }
-        grantedByThirdParty: { type: boolean, default: false }
-
-    Consent:
-      allOf:
-        - { $ref: "#/components/schemas/ConsentInput" }
-        - type: object
-          properties:
-            id: { type: integer }
-            userId: { type: string, format: uuid, nullable: true }
-            grantedAt: { type: string, format: date-time }
-
-    AuthTokens:
-      type: object
-      properties:
-        accessToken: { type: string, description: "JWT, vigente 15 minutos" }
-        refreshToken: { type: string, description: "Vigente 30 días, un solo uso" }
-        tokenType: { type: string, default: Bearer }
-        user: { $ref: "#/components/schemas/User" }
-
-    Pagination:
-      type: object
-      properties:
-        nextCursor: { type: string, nullable: true }
-        hasMore: { type: boolean }
-
-    ProblemDetails:
-      type: object
-      description: "RFC 9457 — Problem Details for HTTP APIs"
-      properties:
-        type: { type: string, format: uri }
-        title: { type: string }
-        status: { type: integer }
-        detail: { type: string }
-        instance: { type: string }
-        errors:
-          type: array
-          items:
-            type: object
-            properties:
-              field: { type: string }
-              message: { type: string }
-  

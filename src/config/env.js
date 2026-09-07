@@ -3,6 +3,7 @@ const { z } = require('zod');
 
 require('dotenv').config({
   path: path.resolve(process.cwd(), `.env.${process.env.NODE_ENV || 'development'}`),
+  quiet: true,
 });
 
 const envSchema = z.object({

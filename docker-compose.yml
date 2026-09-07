@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_DB: ruteando_dev
+      POSTGRES_USER: ruteando
+      POSTGRES_PASSWORD: dev_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql
+volumes:
+  db_data:

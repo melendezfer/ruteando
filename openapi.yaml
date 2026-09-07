@@ -1,0 +1,959 @@
+
+openapi: 3.1.0
+info:
+  title: API RUTEANDO — Plataforma de Geolocalización Gastronómica de Ciudad Verde
+  version: "1.0.0"
+  description: >
+    API REST para el descubrimiento de vendedores gastronómicos
+    informales en Ciudad Verde, Soacha. Ver Documento 07 (modelo
+    de datos) y Documento 05 (requisitos funcionales).
+servers:
+  - url: https://api.ciudadverdegastronomica.co/v1
+    description: Producción
+  - url: https://api-staging.ciudadverdegastronomica.co/v1
+    description: Staging
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    BusinessId:
+      name: businessId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReviewId:
+      name: reviewId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      description: Token opaco devuelto por la página anterior
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+
+  responses:
+    ValidationError:
+      description: Error de validación (RFC 9457)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    Unauthorized:
+      description: Token de acceso faltante o inválido
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    Forbidden:
+      description: Rol o propiedad del recurso insuficiente
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetails" }
+  
+
+paths:
+  /auth/register:
+    post:
+      tags: [Autenticación]
+      summary: Registrar una cuenta nueva
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, email, password, role]
+              properties:
+                fullName: { type: string, maxLength: 150 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                role: { type: string, enum: [consumer, vendor] }
+      responses:
+        "201":
+          description: Cuenta creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "409": { description: El correo ya está registrado }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/refresh:
+    post:
+      tags: [Autenticación]
+      summary: Renovar el token de acceso
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: Tokens renovados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Invalidar el refresh token actual
+      responses:
+        "204": { description: Sesión cerrada }
+
+  /users/me:
+    get:
+      tags: [Usuarios]
+      summary: Obtener el perfil propio
+      responses:
+        "200":
+          description: Perfil del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [Usuarios]
+      summary: Editar el perfil propio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName: { type: string }
+                phone: { type: string }
+                profilePhotoUrl: { type: string, format: uri }
+      responses:
+        "200":
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Usuarios]
+      summary: Eliminar la cuenta propia
+      responses:
+        "204": { description: Cuenta eliminada }
+
+  /users/me/favorites:
+    get:
+      tags: [Usuarios]
+      summary: Listar negocios favoritos
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Lista de favoritos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Business" }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+  
+
+  /categories:
+    get:
+      tags: [Categorías]
+      summary: Listar categorías gastronómicas
+      security: []
+      responses:
+        "200":
+          description: Lista de categorías
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Category" }
+
+  /businesses:
+    post:
+      tags: [Negocios]
+      summary: Registrar un negocio nuevo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BusinessInput" }
+      responses:
+        "201":
+          description: Negocio creado (estado inicial "pending")
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Business" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [Negocios]
+      summary: Listar y filtrar negocios
+      security: []
+      parameters:
+        - name: categoryId
+          in: query
+          schema: { type: integer }
+        - name: q
+          in: query
+          description: Texto de búsqueda libre sobre el nombre
+          schema: { type: string }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Lista de negocios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Business" }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /businesses/nearby:
+    get:
+      tags: [Negocios]
+      summary: Buscar negocios cercanos a una coordenada
+      security: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: radiusKm
+          in: query
+          schema: { type: number, default: 2, maximum: 10 }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Negocios ordenados por distancia ascendente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Business" }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /businesses/{businessId}:
+    get:
+      tags: [Negocios]
+      summary: Obtener el detalle de un negocio
+      security: []
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200":
+          description: Detalle del negocio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Business" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Negocios]
+      summary: Editar un negocio (solo su propietario)
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BusinessInput" }
+      responses:
+        "200":
+          description: Negocio actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Business" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [Negocios]
+      summary: Dar de baja un negocio
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "204": { description: Negocio dado de baja }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /businesses/{businessId}/location:
+    get:
+      tags: [Negocios]
+      summary: Obtener la ubicación vigente
+      security: []
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200":
+          description: Ubicación vigente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+    put:
+      tags: [Negocios]
+      summary: Actualizar la ubicación vigente
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocationInput" }
+      responses:
+        "200":
+          description: Nueva ubicación vigente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+
+  /businesses/{businessId}/schedule:
+    get:
+      tags: [Negocios]
+      summary: Obtener el horario semanal
+      security: []
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200":
+          description: Horario semanal (hasta 7 elementos)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleDay" }
+    put:
+      tags: [Negocios]
+      summary: Reemplazar el horario semanal completo
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 7
+              items: { $ref: "#/components/schemas/ScheduleDay" }
+      responses:
+        "200": { description: Horario actualizado }
+  
+
+  /businesses/{businessId}/products:
+    post:
+      tags: [Productos]
+      summary: Agregar un producto al menú
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+      responses:
+        "201":
+          description: Producto creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+    get:
+      tags: [Productos]
+      summary: Listar el menú de un negocio
+      security: []
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200":
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+
+  /products/{productId}:
+    get:
+      tags: [Productos]
+      summary: Obtener el detalle de un producto
+      security: []
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200":
+          description: Detalle del producto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+    patch:
+      tags: [Productos]
+      summary: Editar un producto
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+    delete:
+      tags: [Productos]
+      summary: Eliminar un producto
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "204": { description: Producto eliminado }
+
+  /businesses/{businessId}/photos:
+    post:
+      tags: [Fotos]
+      summary: Subir una foto del negocio
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Foto subida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Photo" }
+
+  /products/{productId}/photos:
+    post:
+      tags: [Fotos]
+      summary: Subir una foto de un producto
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Foto subida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Photo" }
+
+  /photos/{photoId}:
+    delete:
+      tags: [Fotos]
+      summary: Eliminar una foto
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Foto eliminada }
+  
+
+  /businesses/{businessId}/reviews:
+    post:
+      tags: [Reseñas]
+      summary: Dejar una reseña y calificación
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewInput" }
+      responses:
+        "201":
+          description: Reseña creada (estado inicial "pending")
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Review" }
+        "409": { description: "Ya existe una reseña de este usuario para este negocio (RF-015)" }
+    get:
+      tags: [Reseñas]
+      summary: Listar reseñas aprobadas de un negocio
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/BusinessId" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Lista de reseñas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Review" }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /reviews/{reviewId}:
+    delete:
+      tags: [Reseñas]
+      summary: Eliminar la propia reseña
+      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      responses:
+        "204": { description: Reseña eliminada }
+
+  /reviews/{reviewId}/report:
+    post:
+      tags: [Reseñas]
+      summary: Reportar una reseña como inapropiada
+      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      responses:
+        "202": { description: Reporte recibido para moderación }
+
+  /businesses/{businessId}/favorite:
+    post:
+      tags: [Favoritos]
+      summary: Marcar un negocio como favorito
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "204": { description: Marcado como favorito }
+    delete:
+      tags: [Favoritos]
+      summary: Quitar un negocio de favoritos
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "204": { description: Favorito eliminado }
+
+  /businesses/{businessId}/promotions:
+    post:
+      tags: [Promociones]
+      summary: Crear una promoción temporal
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PromotionInput" }
+      responses:
+        "201":
+          description: Promoción creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Promotion" }
+    get:
+      tags: [Promociones]
+      summary: Listar promociones activas de un negocio
+      security: []
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200":
+          description: Lista de promociones activas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Promotion" }
+
+  /events:
+    post:
+      tags: [Analítica]
+      summary: Registrar un evento de comportamiento
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventInput" }
+      responses:
+        "202": { description: Evento aceptado para procesamiento asíncrono }
+
+  /consents:
+    post:
+      tags: [Privacidad]
+      summary: Registrar un consentimiento otorgado
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConsentInput" }
+      responses:
+        "201":
+          description: Consentimiento registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Consent" }
+
+  /admin/businesses/pending:
+    get:
+      tags: [Administración]
+      summary: Listar negocios pendientes de aprobación
+      responses:
+        "200":
+          description: Lista de negocios pendientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Business" }
+
+  /admin/businesses/{businessId}/approve:
+    patch:
+      tags: [Administración]
+      summary: Aprobar un negocio pendiente
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      responses:
+        "200": { description: "Negocio aprobado (estado 'active')" }
+
+  /admin/reviews/reported:
+    get:
+      tags: [Administración]
+      summary: Listar reseñas reportadas pendientes de moderación
+      responses:
+        "200":
+          description: Lista de reseñas reportadas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Review" }
+
+  /admin/businesses/{businessId}/reject:
+    patch:
+      tags: [Administración]
+      summary: Rechazar un negocio pendiente
+      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: "Negocio rechazado (estado 'closed')" }
+
+  /admin/reviews/{reviewId}/moderate:
+    patch:
+      tags: [Administración]
+      summary: Aprobar o rechazar una reseña reportada
+      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+      responses:
+        "200": { description: Reseña moderada }
+
+  /admin/metrics:
+    get:
+      tags: [Administración]
+      summary: Consultar métricas agregadas de uso
+      responses:
+        "200": { description: "Panel de métricas (negocios activos, búsquedas, reseñas por semana)" }
+
+  /users/me/consents:
+    get:
+      tags: [Privacidad]
+      summary: Consultar el historial de consentimientos propios
+      responses:
+        "200":
+          description: Lista de consentimientos otorgados
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Consent" }
+
+  /auth/assisted-registration:
+    post:
+      tags: [Autenticación]
+      summary: Registro de negocio asistido por un tercero en campo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/BusinessInput" }
+                - type: object
+                  required: [assistedBy, consentTextVersion]
+                  properties:
+                    assistedBy: { type: string, description: "Nombre de quien realiza el registro asistido" }
+                    consentTextVersion: { type: string }
+      responses:
+        "201":
+          description: Negocio y consentimiento asistido registrados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Business" }
+  
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        role: { type: string, enum: [consumer, vendor, administrator] }
+        profilePhotoUrl: { type: string, format: uri, nullable: true }
+        createdAt: { type: string, format: date-time }
+        active: { type: boolean }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        icon: { type: string, nullable: true }
+        displayOrder: { type: integer }
+
+    Business:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ownerId: { type: string, format: uuid }
+        categoryId: { type: integer }
+        name: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [pending, active, suspended, closed] }
+        contactPhone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BusinessInput:
+      type: object
+      required: [name, categoryId]
+      properties:
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        categoryId: { type: integer }
+        contactPhone: { type: string }
+
+    Location:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
+        referenceAddress: { type: string, nullable: true }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        isCurrent: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    LocationInput:
+      type: object
+      required: [type, latitude, longitude]
+      properties:
+        type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
+        referenceAddress: { type: string }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+
+    ScheduleDay:
+      type: object
+      required: [day]
+      properties:
+        day: { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+        openTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
+        closeTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
+        closed: { type: boolean, default: false }
+  
+
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        categoryId: { type: integer, nullable: true }
+        name: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        price: { type: number, format: double, minimum: 0 }
+        available: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ProductInput:
+      type: object
+      required: [name, price]
+      properties:
+        name: { type: string, maxLength: 150 }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        categoryId: { type: integer }
+        available: { type: boolean, default: true }
+
+    Photo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid, nullable: true }
+        productId: { type: string, format: uuid, nullable: true }
+        type: { type: string, enum: [business, product] }
+        url: { type: string, format: uri }
+        displayOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        moderationStatus: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string, format: date-time }
+
+    ReviewInput:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 1000 }
+
+    Promotion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        title: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        active: { type: boolean }
+
+    PromotionInput:
+      type: object
+      required: [title, startDate, endDate]
+      properties:
+        title: { type: string, maxLength: 150 }
+        description: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+
+    EventInput:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [search, business_view, product_view, contact_click, favorite_added, review_created, business_registered]
+        businessId: { type: string, format: uuid, nullable: true }
+        metadata: { type: object, additionalProperties: true }
+
+    ConsentInput:
+      type: object
+      required: [type, textVersion]
+      properties:
+        type:
+          type: string
+          enum: [data_processing, terms_conditions, assisted_registration, notifications]
+        businessId: { type: string, format: uuid, nullable: true }
+        textVersion: { type: string }
+        grantedByThirdParty: { type: boolean, default: false }
+
+    Consent:
+      allOf:
+        - { $ref: "#/components/schemas/ConsentInput" }
+        - type: object
+          properties:
+            id: { type: integer }
+            userId: { type: string, format: uuid, nullable: true }
+            grantedAt: { type: string, format: date-time }
+
+    AuthTokens:
+      type: object
+      properties:
+        accessToken: { type: string, description: "JWT, vigente 15 minutos" }
+        refreshToken: { type: string, description: "Vigente 30 días, un solo uso" }
+        tokenType: { type: string, default: Bearer }
+        user: { $ref: "#/components/schemas/User" }
+
+    Pagination:
+      type: object
+      properties:
+        nextCursor: { type: string, nullable: true }
+        hasMore: { type: boolean }
+
+    ProblemDetails:
+      type: object
+      description: "RFC 9457 — Problem Details for HTTP APIs"
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+  

@@ -5,7 +5,7 @@
  * (src/middlewares/errorHandler.js) pueda serializarlos correctamente.
  */
 class ProblemDetailsError extends Error {
-  constructor({ status, title, detail, type = 'about:blank', instance }) {
+  constructor({ status, title, detail, type = 'about:blank', instance, errors }) {
     super(detail || title);
     this.name = 'ProblemDetailsError';
     this.status = status;
@@ -13,16 +13,21 @@ class ProblemDetailsError extends Error {
     this.detail = detail;
     this.type = type;
     this.instance = instance;
+    this.errors = errors;
   }
 
   toProblemDetails() {
-    return {
+    const problem = {
       type: this.type,
       title: this.title,
       status: this.status,
       detail: this.detail,
       instance: this.instance,
     };
+    if (this.errors) {
+      problem.errors = this.errors;
+    }
+    return problem;
   }
 }
 

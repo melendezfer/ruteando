@@ -1,0 +1,56 @@
+{
+  "name": "ruteando",
+  "version": "1.0.0",
+  "description": "API de RUTEANDO: geolocalización de vendedores gastronómicos informales en Ciudad Verde, Soacha.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "NODE_ENV=test jest --runInBand",
+    "test:unit": "NODE_ENV=test jest --runInBand tests/unit",
+    "test:integration": "NODE_ENV=test jest --runInBand tests/integration",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/melendezfer/ruteando.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/melendezfer/ruteando/issues"
+  },
+  "homepage": "https://github.com/melendezfer/ruteando#readme",
+  "dependencies": {
+    "argon2": "^0.45.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "jest": "^30.5.1",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.9.6",
+    "supertest": "^7.2.2"
+  }
+}

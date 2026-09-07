@@ -144,15 +144,16 @@ describe('PATCH /businesses/{businessId}', () => {
     expect(res.body.contactPhone).toBe('3009998877'); // no se borró
   });
 
-  it('rechaza con 403 a un vendor que no es el dueño', async () => {
+  it('rechaza con 403 al dueño de OTRO negocio (no solo a un vendor sin negocio propio)', async () => {
     const categoryId = await crearCategoria();
-    const vendor = await registrar('vendor');
-    const otro = await registrar('vendor');
-    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    const propietarioA = await registrar('vendor');
+    const propietarioB = await registrar('vendor');
+    const negocioDeA = await crearNegocio(propietarioA.accessToken, categoryId);
+    await crearNegocio(propietarioB.accessToken, categoryId); // B es dueño de su propio negocio
 
     const res = await request(app)
-      .patch(`/businesses/${negocio.id}`)
-      .set('Authorization', `Bearer ${otro.accessToken}`)
+      .patch(`/businesses/${negocioDeA.id}`)
+      .set('Authorization', `Bearer ${propietarioB.accessToken}`)
       .send({ name: 'Robado', categoryId });
 
     expect(res.status).toBe(403);
@@ -174,16 +175,22 @@ describe('DELETE /businesses/{businessId}', () => {
     expect(rows[0].estado).toBe('cerrado');
   });
 
-  it('rechaza con 403 a quien no es el dueño', async () => {
+  it('rechaza con 403 al dueño de OTRO negocio (no solo a un vendor sin negocio propio)', async () => {
     const categoryId = await crearCategoria();
-    const vendor = await registrar('vendor');
-    const otro = await registrar('vendor');
-    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    const propietarioA = await registrar('vendor');
+    const propietarioB = await registrar('vendor');
+    const negocioDeA = await crearNegocio(propietarioA.accessToken, categoryId);
+    await crearNegocio(propietarioB.accessToken, categoryId);
 
     const res = await request(app)
-      .delete(`/businesses/${negocio.id}`)
-      .set('Authorization', `Bearer ${otro.accessToken}`);
+      .delete(`/businesses/${negocioDeA.id}`)
+      .set('Authorization', `Bearer ${propietarioB.accessToken}`);
     expect(res.status).toBe(403);
+
+    const { rows } = await pool.query('SELECT estado FROM negocios WHERE id = $1', [
+      negocioDeA.id,
+    ]);
+    expect(rows[0].estado).not.toBe('cerrado'); // el negocio de A sigue intacto
   });
 });
 

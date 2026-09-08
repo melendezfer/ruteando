@@ -51,4 +51,39 @@ jobs:
       - name: Aplicar migraciones (schema.sql versionado)
         run: npm run migrate:up
 
+      # Backend real de almacenamiento para las pruebas de subida/borrado
+      # de fotos (RF-007, Épica 3) — mismo principio que postgres arriba:
+      # nada de mocks contra un servicio externo. No se define como
+      # "services:" porque ese mecanismo de GitHub Actions no permite
+      # pasar un comando (docker create no acepta COMMAND después de
+      # OPTIONS ahí) y la imagen minio/minio no arranca el servidor por
+      # defecto (su CMD es solo ["minio"], sin "server /data") — se
+      # levanta a mano con el comando completo, igual que en
+      # docker-compose.yml.
+      - name: Iniciar MinIO
+        run: |
+          docker run -d --name minio \
+            -e MINIO_ROOT_USER=ci-placeholder \
+            -e MINIO_ROOT_PASSWORD=ci-placeholder \
+            -p 9000:9000 \
+            minio/minio:latest server /data
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO listo"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "MinIO no respondió a tiempo" >&2
+          docker logs minio
+          exit 1
+
+      - name: Crear bucket de MinIO para las pruebas
+        run: |
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
+            minio/mc:latest mb --ignore-existing local/ruteando-media-ci
+
       - run: npm test

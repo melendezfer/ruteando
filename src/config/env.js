@@ -21,6 +21,16 @@ const envSchema = z
     STORAGE_BUCKET: z.string().min(1, 'STORAGE_BUCKET es obligatorio'),
     STORAGE_ACCESS_KEY: z.string().min(1, 'STORAGE_ACCESS_KEY es obligatorio'),
     STORAGE_SECRET_KEY: z.string().min(1, 'STORAGE_SECRET_KEY es obligatorio'),
+    // STORAGE_ENDPOINT es el endpoint de la API S3 (contra el que el SDK
+    // firma PUT/DELETE) — en R2/B2 real ese host NO sirve lectura pública
+    // anónima de los objetos (devuelve 401/403), así que no sirve como URL
+    // para fotos.url. STORAGE_PUBLIC_URL es la base de lectura pública
+    // real (bucket público de R2, dominio custom, o el CDN delante de B2).
+    // Opcional: si no está configurada, se usa STORAGE_ENDPOINT como antes
+    // — correcto en dev/CI con MinIO, donde el mismo endpoint sí es
+    // alcanzable por el cliente; en production es obligatorio configurarla
+    // aparte (ver almacenamiento.service.js).
+    STORAGE_PUBLIC_URL: z.string().min(1).optional(),
 
     SENTRY_DSN: z.string().optional(),
 
@@ -35,6 +45,11 @@ const envSchema = z
   .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.SENTRY_DSN), {
     message: 'SENTRY_DSN es obligatorio en production (registro de errores centralizado)',
     path: ['SENTRY_DSN'],
+  })
+  .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.STORAGE_PUBLIC_URL), {
+    message:
+      'STORAGE_PUBLIC_URL es obligatorio en production — STORAGE_ENDPOINT (la API de R2/B2) no sirve lectura pública de las fotos',
+    path: ['STORAGE_PUBLIC_URL'],
   });
 
 const parsed = envSchema.safeParse(process.env);

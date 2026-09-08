@@ -2,6 +2,8 @@ const negociosService = require('../services/negocios.service');
 const ubicacionService = require('../services/ubicacion.service');
 const horarioService = require('../services/horario.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
+const productosService = require('../services/productos.service');
+const fotosService = require('../services/fotos.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -53,6 +55,26 @@ async function reportOutdated(req, res) {
   res.status(201).json(report);
 }
 
+async function createProduct(req, res) {
+  const product = await productosService.crear(req.user.id, req.params.businessId, req.body);
+  res.status(201).json(product);
+}
+
+async function listProducts(req, res) {
+  const products = await productosService.listar(req.params.businessId);
+  res.status(200).json(products);
+}
+
+async function uploadPhoto(req, res) {
+  const photo = await fotosService.subirParaNegocio(
+    req.user.id,
+    req.params.businessId,
+    req.file,
+    req.log,
+  );
+  res.status(201).json(photo);
+}
+
 module.exports = {
   create,
   getOne,
@@ -63,4 +85,7 @@ module.exports = {
   getSchedule,
   putSchedule,
   reportOutdated,
+  createProduct,
+  listProducts,
+  uploadPhoto,
 };

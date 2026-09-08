@@ -1,7 +1,7 @@
 // Mismo principio que user.mapper.js: la base de datos usa los enums en
 // español del Documento 07, el contrato de openapi.yaml usa inglés. Este
 // es el único lugar que conoce ambos vocabularios para negocios,
-// ubicaciones y horarios.
+// ubicaciones, horarios, productos y fotos.
 
 const STATUS_DB_TO_API = {
   pendiente: 'pending',
@@ -82,6 +82,38 @@ function toApiScheduleDay(row) {
   };
 }
 
+const PHOTO_TYPE_DB_TO_API = {
+  negocio: 'business',
+  producto: 'product',
+};
+
+function toApiProduct(row) {
+  return {
+    id: row.id,
+    businessId: row.negocio_id,
+    categoryId: row.categoria_id,
+    name: row.nombre,
+    description: row.descripcion,
+    // pg devuelve DECIMAL como string para no perder precisión — el
+    // contrato (ProductInput/Product) lo declara number.
+    price: Number(row.precio),
+    available: row.disponible,
+    createdAt: row.fecha_creacion,
+  };
+}
+
+function toApiPhoto(row) {
+  return {
+    id: row.id,
+    businessId: row.negocio_id,
+    productId: row.producto_id,
+    type: PHOTO_TYPE_DB_TO_API[row.tipo],
+    url: row.url,
+    displayOrder: row.orden_visualizacion,
+    createdAt: row.fecha_creacion,
+  };
+}
+
 module.exports = {
   STATUS_DB_TO_API,
   LOCATION_TYPE_DB_TO_API,
@@ -89,7 +121,10 @@ module.exports = {
   DAY_DB_TO_API,
   DAY_API_TO_DB,
   ORDEN_DIAS_DB,
+  PHOTO_TYPE_DB_TO_API,
   toApiBusiness,
   toApiLocation,
   toApiScheduleDay,
+  toApiProduct,
+  toApiPhoto,
 };

@@ -23,6 +23,16 @@ async function registrar(overrides = {}) {
   return res;
 }
 
+// RF-018 (Épica 8): login() exige los dos consentimientos obligatorios
+// antes de emitir tokens — ver el mismo helper en auth.test.js.
+async function otorgarConsentimientosObligatorios(usuarioId) {
+  await pool.query(
+    `INSERT INTO consentimientos (usuario_id, tipo, texto_version)
+     VALUES ($1, 'tratamiento_datos', 'v1'), ($1, 'terminos_condiciones', 'v1')`,
+    [usuarioId],
+  );
+}
+
 afterAll(async () => {
   if (usuarioIdsCreados.length > 0) {
     await pool.query('DELETE FROM usuarios WHERE id = ANY($1)', [usuarioIdsCreados]);
@@ -85,6 +95,7 @@ describe('POST /auth/reset-password', () => {
   it('cambia la contraseña con un token válido y revoca las sesiones existentes', async () => {
     const email = correoDePrueba();
     const registro = await registrar({ email });
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
     const refreshPrevio = registro.body.refreshToken;
 
     // Generamos el token crudo nosotros mismos (en vez de vía HTTP, porque

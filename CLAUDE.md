@@ -180,6 +180,12 @@ Tareas:
    correspondan a RF-001–003; incluir un caso que verifique que un token
    expirado o inválido es rechazado.
 
+**Actualización introducida en la Épica 8 (RF-018)**: `login()` y
+`refresh()` incorporan una verificación de consentimiento obligatorio
+antes de emitir tokens. `register()` no cambia. Ver el detalle de diseño
+y la ventana de gracia que esto deja en la sección Épica 8 y en la
+sección de gaps conocidos.
+
 ### Épica 2 — Negocios y ubicación (RF-004, RF-005, RF-024, RF-025)
 
 Rutas: `POST /businesses`, `GET/PATCH /businesses/{businessId}`,
@@ -277,6 +283,34 @@ Rutas: `POST /consents`, `GET /users/me/consents`.
 2. Registro de consentimiento explícito por tipo (`tipo_consentimiento`),
    con fecha y versión del texto legal aceptado — nunca un booleano simple
    "aceptó sí/no" sin trazabilidad de qué texto aceptó.
+3. `GET /users/me/consents` usa el middleware `authenticate` estándar de
+   la Épica 1 (el mismo de `GET /users/me`) — siempre contra
+   `req.user.id`, nunca un id en la URL o el body.
+4. `POST /consents` usa un middleware nuevo, `optionalAuthenticate`: valida
+   el token si viene, pero si no hay token o es inválido/expirado NO
+   rechaza la petición — deja `req.user = null` y el handler decide.
+   - Si `req.user` es `null`: por ahora responde 401. El camino para
+     registro asistido sin token existe en la ruta (por eso el middleware
+     es opcional y no `authenticate` a secas), pero su lógica de negocio
+     queda pendiente para cuando se aborde la Épica 2 — no se implementa
+     en esta épica (ver gaps conocidos).
+   - Si `req.user` existe pero el `usuario_id` del cuerpo no coincide con
+     `req.user.id`: 403 (autorización a nivel de objeto, regla de
+     seguridad #2).
+5. `login()`, después de validar credenciales, y `refresh()`, después de
+   validar el refresh token — en ambos casos ANTES de emitir el nuevo par
+   de tokens — consultan `consentimientos` filtrando
+   `tipo IN ('tratamiento_datos', 'terminos_condiciones')` para ese
+   `usuario_id`. Si falta alguno de los dos: no se emiten tokens, se
+   responde 403 en formato RFC 9457 (Problem Details) con `type`
+   distinguible (`.../errors/consent-required`) y un campo de extensión
+   con los tipos faltantes. `register()` no cambia — sigue emitiendo
+   tokens de inmediato, sin este chequeo.
+6. En `refresh()` específicamente: si el rechazo es por consentimiento
+   faltante (no por token inválido), NO se rota ni se invalida el refresh
+   token existente — debe seguir sirviendo para el siguiente intento una
+   vez el usuario complete el consentimiento. La rotación solo ocurre
+   cuando el intercambio efectivamente tiene éxito.
 
 ### Épica 9 — Administración y moderación (RF-019 a RF-023)
 
@@ -739,3 +773,55 @@ alguien tiene que cerrar durante la implementación:
   negocio favorito que luego cierra sigue apareciendo) — no estaba
   pedido y agregarlo hubiera sido sobre-diseñar la épica más simple del
   backlog, tal como pide la sección 6.
+- Épica 8: la verificación de consentimiento en `login()`/`refresh()`
+  (RF-018) deja una ventana de gracia deliberada, no accidental: una
+  cuenta recién registrada sigue operando con el primer par de tokens que
+  `register()` ya le entregó (sin cambios ahí) hasta que ese access token
+  expire — **15 minutos**, el TTL fijo de `JWT_ACCESS_TOKEN_TTL`. El
+  candado se siente recién en el siguiente `login()` o `refresh()`, no
+  antes, y no hay manera de extender esa ventana refrescando: `refresh()`
+  aplica el mismo chequeo antes de emitir el nuevo par, así que un intento
+  de refrescar sin consentimiento completo se rechaza igual que un
+  `login()`. La ventana real es los 15 minutos del access token inicial,
+  no los 30 días de vida del refresh token.
+- Épica 8: `tipo_consentimiento = 'registro_asistido'` (consentimiento
+  otorgado por un tercero en campo, sin que el titular tenga token
+  todavía) queda sin implementar en esta épica — `POST /consents` deja el
+  camino abierto en la ruta (`optionalAuthenticate`, un `req.user = null`
+  no rompe el middleware) pero por ahora responde 401 cuando no hay token,
+  sin la lógica de negocio real. Agrupado como pendiente junto con
+  `POST /auth/assisted-registration` (huérfano de contrato encontrado al
+  planear esta épica — crea un negocio y su consentimiento asistido en un
+  solo paso, pero no está asignado a ninguna épica de la sección 6) para
+  cuando se aborde la Épica 2: en el fondo son la misma pieza — alguien
+  más registrando en nombre de un vendedor que todavía no tiene cuenta.
+- Épica 8: `tryAuthenticate` (middleware nuevo) es una función **separada**
+  de `optionalAuthenticate` (ya usada por RF-025 y `POST /events`), no una
+  modificación de esa — sus criterios son opuestos a propósito.
+  `optionalAuthenticate` rechaza con 401 un token presente pero
+  inválido/expirado ("un token roto no debe degradarse en silencio a
+  anónimo"); `tryAuthenticate` (RF-018, `POST /consents`) nunca rechaza
+  desde el middleware — cualquier falla (sin header, formato inválido,
+  firma inválida, expirado) deja `req.user = null` y el handler decide.
+  Cambiar el comportamiento de la función existente habría afectado a
+  quien ya depende de ella; se agregó una nueva en su lugar.
+- Épica 8: `ConsentInput` **no lleva un campo `userId`** — el
+  consentimiento siempre se asocia a `req.user.id` cuando hay usuario
+  autenticado, sin ninguna forma de otorgarlo a nombre de otro
+  `usuario_id` todavía. Se consideró agregarlo (para el chequeo "si no
+  coincide, 403" de autorización a nivel de objeto) pero se descartó a
+  propósito: un campo que permite pedir consentimiento por otra persona,
+  con solo un chequeo de igualdad y sin la lógica que decida quién puede
+  hacerlo y con qué evidencia, es abrir superficie sin sostenerla — esa
+  lógica es justo lo que le corresponde resolver al registro asistido
+  (ver el punto anterior), no a esta épica.
+- Épica 8: al correr la suite completa (no solo los archivos que parecían
+  afectados) apareció una quinta prueba con el mismo problema que las 4
+  ya anticipadas — `passwordReset.test.js` ("cambia la contraseña con un
+  token válido...") también hace un `login()` exitoso después de
+  registrar, y se había quedado fuera de la revisión inicial porque solo
+  se inspeccionó `auth.test.js`. Se corrigió con el mismo patrón —
+  otorgar los dos consentimientos obligatorios antes de la aserción que
+  espera 200 — y queda anotado como recordatorio: "qué pruebas llaman a
+  X" hay que verificarlo corriendo la suite completa, no con una
+  búsqueda manual limitada a un solo archivo.

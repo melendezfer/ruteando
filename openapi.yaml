@@ -115,6 +115,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
+    ConsentRequired:
+      description: Faltan consentimientos obligatorios (RF-018) — no se emiten tokens
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ConsentRequiredProblem' }
   schemas:
     User:
       type: object
@@ -384,6 +389,19 @@ components:
               field: { type: string }
               message: { type: string }
 
+    ConsentRequiredProblem:
+      description: >-
+        RF-018: login()/refresh() lo devuelven cuando al usuario le falta
+        al menos uno de los dos consentimientos obligatorios
+        (tratamiento_datos, terminos_condiciones) — no se emiten tokens.
+      allOf:
+        - { $ref: '#/components/schemas/ProblemDetails' }
+        - type: object
+          properties:
+            missingConsentTypes:
+              type: array
+              items: { type: string, enum: [data_processing, terms_conditions] }
+
 paths:
   /auth/register:
     post:
@@ -433,6 +451,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AuthTokens' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
 
   /auth/refresh:
     post:
@@ -455,6 +474,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AuthTokens' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: >-
+            Faltan consentimientos obligatorios — el refresh token
+            original NO se rota ni se invalida, sigue sirviendo para el
+            siguiente intento
+          $ref: '#/components/responses/ConsentRequired'
 
   /auth/logout:
     post:
@@ -1138,6 +1163,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Consent' }
+        '401':
+          description: >-
+            Sin token de acceso — el consentimiento no tiene a quién
+            asociarse todavía (registro asistido sin token queda
+            pendiente, ver CLAUDE.md)
+          $ref: '#/components/responses/Unauthorized'
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /admin/businesses/pending:
     get:
@@ -1217,6 +1249,10 @@ paths:
     get:
       tags: [Privacidad]
       summary: Consultar el historial de consentimientos propios
+      description: >-
+        Historial completo (append-only): todas las filas, no solo la más
+        reciente por tipo — así se puede demostrar toda la secuencia
+        aceptada, no solo el estado actual.
       responses:
         '200':
           description: Lista de consentimientos otorgados
@@ -1225,6 +1261,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/assisted-registration:
     post:

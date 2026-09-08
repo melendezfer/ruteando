@@ -10,5 +10,6 @@ router.use('/photos', require('./photos.routes'));
 router.use('/categories', require('./categories.routes'));
 router.use('/events', require('./events.routes'));
 router.use('/reviews', require('./reviews.routes'));
+router.use('/consents', require('./consents.routes'));
 
 module.exports = router;

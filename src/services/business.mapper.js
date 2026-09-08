@@ -122,6 +122,27 @@ function toApiPhoto(row) {
   };
 }
 
+/**
+ * GET /businesses/{businessId} (RF-012) — perfil público completo.
+ * Distinto de toApiBusiness (usado en crear/listar/cercanos): ahí
+ * embeber menú/fotos/horario en cada resultado de una búsqueda sería
+ * desperdiciar ancho de banda; acá es exactamente lo que pide el
+ * contrato para un solo negocio. Las reseñas mismas NO se embeben (sin
+ * límite de cuántas puede haber) — solo el agregado; la lista completa
+ * vive en su propio endpoint paginado (GET .../reviews, Épica 6).
+ */
+function toApiBusinessProfile({ negocio, ubicacion, horario, productos, fotos, agregadoResenas }) {
+  return {
+    ...toApiBusiness(negocio),
+    location: ubicacion ? toApiLocation(ubicacion) : null,
+    schedule: horario.map(toApiScheduleDay),
+    products: productos.map(toApiProduct),
+    photos: fotos.map(toApiPhoto),
+    averageRating: agregadoResenas.promedio,
+    reviewCount: agregadoResenas.total,
+  };
+}
+
 module.exports = {
   STATUS_DB_TO_API,
   LOCATION_TYPE_DB_TO_API,
@@ -135,4 +156,5 @@ module.exports = {
   toApiScheduleDay,
   toApiProduct,
   toApiPhoto,
+  toApiBusinessProfile,
 };

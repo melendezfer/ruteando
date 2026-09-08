@@ -4,6 +4,7 @@ const horarioService = require('../services/horario.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
 const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
+const perfilNegocioService = require('../services/perfilNegocio.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -21,8 +22,8 @@ async function nearby(req, res) {
 }
 
 async function getOne(req, res) {
-  const business = await negociosService.obtener(req.params.businessId);
-  res.status(200).json(business);
+  const profile = await perfilNegocioService.obtener(req.params.businessId);
+  res.status(200).json(profile);
 }
 
 async function update(req, res) {

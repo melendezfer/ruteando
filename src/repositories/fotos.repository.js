@@ -53,8 +53,33 @@ async function listarPorProducto(productoId) {
   return rows;
 }
 
+/**
+ * Todas las fotos relacionadas con un negocio para el perfil público
+ * (RF-012): las suyas propias (tipo='negocio') y las de cada uno de sus
+ * productos (tipo='producto') en un solo viaje a la base de datos, en
+ * vez de un N+1 por producto. Photo ya distingue businessId/productId
+ * por fila, así que el cliente puede agrupar del lado suyo sin que el
+ * contrato necesite anidar fotos dentro de cada producto.
+ */
+async function listarPorNegocio(negocioId) {
+  const { rows } = await pool.query(
+    `SELECT f.* FROM fotos f WHERE f.negocio_id = $1
+     UNION ALL
+     SELECT f.* FROM fotos f JOIN productos p ON p.id = f.producto_id WHERE p.negocio_id = $1
+     ORDER BY orden_visualizacion`,
+    [negocioId],
+  );
+  return rows;
+}
+
 async function eliminar(id) {
   await pool.query('DELETE FROM fotos WHERE id = $1', [id]);
 }
 
-module.exports = { crearConOrdenSiguiente, buscarPorId, listarPorProducto, eliminar };
+module.exports = {
+  crearConOrdenSiguiente,
+  buscarPorId,
+  listarPorProducto,
+  listarPorNegocio,
+  eliminar,
+};

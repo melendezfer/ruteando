@@ -1,10 +1,21 @@
 const argon2 = require('argon2');
 const usuariosRepo = require('../repositories/usuarios.repository');
 const tokensRefrescoRepo = require('../repositories/tokensRefresco.repository');
+const consentimientosService = require('./consentimientos.service');
 const { REFRESH_TOKEN_TTL_MS } = require('../config/constants');
 const { signAccessToken, generateOpaqueToken, hashToken } = require('./token.service');
 const { ROLE_API_TO_DB, toApiUser } = require('./user.mapper');
-const { ConflictError, UnauthorizedError } = require('../errors');
+const { ConflictError, UnauthorizedError, ConsentRequiredError } = require('../errors');
+
+// RF-018: chequeo compartido por login() y refresh(), en ambos casos
+// ANTES de emitir/rotar tokens — register() no lo usa, no cambia (ver
+// CLAUDE.md sección "Épica 8").
+async function exigirConsentimientoCompleto(usuarioId) {
+  const faltantes = await consentimientosService.obtenerTiposObligatoriosFaltantes(usuarioId);
+  if (faltantes.length > 0) {
+    throw new ConsentRequiredError(faltantes);
+  }
+}
 
 // Hash de referencia usado solo para que login() tarde lo mismo exista o
 // no la cuenta (contra ataques de temporización que revelarían qué
@@ -54,6 +65,8 @@ async function login({ email, password }) {
     throw new UnauthorizedError('Credenciales inválidas');
   }
 
+  await exigirConsentimientoCompleto(usuario.id);
+
   return emitirTokens(usuario);
 }
 
@@ -81,6 +94,12 @@ async function refresh({ refreshToken }) {
   if (!usuario || !usuario.activo) {
     throw new UnauthorizedError('Refresh token inválido');
   }
+
+  // Antes de CUALQUIER mutación (emitirTokens crea una fila nueva,
+  // marcarRevocado más abajo cierra la vieja) — así, si falta
+  // consentimiento, el refresh token original queda intacto por
+  // construcción, no por un rollback aparte: nunca se llega a rotar.
+  await exigirConsentimientoCompleto(usuario.id);
 
   const tokens = await emitirTokens(usuario);
 

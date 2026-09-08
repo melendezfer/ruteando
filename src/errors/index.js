@@ -42,6 +42,31 @@ class TooManyRequestsError extends ProblemDetailsError {
   }
 }
 
+// RF-018: login()/refresh() lo lanzan cuando faltan consentimientos
+// obligatorios. type distinguible (no el about:blank por defecto) para
+// que un cliente pueda diferenciar este 403 de "no tiene permisos sobre
+// este recurso" — son situaciones distintas que requieren una reacción
+// distinta del cliente (mostrar el aviso de privacidad, no un error
+// genérico). missingConsentTypes es la única razón para sobrescribir
+// toProblemDetails() en vez de pasar un campo por el constructor de la
+// base: ningún otro error del proyecto necesita una extensión propia.
+class ConsentRequiredError extends ProblemDetailsError {
+  constructor(missingConsentTypes) {
+    super({
+      status: 403,
+      title: 'Consentimiento requerido',
+      detail: 'Debe otorgar los consentimientos obligatorios antes de continuar',
+      type: 'https://api.ciudadverdegastronomica.co/errors/consent-required',
+    });
+    this.name = 'ConsentRequiredError';
+    this.missingConsentTypes = missingConsentTypes;
+  }
+
+  toProblemDetails() {
+    return { ...super.toProblemDetails(), missingConsentTypes: this.missingConsentTypes };
+  }
+}
+
 module.exports = {
   ProblemDetailsError,
   ValidationError,
@@ -50,4 +75,5 @@ module.exports = {
   NotFoundError,
   ConflictError,
   TooManyRequestsError,
+  ConsentRequiredError,
 };

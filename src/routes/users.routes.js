@@ -13,5 +13,6 @@ router.get(
   validateQuery(favoritesListQuerySchema),
   usersController.listFavorites,
 );
+router.get('/me/consents', authenticate, usersController.listConsents);
 
 module.exports = router;

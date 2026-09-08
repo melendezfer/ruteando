@@ -47,5 +47,24 @@ function optionalAuthenticate(req, res, next) {
   authenticate(req, res, next);
 }
 
+/**
+ * Distinto de optionalAuthenticate a propósito (RF-018, POST /consents):
+ * acá SÍ se degrada en silencio a anónimo ante cualquier falla (sin
+ * header, formato inválido, firma inválida, expirado) — nunca rechaza la
+ * petición desde el middleware, deja req.user = null y el handler
+ * decide. No reemplaza a optionalAuthenticate en ningún lado existente
+ * (RF-025/eventos siguen usando esa, con su propio criterio de "un token
+ * roto no se degrada en silencio") — es una función nueva y separada.
+ */
+function tryAuthenticate(req, res, next) {
+  try {
+    req.user = verificarBearer(req);
+  } catch {
+    req.user = null;
+  }
+  next();
+}
+
 module.exports = authenticate;
 module.exports.optionalAuthenticate = optionalAuthenticate;
+module.exports.tryAuthenticate = tryAuthenticate;

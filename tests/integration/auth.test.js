@@ -25,6 +25,24 @@ async function registrar(overrides = {}) {
   return res;
 }
 
+/**
+ * RF-018 (Épica 8): login()/refresh() ahora exigen los dos
+ * consentimientos obligatorios antes de emitir tokens — register() no
+ * cambia y sigue emitiéndolos de inmediato (por eso las pruebas de
+ * "POST /auth/register" de arriba no necesitan esto), pero cualquier
+ * prueba de esta suite que además llame a login()/refresh() sí. Inserta
+ * directo por SQL en vez de pasar por POST /consents (que tiene su
+ * propia suite en consentimientos.test.js) para no acoplar esta suite a
+ * ese endpoint.
+ */
+async function otorgarConsentimientosObligatorios(usuarioId) {
+  await pool.query(
+    `INSERT INTO consentimientos (usuario_id, tipo, texto_version)
+     VALUES ($1, 'tratamiento_datos', 'v1'), ($1, 'terminos_condiciones', 'v1')`,
+    [usuarioId],
+  );
+}
+
 afterAll(async () => {
   if (usuarioIdsCreados.length > 0) {
     await pool.query('DELETE FROM usuarios WHERE id = ANY($1)', [usuarioIdsCreados]);
@@ -82,14 +100,41 @@ describe('POST /auth/register', () => {
 });
 
 describe('POST /auth/login', () => {
-  it('inicia sesión con credenciales correctas (200)', async () => {
+  it('inicia sesión con credenciales correctas y consentimiento completo (200)', async () => {
     const email = correoDePrueba();
-    await registrar({ email });
+    const registro = await registrar({ email });
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
 
     const res = await request(app).post('/auth/login').send({ email, password: 'password123' });
 
     expect(res.status).toBe(200);
     expect(res.body.user.email).toBe(email);
+  });
+
+  it('rechaza con 403 (RFC 9457, type consent-required) cuando falta consentimiento obligatorio', async () => {
+    const email = correoDePrueba();
+    await registrar({ email }); // sin otorgar ningún consentimiento
+
+    const res = await request(app).post('/auth/login').send({ email, password: 'password123' });
+
+    expect(res.status).toBe(403);
+    expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+    expect(res.body.type).toBe('https://api.ciudadverdegastronomica.co/errors/consent-required');
+    expect(res.body.missingConsentTypes.sort()).toEqual(['data_processing', 'terms_conditions']);
+  });
+
+  it('rechaza con 403 cuando falta solo UNO de los dos consentimientos obligatorios', async () => {
+    const email = correoDePrueba();
+    const registro = await registrar({ email });
+    await pool.query(
+      `INSERT INTO consentimientos (usuario_id, tipo, texto_version) VALUES ($1, 'tratamiento_datos', 'v1')`,
+      [registro.body.user.id],
+    );
+
+    const res = await request(app).post('/auth/login').send({ email, password: 'password123' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.missingConsentTypes).toEqual(['terms_conditions']);
   });
 
   it('rechaza una contraseña incorrecta con el mismo mensaje genérico', async () => {
@@ -132,6 +177,7 @@ describe('POST /auth/refresh', () => {
   it('rota el refresh token: el nuevo par funciona y el viejo deja de servir', async () => {
     const email = correoDePrueba();
     const registro = await registrar({ email });
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
     const refreshViejo = registro.body.refreshToken;
 
     const rotado = await request(app).post('/auth/refresh').send({ refreshToken: refreshViejo });
@@ -144,9 +190,29 @@ describe('POST /auth/refresh', () => {
     expect(reintentoViejo.status).toBe(401);
   });
 
+  it('rechaza con 403 cuando falta consentimiento, y el refresh token original NO se rota ni se invalida', async () => {
+    const email = correoDePrueba();
+    const registro = await registrar({ email }); // sin otorgar consentimiento
+    const refreshToken = registro.body.refreshToken;
+
+    const rechazado = await request(app).post('/auth/refresh').send({ refreshToken });
+    expect(rechazado.status).toBe(403);
+    expect(rechazado.body.type).toBe(
+      'https://api.ciudadverdegastronomica.co/errors/consent-required',
+    );
+
+    // El mismo token original, después de otorgar el consentimiento, sigue
+    // sirviendo — prueba de que el 403 anterior no lo tocó (regla 4: la
+    // rotación solo ocurre cuando el intercambio efectivamente tiene éxito).
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
+    const exitoso = await request(app).post('/auth/refresh').send({ refreshToken });
+    expect(exitoso.status).toBe(200);
+  });
+
   it('reusar un refresh token ya rotado revoca también el token nuevo (detección de robo)', async () => {
     const email = correoDePrueba();
     const registro = await registrar({ email });
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
     const refreshOriginal = registro.body.refreshToken;
 
     const primeraRotacion = await request(app)
@@ -212,6 +278,7 @@ describe('POST /auth/logout', () => {
   it('no revoca el refresh token de otro usuario (autorización a nivel de objeto)', async () => {
     const registroA = await registrar();
     const registroB = await registrar();
+    await otorgarConsentimientosObligatorios(registroB.body.user.id);
 
     // El usuario A intenta cerrar sesión pasando el refresh token de B.
     await request(app)

@@ -97,11 +97,6 @@ async function crear(usuarioId, input) {
   return toApiBusiness(negocio);
 }
 
-async function obtener(id) {
-  const negocio = await obtenerCrudoOFallar(id);
-  return toApiBusiness(negocio);
-}
-
 async function actualizar(usuarioId, id, input) {
   const negocio = await obtenerCrudoOFallar(id);
   verificarPropietario(negocio, usuarioId);
@@ -158,7 +153,6 @@ async function cercanos(filtros) {
 
 module.exports = {
   crear,
-  obtener,
   actualizar,
   cerrar,
   listar,

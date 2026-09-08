@@ -1,10 +1,13 @@
 const pool = require('../config/db');
 
+// Sin RETURNING: eventos es una tabla de alto volumen (ver schema.sql) y
+// ningún caller usa la fila insertada — devolverla solo pagaría una
+// serialización/round-trip de más (incluyendo metadatos, hasta
+// EVENT_METADATA_MAX_BYTES) en cada POST /events.
 async function crear({ usuarioId, negocioId, tipo, metadatos, ip }) {
-  const { rows } = await pool.query(
+  await pool.query(
     `INSERT INTO eventos (usuario_id, negocio_id, tipo, metadatos, ip_origen)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5)`,
     [
       usuarioId ?? null,
       negocioId ?? null,
@@ -13,7 +16,6 @@ async function crear({ usuarioId, negocioId, tipo, metadatos, ip }) {
       usuarioId ? null : (ip ?? null),
     ],
   );
-  return rows[0];
 }
 
 /**

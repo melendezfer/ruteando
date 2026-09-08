@@ -610,3 +610,66 @@ alguien tiene que cerrar durante la implementación:
   `\` primero, luego `%` y `_`, con `\` como carácter de escape — el que
   usa Postgres por defecto en LIKE/ILIKE) antes de armar el patrón. Ver
   prueba de regresión con `q=50%` y `q=%` en `discovery.test.js`.
+- Épica 5 (perfil de negocio y contacto, RF-012 a RF-014): `Business`
+  (el schema liviano que ya usan POST/PATCH/GET-lista/nearby) no alcanza
+  para lo que pide RF-012 — ubicación, horario, menú, fotos, calificación
+  y reseñas en una sola respuesta. En vez de inflar `Business` (que
+  penalizaría cada resultado de una búsqueda), se agregó `BusinessProfile`
+  (`allOf: [Business, {...}]`) solo para el `200` de
+  `GET /businesses/{businessId}`, compuesto en `perfilNegocio.service.js`
+  a partir de los repositorios que ya existían de épicas anteriores
+  (`ubicaciones`, `horarios`, `productos`) más uno nuevo
+  (`fotos.repository.js#listarPorNegocio`, fotos del negocio + de todos
+  sus productos en un solo `UNION ALL`, sin N+1 por producto) y uno
+  completamente nuevo (`resenas.repository.js`).
+- Épica 5: **la lista completa de reseñas no se embebe** en el perfil —
+  solo `averageRating`/`reviewCount` (agregado acotado). La lista vive en
+  su propio endpoint paginado (`GET /businesses/{businessId}/reviews`),
+  que ya está en `openapi.yaml` pero es responsabilidad de la Épica 6, no
+  de esta. `POST /businesses/{businessId}/reviews` (la única forma de que
+  exista una fila en `resenas`) también es de la Épica 6 — así que
+  `resenas.repository.js#obtenerAgregado` (que sí se implementó ya, contra
+  la tabla real, filtrando `estado_moderacion = 'aprobada'`) hoy siempre
+  da `{ promedio: null, total: 0 }` porque no hay filas que puedan
+  cumplir ese filtro todavía (ni siquiera existe cómo crear una reseña
+  aprobada sin la Épica 9 de moderación). No es un valor fijo ni un mock
+  — es el resultado correcto de agregar sobre una tabla vacía; cuando la
+  Épica 6 exista, este mismo código empieza a devolver datos reales sin
+  tocarse.
+- Épica 5: `POST /events` (RF-013/023) ya estaba completo en
+  `openapi.yaml` desde antes de esta épica (`EventInput` con el enum
+  `type` calcado 1:1 de `tipo_evento`) pero no tenía ninguna
+  implementación en `src/`. Reglas de validación que valen la pena dejar
+  explícitas: un `businessId` **mal formado** (`"abc123"`) se rechaza con
+  422 en el schema de Zod (`.uuid()`), antes de tocar la base de datos; un
+  `businessId` con **forma de UUID válida pero que no existe** SÍ se
+  acepta (queda `negocio_id = null`) — es analítica de mejor esfuerzo,
+  `202 Accepted` ya es la semántica de "aceptado para procesar", y fallar
+  duro solo porque el negocio se borró entre que el cliente cargó la
+  página y disparó el evento no aporta nada. Son dos capas distintas a
+  propósito, no una inconsistencia con `validateUuidParam` (que trata un
+  UUID mal formado en un parámetro de _ruta_ como 404): acá `businessId`
+  es un campo del _body_, y la convención establecida en todo el proyecto
+  para un campo de body que no pasa el schema es 422, no 404.
+- Épica 5: `eventos` (tabla "de alto volumen" por diseño, según su propio
+  comentario en `schema.sql`) no tenía columna `ip_origen` — a diferencia
+  de `reportes_negocio`, que ya la tiene desde la Épica 2 — así que no
+  había forma de limitar abuso de `POST /events` en anónimos (nada de
+  limitador en memoria, mismo principio que RF-025: no sobrevive
+  reinicios ni funciona igual con más de una instancia). Se agregó vía
+  migración (`eventos-ip-origen`), junto con dos índices parciales
+  (`usuario_id`/`ip_origen`, cada uno solo sobre las filas donde esa
+  columna no es null) — sin `schema.sql` cambiado, porque ese archivo
+  sigue siendo la migración inicial congelada, no el estado actual (mismo
+  criterio que `reportes_negocio`/`codigos_recuperacion`, que tampoco
+  están ahí). El límite (60 eventos por origen por minuto) es
+  deliberadamente mucho más generoso que el de RF-025 (3 cada 10
+  minutos): un reporte de negocio desactualizado es una acción deliberada
+  y rara; un evento de analítica es tráfico normal — una sola sesión de
+  navegación genera fácilmente decenas (búsquedas, vistas, clics). Cifra
+  propia, no citada de ningún documento.
+- Épica 5: `metadata` (JSONB, `additionalProperties: true` en el
+  contrato) es un campo libre que puede venir de un cliente anónimo — sin
+  tope de tamaño es un vector fácil para llenar `eventos` de basura
+  (regla de seguridad #1). Se agregó un límite de 2 KB serializado
+  (`EVENT_METADATA_MAX_BYTES`), también una cifra propia.

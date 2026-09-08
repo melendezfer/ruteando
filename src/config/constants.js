@@ -54,4 +54,24 @@ module.exports = {
   // cámara de celular más exigente en uso normal (~40 MP) y acota la
   // asignación real a un tamaño razonable.
   PHOTO_MAX_INPUT_PIXELS: 40_000_000,
+
+  // RF-013/023 (POST /events, Épica 5) — público (auth opcional), límite
+  // de abuso por origen (usuario_id si está logueado, si no ip_origen;
+  // ver migración eventos-ip-origen). A diferencia de
+  // OUTDATED_REPORT_RATE_LIMIT_MAX (una acción deliberada y rara), un
+  // evento es tráfico de analítica normal: una sola sesión de navegación
+  // genera fácilmente decenas (búsquedas, vistas, clics), así que el
+  // límite tiene que ser mucho más generoso — 60 por minuto deja pasar
+  // uso legítimo sin permitir una inundación trivial del endpoint o de
+  // las métricas que la Épica 9 va a leer de esta misma tabla. Supuesto
+  // propio, no una cifra citada de ningún documento.
+  EVENT_RATE_LIMIT_MAX: 60,
+  EVENT_RATE_LIMIT_WINDOW_MINUTES: 1,
+
+  // metadata (JSONB, additionalProperties: true) es un campo libre de un
+  // cliente que puede ser anónimo — sin tope, es un vector fácil para
+  // llenar la tabla de basura (regla de seguridad #1). 2 KB alcanza de
+  // sobra para lo que un evento de analítica necesita guardar (ej. el
+  // texto buscado, el id del producto visto).
+  EVENT_METADATA_MAX_BYTES: 2048,
 };

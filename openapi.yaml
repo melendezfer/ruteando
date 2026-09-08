@@ -233,6 +233,44 @@ components:
         displayOrder: { type: integer }
         createdAt: { type: string, format: date-time }
 
+    BusinessProfile:
+      description: >-
+        Perfil público completo (RF-012) — solo lo devuelve
+        GET /businesses/{businessId}. Distinto de Business (usado en
+        POST/PATCH y en los resultados de GET /businesses y
+        /businesses/nearby): ahí incluir menú/fotos/horario en cada
+        resultado de una búsqueda sería desperdiciar ancho de banda.
+      allOf:
+        - { $ref: '#/components/schemas/Business' }
+        - type: object
+          properties:
+            location:
+              allOf: [{ $ref: '#/components/schemas/Location' }]
+              nullable: true
+              description: Null si el negocio todavía no registró una ubicación.
+            schedule:
+              type: array
+              items: { $ref: '#/components/schemas/ScheduleDay' }
+            products:
+              type: array
+              items: { $ref: '#/components/schemas/Product' }
+            photos:
+              type: array
+              items: { $ref: '#/components/schemas/Photo' }
+              description: Fotos del negocio y de todos sus productos, sin anidar.
+            averageRating:
+              type: number
+              format: double
+              nullable: true
+              description: >-
+                Promedio de calificaciones aprobadas (1-5). Null si
+                todavía no tiene ninguna reseña aprobada.
+            reviewCount:
+              type: integer
+              description: >-
+                Solo cuenta reseñas aprobadas. La lista completa (paginada)
+                vive en GET /businesses/{businessId}/reviews.
+
     Review:
       type: object
       properties:
@@ -648,15 +686,15 @@ paths:
   /businesses/{businessId}:
     get:
       tags: [Negocios]
-      summary: Obtener el detalle de un negocio
+      summary: Obtener el perfil público completo de un negocio (RF-012)
       security: []
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
         '200':
-          description: Detalle del negocio
+          description: Perfil del negocio
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Business' }
+              schema: { $ref: '#/components/schemas/BusinessProfile' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Negocios]
@@ -1024,6 +1062,12 @@ paths:
     post:
       tags: [Analítica]
       summary: Registrar un evento de comportamiento
+      description: >-
+        Analítica de mejor esfuerzo: si businessId tiene formato de UUID
+        válido pero no corresponde a ningún negocio, el evento igual se
+        acepta (queda sin negocio asociado) — solo un businessId mal
+        formado se rechaza. Auth opcional: con un Bearer válido, el
+        evento queda asociado al usuario; sin uno, queda anónimo.
       security: []
       requestBody:
         required: true
@@ -1032,6 +1076,8 @@ paths:
             schema: { $ref: '#/components/schemas/EventInput' }
       responses:
         '202': { description: Evento aceptado para procesamiento asíncrono }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /consents:
     post:

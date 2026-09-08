@@ -5,4 +5,11 @@ async function existePorId(id) {
   return rows.length > 0;
 }
 
-module.exports = { existePorId };
+async function listar() {
+  const { rows } = await pool.query(
+    'SELECT id, nombre, icono, orden_visualizacion FROM categorias ORDER BY orden_visualizacion, nombre',
+  );
+  return rows;
+}
+
+module.exports = { existePorId, listar };

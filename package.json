@@ -19,7 +19,10 @@
     "format": "prettier --write .",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
-    "migrate:create": "node-pg-migrate create"
+    "migrate:create": "node-pg-migrate create",
+    "seed:loadtest": "node scripts/seedLoadTest.js",
+    "seed:loadtest:clean": "node scripts/seedLoadTest.js --clean",
+    "loadtest": "k6 run scripts/loadtest-nearby.js"
   },
   "repository": {
     "type": "git",

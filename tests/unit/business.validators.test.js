@@ -69,9 +69,16 @@ describe('scheduleInputSchema', () => {
     expect(scheduleInputSchema.safeParse([{ day: 'monday', closed: false }]).success).toBe(false);
   });
 
-  it('rechaza closeTime anterior o igual a openTime', () => {
+  it('acepta closeTime anterior a openTime (turno nocturno que cruza medianoche)', () => {
     const result = scheduleInputSchema.safeParse([
-      { day: 'monday', openTime: '18:00', closeTime: '08:00' },
+      { day: 'monday', openTime: '18:00', closeTime: '02:00' },
+    ]);
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza closeTime igual a openTime (ambiguo, no representable en este esquema)', () => {
+    const result = scheduleInputSchema.safeParse([
+      { day: 'monday', openTime: '08:00', closeTime: '08:00' },
     ]);
     expect(result.success).toBe(false);
   });

@@ -38,6 +38,18 @@ module.exports = [
     },
   },
   {
+    // Los scripts de k6 corren en el runtime propio de k6 (goja), no en
+    // Node — usan sintaxis de módulos ES (import/export) y globals de k6
+    // (__ENV), no CommonJS.
+    files: ['scripts/loadtest-*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        __ENV: 'readonly',
+      },
+    },
+  },
+  {
     ignores: ['node_modules/', 'coverage/'],
   },
 ];

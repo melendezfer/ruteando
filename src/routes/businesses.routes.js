@@ -3,13 +3,15 @@ const controller = require('../controllers/businesses.controller');
 const authenticate = require('../middlewares/authenticate');
 const { optionalAuthenticate } = authenticate;
 const requireRole = require('../middlewares/requireRole');
-const { validateBody, validateUuidParam } = require('../middlewares/validate');
+const { validateBody, validateQuery, validateUuidParam } = require('../middlewares/validate');
 const { uploadSingleFoto } = require('../middlewares/upload');
 const {
   businessInputSchema,
   locationInputSchema,
   scheduleInputSchema,
   reportInputSchema,
+  businessListQuerySchema,
+  businessNearbyQuerySchema,
 } = require('../validators/business.validators');
 const { productInputSchema } = require('../validators/product.validators');
 
@@ -24,6 +26,13 @@ router.post(
   validateBody(businessInputSchema),
   controller.create,
 );
+
+// IMPORTANTE: /nearby (y GET '/') deben registrarse ANTES de
+// GET /:businessId — si no, Express intentaría matchear "nearby" como el
+// parámetro :businessId (validarBusinessId lo rechazaría con 404 antes de
+// llegar siquiera al controlador correcto).
+router.get('/nearby', validateQuery(businessNearbyQuerySchema), controller.nearby);
+router.get('/', validateQuery(businessListQuerySchema), controller.list);
 
 router.get('/:businessId', validarBusinessId, controller.getOne);
 router.patch(

@@ -23,6 +23,29 @@ function validateBody(schema) {
 }
 
 /**
+ * Igual que validateBody pero para query params. No se puede reusar el
+ * mismo patrón de "reemplazar req.query" — en Express 5, req.query es un
+ * getter sin setter (asignarlo no tira error, pero tampoco cambia nada:
+ * las lecturas posteriores siguen devolviendo el query string crudo sin
+ * coercionar). El resultado parseado queda en req.validatedQuery; los
+ * controladores deben leer de ahí, no de req.query.
+ */
+function validateQuery(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      const errors = result.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
+      return next(new ValidationError('Los parámetros de consulta no son válidos', { errors }));
+    }
+    req.validatedQuery = result.data;
+    next();
+  };
+}
+
+/**
  * Un UUID mal formado nunca debe llegar a una consulta parametrizada: en
  * vez de dejar que Postgres tire "invalid input syntax for type uuid"
  * (un 500 sin sentido para el cliente), lo tratamos como 404 — un id con
@@ -37,4 +60,4 @@ function validateUuidParam(paramName) {
   };
 }
 
-module.exports = { validateBody, validateUuidParam };
+module.exports = { validateBody, validateQuery, validateUuidParam };

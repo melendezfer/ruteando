@@ -1,5 +1,9 @@
 const { z } = require('zod');
-const { validateBody, validateUuidParam } = require('../../src/middlewares/validate');
+const {
+  validateBody,
+  validateQuery,
+  validateUuidParam,
+} = require('../../src/middlewares/validate');
 const { ValidationError, NotFoundError } = require('../../src/errors');
 
 describe('validateBody', () => {
@@ -24,6 +28,32 @@ describe('validateBody', () => {
     const err = next.mock.calls[0][0];
     expect(err).toBeInstanceOf(ValidationError);
     expect(err.errors).toEqual([{ field: 'name', message: expect.any(String) }]);
+  });
+});
+
+describe('validateQuery', () => {
+  const schema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20) });
+
+  it('no toca req.query (en Express 5 es un getter sin setter) — deja el resultado en req.validatedQuery', () => {
+    const req = { query: { limit: '5' } };
+    const next = jest.fn();
+
+    validateQuery(schema)(req, {}, next);
+
+    expect(req.validatedQuery).toEqual({ limit: 5 });
+    expect(req.query).toEqual({ limit: '5' }); // sin coercionar, intacto
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('pasa un ValidationError con errors por campo cuando el query es inválido', () => {
+    const req = { query: { limit: '999' } };
+    const next = jest.fn();
+
+    validateQuery(schema)(req, {}, next);
+
+    const err = next.mock.calls[0][0];
+    expect(err).toBeInstanceOf(ValidationError);
+    expect(err.errors).toEqual([{ field: 'limit', message: expect.any(String) }]);
   });
 });
 

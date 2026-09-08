@@ -10,6 +10,16 @@ async function create(req, res) {
   res.status(201).json(business);
 }
 
+async function list(req, res) {
+  const resultado = await negociosService.listar(req.validatedQuery);
+  res.status(200).json(resultado);
+}
+
+async function nearby(req, res) {
+  const resultado = await negociosService.cercanos(req.validatedQuery);
+  res.status(200).json(resultado);
+}
+
 async function getOne(req, res) {
   const business = await negociosService.obtener(req.params.businessId);
   res.status(200).json(business);
@@ -77,6 +87,8 @@ async function uploadPhoto(req, res) {
 
 module.exports = {
   create,
+  list,
+  nearby,
   getOne,
   update,
   remove,

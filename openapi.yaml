@@ -1,8 +1,7 @@
-
 openapi: 3.1.0
 info:
   title: API RUTEANDO — Plataforma de Geolocalización Gastronómica de Ciudad Verde
-  version: "1.0.0"
+  version: '1.0.0'
   description: >
     API REST para el descubrimiento de vendedores gastronómicos
     informales en Ciudad Verde, Soacha. Ver Documento 07 (modelo
@@ -49,6 +48,37 @@ components:
       in: query
       description: Token opaco devuelto por la página anterior
       schema: { type: string }
+    CategoryIdFilter:
+      name: categoryId
+      in: query
+      schema: { type: integer, maximum: 32767 }
+    QueryFilter:
+      name: q
+      in: query
+      description: Texto de búsqueda libre sobre el nombre del negocio o de un producto suyo
+      schema: { type: string, maxLength: 150 }
+    PriceMinFilter:
+      name: priceMin
+      in: query
+      description: >-
+        Solo negocios con al menos un producto disponible con precio >=
+        este valor
+      schema: { type: number, minimum: 0 }
+    PriceMaxFilter:
+      name: priceMax
+      in: query
+      description: >-
+        Solo negocios con al menos un producto disponible con precio <=
+        este valor
+      schema: { type: number, minimum: 0 }
+    OpenNowFilter:
+      name: openNow
+      in: query
+      description: >-
+        Solo negocios abiertos en este momento, calculado contra su
+        horario y la hora actual (America/Bogota) — no un campo booleano
+        guardado.
+      schema: { type: boolean }
     Limit:
       name: limit
       in: query
@@ -59,27 +89,27 @@ components:
       description: Error de validación (RFC 9457)
       content:
         application/problem+json:
-          schema: { $ref: "#/components/schemas/ProblemDetails" }
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
     Unauthorized:
       description: Token de acceso faltante o inválido
       content:
         application/problem+json:
-          schema: { $ref: "#/components/schemas/ProblemDetails" }
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
     Forbidden:
       description: Rol o propiedad del recurso insuficiente
       content:
         application/problem+json:
-          schema: { $ref: "#/components/schemas/ProblemDetails" }
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
     NotFound:
       description: Recurso no encontrado
       content:
         application/problem+json:
-          schema: { $ref: "#/components/schemas/ProblemDetails" }
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
     TooManyRequests:
       description: Límite de solicitudes excedido
       content:
         application/problem+json:
-          schema: { $ref: "#/components/schemas/ProblemDetails" }
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
   schemas:
     User:
       type: object
@@ -113,6 +143,22 @@ components:
         contactPhone: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            Coordenada de la ubicación actual del negocio, si tiene una
+            registrada. Solo se llena en GET /businesses y
+            GET /businesses/nearby (evita una llamada aparte a
+            GET /businesses/{businessId}/location por cada resultado de
+            una búsqueda) — en el resto de las operaciones queda null.
+        longitude: { type: number, format: double, nullable: true }
+        distanceMeters:
+          type: number
+          format: double
+          nullable: true
+          description: Distancia en metros al punto de búsqueda. Solo en GET /businesses/nearby.
 
     BusinessInput:
       type: object
@@ -148,11 +194,11 @@ components:
       type: object
       required: [day]
       properties:
-        day: { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+        day:
+          { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
         openTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
         closeTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
         closed: { type: boolean, default: false }
-  
 
     Product:
       type: object
@@ -231,7 +277,16 @@ components:
       properties:
         type:
           type: string
-          enum: [search, business_view, product_view, contact_click, favorite_added, review_created, business_registered]
+          enum:
+            [
+              search,
+              business_view,
+              product_view,
+              contact_click,
+              favorite_added,
+              review_created,
+              business_registered,
+            ]
         businessId: { type: string, format: uuid, nullable: true }
         metadata: { type: object, additionalProperties: true }
 
@@ -248,7 +303,7 @@ components:
 
     Consent:
       allOf:
-        - { $ref: "#/components/schemas/ConsentInput" }
+        - { $ref: '#/components/schemas/ConsentInput' }
         - type: object
           properties:
             id: { type: integer }
@@ -258,10 +313,10 @@ components:
     AuthTokens:
       type: object
       properties:
-        accessToken: { type: string, description: "JWT, vigente 15 minutos" }
-        refreshToken: { type: string, description: "Vigente 30 días, un solo uso" }
+        accessToken: { type: string, description: 'JWT, vigente 15 minutos' }
+        refreshToken: { type: string, description: 'Vigente 30 días, un solo uso' }
         tokenType: { type: string, default: Bearer }
-        user: { $ref: "#/components/schemas/User" }
+        user: { $ref: '#/components/schemas/User' }
 
     Pagination:
       type: object
@@ -271,7 +326,7 @@ components:
 
     ProblemDetails:
       type: object
-      description: "RFC 9457 — Problem Details for HTTP APIs"
+      description: 'RFC 9457 — Problem Details for HTTP APIs'
       properties:
         type: { type: string, format: uri }
         title: { type: string }
@@ -285,7 +340,6 @@ components:
             properties:
               field: { type: string }
               message: { type: string }
-  
 
 paths:
   /auth/register:
@@ -306,13 +360,13 @@ paths:
                 password: { type: string, minLength: 8 }
                 role: { type: string, enum: [consumer, vendor] }
       responses:
-        "201":
+        '201':
           description: Cuenta creada
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/AuthTokens" }
-        "409": { description: El correo ya está registrado }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '409': { description: El correo ya está registrado }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /auth/login:
     post:
@@ -330,12 +384,12 @@ paths:
                 email: { type: string, format: email }
                 password: { type: string }
       responses:
-        "200":
+        '200':
           description: Sesión iniciada
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/AuthTokens" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/refresh:
     post:
@@ -352,12 +406,12 @@ paths:
               properties:
                 refreshToken: { type: string }
       responses:
-        "200":
+        '200':
           description: Tokens renovados
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/AuthTokens" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/logout:
     post:
@@ -377,8 +431,8 @@ paths:
               properties:
                 refreshToken: { type: string }
       responses:
-        "204": { description: Sesión cerrada }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+        '204': { description: Sesión cerrada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/forgot-password:
     post:
@@ -398,12 +452,12 @@ paths:
               properties:
                 email: { type: string, format: email }
       responses:
-        "202":
+        '202':
           description: >
             Si el correo está registrado, se envía un enlace de recuperación
             de un solo uso con expiración corta. Respuesta idéntica exista o
             no la cuenta, para no permitir enumeración de usuarios.
-        "422": { $ref: "#/components/responses/ValidationError" }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /auth/reset-password:
     post:
@@ -421,25 +475,26 @@ paths:
                 token: { type: string }
                 newPassword: { type: string, minLength: 8 }
       responses:
-        "204": { description: Contraseña actualizada; todas las sesiones existentes quedan revocadas }
-        "401":
+        '204':
+          { description: Contraseña actualizada; todas las sesiones existentes quedan revocadas }
+        '401':
           description: Token de recuperación inválido, expirado o ya usado
           content:
             application/problem+json:
-              schema: { $ref: "#/components/schemas/ProblemDetails" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /users/me:
     get:
       tags: [Usuarios]
       summary: Obtener el perfil propio
       responses:
-        "200":
+        '200':
           description: Perfil del usuario
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     patch:
       tags: [Usuarios]
       summary: Editar el perfil propio
@@ -454,27 +509,27 @@ paths:
                 phone: { type: string }
                 profilePhotoUrl: { type: string, format: uri }
       responses:
-        "200":
+        '200':
           description: Perfil actualizado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/User' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Usuarios]
       summary: Eliminar la cuenta propia
       responses:
-        "204": { description: Cuenta eliminada }
+        '204': { description: Cuenta eliminada }
 
   /users/me/favorites:
     get:
       tags: [Usuarios]
       summary: Listar negocios favoritos
       parameters:
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
       responses:
-        "200":
+        '200':
           description: Lista de favoritos
           content:
             application/json:
@@ -483,9 +538,8 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: "#/components/schemas/Business" }
-                  pagination: { $ref: "#/components/schemas/Pagination" }
-  
+                    items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
 
   /categories:
     get:
@@ -493,13 +547,13 @@ paths:
       summary: Listar categorías gastronómicas
       security: []
       responses:
-        "200":
+        '200':
           description: Lista de categorías
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Category" }
+                items: { $ref: '#/components/schemas/Category' }
 
   /businesses:
     post:
@@ -509,30 +563,33 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/BusinessInput" }
+            schema: { $ref: '#/components/schemas/BusinessInput' }
       responses:
-        "201":
+        '201':
           description: Negocio creado (estado inicial "pending")
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Business" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/Business' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     get:
       tags: [Negocios]
-      summary: Listar y filtrar negocios
+      summary: Listar y filtrar negocios (sin coordenada de referencia)
+      description: >-
+        Solo negocios con estado "active". Orden por fecha de creación
+        descendente. Para ordenar por cercanía, usar
+        GET /businesses/nearby — los mismos filtros combinables
+        (categoría, texto, precio, abierto ahora) aplican en ambos.
       security: []
       parameters:
-        - name: categoryId
-          in: query
-          schema: { type: integer }
-        - name: q
-          in: query
-          description: Texto de búsqueda libre sobre el nombre
-          schema: { type: string }
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
+        - { $ref: '#/components/parameters/CategoryIdFilter' }
+        - { $ref: '#/components/parameters/QueryFilter' }
+        - { $ref: '#/components/parameters/PriceMinFilter' }
+        - { $ref: '#/components/parameters/PriceMaxFilter' }
+        - { $ref: '#/components/parameters/OpenNowFilter' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        "200":
+        '200':
           description: Lista de negocios
           content:
             application/json:
@@ -541,30 +598,41 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: "#/components/schemas/Business" }
-                  pagination: { $ref: "#/components/schemas/Pagination" }
+                    items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/nearby:
     get:
       tags: [Negocios]
       summary: Buscar negocios cercanos a una coordenada
+      description: >-
+        Solo negocios con estado "active", ordenados por distancia
+        ascendente (índice espacial GIST sobre ubicaciones.punto — ver
+        CLAUDE.md sección 6, Épica 4). Admite los mismos filtros
+        combinables que GET /businesses, encima del radio de búsqueda.
       security: []
       parameters:
         - name: lat
           in: query
           required: true
-          schema: { type: number, format: double }
+          schema: { type: number, format: double, minimum: -90, maximum: 90 }
         - name: lng
           in: query
           required: true
-          schema: { type: number, format: double }
+          schema: { type: number, format: double, minimum: -180, maximum: 180 }
         - name: radiusKm
           in: query
           schema: { type: number, default: 2, maximum: 10 }
-        - $ref: "#/components/parameters/Cursor"
-        - $ref: "#/components/parameters/Limit"
+        - { $ref: '#/components/parameters/CategoryIdFilter' }
+        - { $ref: '#/components/parameters/QueryFilter' }
+        - { $ref: '#/components/parameters/PriceMinFilter' }
+        - { $ref: '#/components/parameters/PriceMaxFilter' }
+        - { $ref: '#/components/parameters/OpenNowFilter' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        "200":
+        '200':
           description: Negocios ordenados por distancia ascendente
           content:
             application/json:
@@ -573,92 +641,93 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: "#/components/schemas/Business" }
-                  pagination: { $ref: "#/components/schemas/Pagination" }
+                    items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/{businessId}:
     get:
       tags: [Negocios]
       summary: Obtener el detalle de un negocio
       security: []
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200":
+        '200':
           description: Detalle del negocio
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Business" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: { $ref: '#/components/schemas/Business' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Negocios]
       summary: Editar un negocio (solo su propietario)
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/BusinessInput" }
+            schema: { $ref: '#/components/schemas/BusinessInput' }
       responses:
-        "200":
+        '200':
           description: Negocio actualizado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Business" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+              schema: { $ref: '#/components/schemas/Business' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     delete:
       tags: [Negocios]
       summary: Dar de baja un negocio
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "204": { description: Negocio dado de baja }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        '204': { description: Negocio dado de baja }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /businesses/{businessId}/location:
     get:
       tags: [Negocios]
       summary: Obtener la ubicación vigente
       security: []
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200":
+        '200':
           description: Ubicación vigente
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Location" }
+              schema: { $ref: '#/components/schemas/Location' }
     put:
       tags: [Negocios]
       summary: Actualizar la ubicación vigente
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/LocationInput" }
+            schema: { $ref: '#/components/schemas/LocationInput' }
       responses:
-        "200":
+        '200':
           description: Nueva ubicación vigente
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Location" }
+              schema: { $ref: '#/components/schemas/Location' }
 
   /businesses/{businessId}/schedule:
     get:
       tags: [Negocios]
       summary: Obtener el horario semanal
       security: []
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200":
+        '200':
           description: Horario semanal (hasta 7 elementos)
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/ScheduleDay" }
+                items: { $ref: '#/components/schemas/ScheduleDay' }
     put:
       tags: [Negocios]
       summary: Reemplazar el horario semanal completo
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
@@ -666,9 +735,9 @@ paths:
             schema:
               type: array
               maxItems: 7
-              items: { $ref: "#/components/schemas/ScheduleDay" }
+              items: { $ref: '#/components/schemas/ScheduleDay' }
       responses:
-        "200": { description: Horario actualizado }
+        '200': { description: Horario actualizado }
 
   /businesses/{businessId}/outdated-reports:
     post:
@@ -682,7 +751,7 @@ paths:
       # un Bearer token válido, el reporte queda asociado a ese usuario.
       security: []
       parameters:
-        - { $ref: "#/components/parameters/BusinessId" }
+        - { $ref: '#/components/parameters/BusinessId' }
       requestBody:
         required: true
         content:
@@ -693,7 +762,7 @@ paths:
               properties:
                 reason: { type: string, maxLength: 500 }
       responses:
-        "201":
+        '201':
           description: Reporte registrado
           content:
             application/json:
@@ -704,92 +773,92 @@ paths:
                   businessId: { type: string, format: uuid }
                   reason: { type: string }
                   createdAt: { type: string, format: date-time }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "422": { $ref: "#/components/responses/ValidationError" }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /businesses/{businessId}/products:
     post:
       tags: [Productos]
       summary: Agregar un producto al menú
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ProductInput" }
+            schema: { $ref: '#/components/schemas/ProductInput' }
       responses:
-        "201":
+        '201':
           description: Producto creado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Product" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     get:
       tags: [Productos]
       summary: Listar el menú de un negocio
       security: []
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200":
+        '200':
           description: Lista de productos
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Product" }
-        "404": { $ref: "#/components/responses/NotFound" }
+                items: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /products/{productId}:
     get:
       tags: [Productos]
       summary: Obtener el detalle de un producto
       security: []
-      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      parameters: [{ $ref: '#/components/parameters/ProductId' }]
       responses:
-        "200":
+        '200':
           description: Detalle del producto
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Product" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Productos]
       summary: Editar un producto
-      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      parameters: [{ $ref: '#/components/parameters/ProductId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ProductInput" }
+            schema: { $ref: '#/components/schemas/ProductInput' }
       responses:
-        "200":
+        '200':
           description: Producto actualizado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Product" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Productos]
       summary: Eliminar un producto
-      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      parameters: [{ $ref: '#/components/parameters/ProductId' }]
       responses:
-        "204": { description: Producto eliminado }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
+        '204': { description: Producto eliminado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /businesses/{businessId}/photos:
     post:
       tags: [Fotos]
       summary: Subir una foto del negocio
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
@@ -800,28 +869,28 @@ paths:
               properties:
                 file: { type: string, format: binary }
       responses:
-        "201":
+        '201':
           description: Foto subida
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Photo" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "422":
+              schema: { $ref: '#/components/schemas/Photo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
           description: >-
             Archivo faltante, tipo no permitido, tamaño mayor al máximo
             (ver PHOTO_MAX_SIZE_BYTES en src/config/constants.js), o
             contenido que no decodifica como una imagen real de un formato
             permitido (regla de seguridad #7 — verificación por contenido,
             no por Content-Type/extensión declarados).
-          $ref: "#/components/responses/ValidationError"
+          $ref: '#/components/responses/ValidationError'
 
   /products/{productId}/photos:
     post:
       tags: [Fotos]
       summary: Subir una foto de un producto
-      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      parameters: [{ $ref: '#/components/parameters/ProductId' }]
       requestBody:
         required: true
         content:
@@ -832,55 +901,54 @@ paths:
               properties:
                 file: { type: string, format: binary }
       responses:
-        "201":
+        '201':
           description: Foto subida
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Photo" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "422": { $ref: "#/components/responses/ValidationError" }
+              schema: { $ref: '#/components/schemas/Photo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /photos/{photoId}:
     delete:
       tags: [Fotos]
       summary: Eliminar una foto
-      parameters: [{ $ref: "#/components/parameters/PhotoId" }]
+      parameters: [{ $ref: '#/components/parameters/PhotoId' }]
       responses:
-        "204": { description: Foto eliminada }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
+        '204': { description: Foto eliminada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /businesses/{businessId}/reviews:
     post:
       tags: [Reseñas]
       summary: Dejar una reseña y calificación
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ReviewInput" }
+            schema: { $ref: '#/components/schemas/ReviewInput' }
       responses:
-        "201":
+        '201':
           description: Reseña creada (estado inicial "pending")
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Review" }
-        "409": { description: "Ya existe una reseña de este usuario para este negocio (RF-015)" }
+              schema: { $ref: '#/components/schemas/Review' }
+        '409': { description: 'Ya existe una reseña de este usuario para este negocio (RF-015)' }
     get:
       tags: [Reseñas]
       summary: Listar reseñas aprobadas de un negocio
       security: []
       parameters:
-        - { $ref: "#/components/parameters/BusinessId" }
-        - { $ref: "#/components/parameters/Cursor" }
-        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: '#/components/parameters/BusinessId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        "200":
+        '200':
           description: Lista de reseñas
           content:
             application/json:
@@ -889,68 +957,68 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: "#/components/schemas/Review" }
-                  pagination: { $ref: "#/components/schemas/Pagination" }
+                    items: { $ref: '#/components/schemas/Review' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
 
   /reviews/{reviewId}:
     delete:
       tags: [Reseñas]
       summary: Eliminar la propia reseña
-      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       responses:
-        "204": { description: Reseña eliminada }
+        '204': { description: Reseña eliminada }
 
   /reviews/{reviewId}/report:
     post:
       tags: [Reseñas]
       summary: Reportar una reseña como inapropiada
-      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       responses:
-        "202": { description: Reporte recibido para moderación }
+        '202': { description: Reporte recibido para moderación }
 
   /businesses/{businessId}/favorite:
     post:
       tags: [Favoritos]
       summary: Marcar un negocio como favorito
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "204": { description: Marcado como favorito }
+        '204': { description: Marcado como favorito }
     delete:
       tags: [Favoritos]
       summary: Quitar un negocio de favoritos
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "204": { description: Favorito eliminado }
+        '204': { description: Favorito eliminado }
 
   /businesses/{businessId}/promotions:
     post:
       tags: [Promociones]
       summary: Crear una promoción temporal
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/PromotionInput" }
+            schema: { $ref: '#/components/schemas/PromotionInput' }
       responses:
-        "201":
+        '201':
           description: Promoción creada
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Promotion" }
+              schema: { $ref: '#/components/schemas/Promotion' }
     get:
       tags: [Promociones]
       summary: Listar promociones activas de un negocio
       security: []
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200":
+        '200':
           description: Lista de promociones activas
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Promotion" }
+                items: { $ref: '#/components/schemas/Promotion' }
 
   /events:
     post:
@@ -961,9 +1029,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EventInput" }
+            schema: { $ref: '#/components/schemas/EventInput' }
       responses:
-        "202": { description: Evento aceptado para procesamiento asíncrono }
+        '202': { description: Evento aceptado para procesamiento asíncrono }
 
   /consents:
     post:
@@ -974,53 +1042,53 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ConsentInput" }
+            schema: { $ref: '#/components/schemas/ConsentInput' }
       responses:
-        "201":
+        '201':
           description: Consentimiento registrado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Consent" }
+              schema: { $ref: '#/components/schemas/Consent' }
 
   /admin/businesses/pending:
     get:
       tags: [Administración]
       summary: Listar negocios pendientes de aprobación
       responses:
-        "200":
+        '200':
           description: Lista de negocios pendientes
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Business" }
+                items: { $ref: '#/components/schemas/Business' }
 
   /admin/businesses/{businessId}/approve:
     patch:
       tags: [Administración]
       summary: Aprobar un negocio pendiente
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        "200": { description: "Negocio aprobado (estado 'active')" }
+        '200': { description: "Negocio aprobado (estado 'active')" }
 
   /admin/reviews/reported:
     get:
       tags: [Administración]
       summary: Listar reseñas reportadas pendientes de moderación
       responses:
-        "200":
+        '200':
           description: Lista de reseñas reportadas
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Review" }
+                items: { $ref: '#/components/schemas/Review' }
 
   /admin/businesses/{businessId}/reject:
     patch:
       tags: [Administración]
       summary: Rechazar un negocio pendiente
-      parameters: [{ $ref: "#/components/parameters/BusinessId" }]
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         content:
           application/json:
@@ -1029,13 +1097,13 @@ paths:
               properties:
                 reason: { type: string }
       responses:
-        "200": { description: "Negocio rechazado (estado 'closed')" }
+        '200': { description: "Negocio rechazado (estado 'closed')" }
 
   /admin/reviews/{reviewId}/moderate:
     patch:
       tags: [Administración]
       summary: Aprobar o rechazar una reseña reportada
-      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       requestBody:
         required: true
         content:
@@ -1046,27 +1114,28 @@ paths:
               properties:
                 decision: { type: string, enum: [approved, rejected] }
       responses:
-        "200": { description: Reseña moderada }
+        '200': { description: Reseña moderada }
 
   /admin/metrics:
     get:
       tags: [Administración]
       summary: Consultar métricas agregadas de uso
       responses:
-        "200": { description: "Panel de métricas (negocios activos, búsquedas, reseñas por semana)" }
+        '200':
+          { description: 'Panel de métricas (negocios activos, búsquedas, reseñas por semana)' }
 
   /users/me/consents:
     get:
       tags: [Privacidad]
       summary: Consultar el historial de consentimientos propios
       responses:
-        "200":
+        '200':
           description: Lista de consentimientos otorgados
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Consent" }
+                items: { $ref: '#/components/schemas/Consent' }
 
   /auth/assisted-registration:
     post:
@@ -1078,17 +1147,16 @@ paths:
           application/json:
             schema:
               allOf:
-                - { $ref: "#/components/schemas/BusinessInput" }
+                - { $ref: '#/components/schemas/BusinessInput' }
                 - type: object
                   required: [assistedBy, consentTextVersion]
                   properties:
-                    assistedBy: { type: string, description: "Nombre de quien realiza el registro asistido" }
+                    assistedBy:
+                      { type: string, description: 'Nombre de quien realiza el registro asistido' }
                     consentTextVersion: { type: string }
       responses:
-        "201":
+        '201':
           description: Negocio y consentimiento asistido registrados
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Business" }
-  
-
+              schema: { $ref: '#/components/schemas/Business' }

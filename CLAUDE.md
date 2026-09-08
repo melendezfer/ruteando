@@ -167,6 +167,7 @@ Rutas: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`,
 `POST /auth/logout`, `GET /users/me`.
 
 Tareas:
+
 1. Registro con correo y contraseña, hash con bcrypt/argon2 (regla de
    seguridad #4).
 2. Login que devuelve un access token de corta duración y un refresh token
@@ -185,6 +186,7 @@ Rutas: `POST /businesses`, `GET/PATCH /businesses/{businessId}`,
 `PATCH /businesses/{businessId}/location`, `POST /businesses/{businessId}/schedule`.
 
 Tareas:
+
 1. Alta de negocio (nombre, descripción, categoría, tipo de negocio) —
    objetivo explícito: que el flujo completo (RF-004 a RF-008) tome menos de
    10 minutos (RNF-013); no agregar campos obligatorios que no estén en la
@@ -211,6 +213,7 @@ Rutas: `POST/GET /businesses/{businessId}/products`,
 `DELETE /photos/{photoId}`, `POST /businesses/{businessId}/schedule`.
 
 Tareas:
+
 1. CRUD de productos con nombre, precio, descripción, disponibilidad, foto.
 2. Carga de fotos con compresión automática en el servidor (regla de
    seguridad #7) antes de subir al almacenamiento S3-compatible.
@@ -378,9 +381,9 @@ alguien tiene que cerrar durante la implementación:
   `src/config/constants.js`), respaldado en base de datos (columna
   `ip_origen` en `reportes_negocio`, mismo tipo que `consentimientos`) en
   vez de un limitador en memoria, para que sobreviva reinicios y funcione
-  igual con más de una instancia corriendo. Requirió `app.set('trust
-  proxy', 1)` en `src/app.js` para que `req.ip` sea la IP real del
-  cliente detrás del proxy de Render/Railway.
+  igual con más de una instancia corriendo. Requirió
+  `app.set('trust proxy', 1)` en `src/app.js` para que `req.ip` sea la IP
+  real del cliente detrás del proxy de Render/Railway.
 - Hallazgo preexistente en `openapi.yaml` (ya estaba en el primer commit,
   `6f7debc`, antes de la Épica 1): el archivo tenía **dos claves
   `components:` de nivel superior** (una con `securitySchemes`,
@@ -513,3 +516,97 @@ alguien tiene que cerrar durante la implementación:
   completas; si durante el desarrollo surge evidencia que los contradiga,
   el código puede necesitar ajustarse y **debe documentarse el cambio**, no
   solo aplicarse en silencio.
+- Épica 4 (búsqueda geoespacial, RF-009 a RF-011): `openapi.yaml` no
+  declaraba en `/businesses/nearby` ninguno de los filtros combinables que
+  la prosa de la sección 6 promete (rango de precio, "abierto ahora",
+  texto, categoría) — solo tenía `lat/lng/radiusKm/cursor/limit`; y
+  `/businesses` no tenía `priceMin/priceMax/openNow`. Se agregaron ambos
+  conjuntos de parámetros (`CategoryIdFilter`, `QueryFilter`,
+  `PriceMinFilter`, `PriceMaxFilter`, `OpenNowFilter` en
+  `components/parameters`), compartidos entre las dos rutas.
+- Épica 4: la respuesta de `/businesses/nearby` no incluía la distancia
+  que justifica "ordenados por distancia ascendente", y `Business` no
+  llevaba coordenadas (una vista de mapa habría necesitado una llamada
+  aparte a `GET /businesses/{id}/location` por cada resultado). Se
+  agregaron `latitude`/`longitude` (en `/businesses` y `/businesses/nearby`)
+  y `distanceMeters` (solo en `/nearby`) directamente al schema `Business`
+  — quedan `null` en el resto de las operaciones (POST/PATCH/GET por id),
+  que no hacen ese join.
+- Épica 4: RF-008 (horario, en teoría cerrado desde la Épica 2) tenía un
+  bug real encontrado al diseñar "abierto ahora" — `business.validators.js`
+  rechazaba con 422 cualquier horario con `closeTime <= openTime`, lo que
+  bloqueaba turnos nocturnos que cruzan medianoche (ej. 18:00–02:00,
+  común en comida callejera nocturna) desde `PUT /businesses/{id}/schedule`,
+  antes incluso de llegar a esta épica. Se relajó esa regla (solo se
+  rechaza `closeTime === openTime`, ambiguo — "cerrado todo el día" vs.
+  "abierto 24 horas" no son distinguibles en este esquema, y "24 horas" no
+  quedó representable) y se invirtió la prueba unitaria que antes esperaba
+  ese 422 (`business.validators.test.js`). Sin migración: `chk_horarios_rango`
+  en `schema.sql` nunca exigió `hora_apertura < hora_cierre`, solo que
+  ambas existan — el bloqueo era enteramente de la capa de aplicación.
+- Épica 4: el cálculo de "abierto ahora" para un turno nocturno necesita
+  revisar la fila de horario de HOY y la de AYER (un turno que cruza
+  medianoche queda guardado bajo el día en que empieza) — aplicar la regla
+  completa (`ahora >= apertura O ahora <= cierre`) contra una sola fila da
+  un falso positivo antes de que ese turno empiece (ver el caso exacto,
+  con prueba de regresión permanente, en
+  `disponibilidad.service.test.js` y `tests/integration/discovery.test.js`).
+  La misma regla vive dos veces a propósito: como función pura en JS
+  (`disponibilidad.service.js`, testeable sin depender del reloj real) y
+  como expresión SQL en `negocios.repository.js#agregarFiltrosComunes` —
+  verificada contra la API real con datos sembrados a mano antes de
+  escribir las pruebas automatizadas.
+- Épica 4: `req.query` en Express 5 es un getter sin setter — el patrón
+  de `validateBody` (reemplazar `req.body` por los datos ya
+  coercionados/validados) no funciona para query params: asignar
+  `req.query = ...` no tira error, pero tampoco cambia nada (verificado
+  con una prueba mínima antes de escribir el middleware). Se agregó
+  `validateQuery` en `src/middlewares/validate.js`, que deja el resultado
+  en `req.validatedQuery` en vez de sobrescribir `req.query`.
+- Épica 4: paginación por cursor (`nextCursor` de `Pagination`) implementada
+  como keyset, no `OFFSET` — cursor opaco en base64url
+  (`src/utils/cursor.js`) con `(distanceMeters, id)` para `/nearby` y
+  `(fechaCreacion, id)` para `/businesses`, usando `id` como desempate
+  determinístico para que dos negocios a la misma distancia exacta no se
+  salten ni se dupliquen entre páginas (probado con coordenadas idénticas
+  a propósito, no "simétricas" — `ST_Distance` da el mismo valor exacto
+  solo si las coordenadas de entrada son literalmente iguales). Un cursor
+  que no decodifica a la forma esperada se rechaza con 422, nunca llega a
+  la consulta parametrizada.
+- Épica 4: verificado con `EXPLAIN ANALYZE` a mano (8.000 filas sintéticas)
+  y luego con una prueba de integración permanente
+  (`tests/integration/nearbyIndexPlan.test.js`) que la consulta de
+  `/businesses/nearby` usa `idx_ubicaciones_punto` — como `Index Scan`
+  simple sin otros filtros, o como `Bitmap Index Scan` combinado con otros
+  índices cuando hay más filtros activos (ambos son caminos de acceso por
+  índice; ninguno es un seq scan, que es lo único que la prueba prohíbe
+  de verdad). Encontrado en el camino: sin `ANALYZE` después de la carga
+  masiva de datos sembrados, el planificador usa estadísticas
+  viejas/por defecto y puede elegir no pasar por el índice espacial en
+  absoluto — la prueba y `scripts/seedLoadTest.js` corren `ANALYZE`
+  explícito después de sembrar, no dependen del autoanalyze asíncrono de
+  Postgres.
+- Épica 4: prueba de carga con k6 (no Artillery — ver decisión en la
+  conversación de planeación) contra `GET /businesses/nearby`, con
+  `scripts/seedLoadTest.js` sembrando 5.000 negocios representativos
+  alrededor de Ciudad Verde antes de correr `scripts/loadtest-nearby.js`.
+  Umbrales (`p95<300ms`, `p99<800ms`, error rate `<1%`, 50 VUs
+  concurrentes) son **un supuesto propio, no un requisito citado** — no
+  hay un RNF de rendimiento documentado en este repositorio para este
+  endpoint. Resultado real medido contra los 5.000 negocios sembrados:
+  p95≈152ms, 0% de errores, ~450-600 req/s sostenidos con 50 VUs — dentro
+  de los umbrales propuestos con margen amplio. No corre dentro de
+  `npm test` ni en el pipeline de CI de cada PR (necesita servidor arriba,
+  datos sembrados, y tarda más que las pruebas unitarias/integración) —
+  queda como paso manual documentado aquí y en los comentarios del script.
+- Épica 4: el patrón de `q` (`%${q}%`) siempre viajó como valor ligado
+  ($N), nunca concatenado en el texto SQL — no era una inyección SQL. Pero
+  sin escapar, `%` y `_` dentro de `q` actuaban como comodines de verdad
+  de `ILIKE` (no como texto literal): un negocio llamado con un `%` en el
+  nombre generaba coincidencias más amplias de lo esperado, y
+  `q=%` a secas matchea "cualquier texto" (comodín de LIKE), devolviendo
+  todos los negocios de la categoría en vez de buscar un `%` literal. Se
+  agregó `escaparComodinesLike()` en `negocios.repository.js` (escapa
+  `\` primero, luego `%` y `_`, con `\` como carácter de escape — el que
+  usa Postgres por defecto en LIKE/ILIKE) antes de armar el patrón. Ver
+  prueba de regresión con `q=50%` y `q=%` en `discovery.test.js`.

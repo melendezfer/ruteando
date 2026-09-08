@@ -51,6 +51,14 @@ function toApiBusiness(row) {
     contactPhone: row.telefono_contacto,
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
+    // Presentes solo cuando la consulta que produjo esta fila hizo el
+    // join con ubicaciones (listar/cercanos en negocios.repository.js) —
+    // en el resto de los callers (crear/obtener/actualizar/cerrar) quedan
+    // en null, no es un dato que esos endpoints hayan consultado.
+    latitude: row.latitud != null ? Number(row.latitud) : null,
+    longitude: row.longitud != null ? Number(row.longitud) : null,
+    // Solo lo llena la consulta de /businesses/nearby.
+    distanceMeters: row.distancia_m != null ? Number(row.distancia_m) : null,
   };
 }
 

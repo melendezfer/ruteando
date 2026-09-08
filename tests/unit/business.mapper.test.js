@@ -30,7 +30,33 @@ describe('toApiBusiness', () => {
       contactPhone: '3001112233',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
+      latitude: null,
+      longitude: null,
+      distanceMeters: null,
     });
+  });
+
+  it('embebe latitude/longitude/distanceMeters cuando la fila viene de una consulta con join de ubicación (listar/cercanos)', () => {
+    const row = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Salchipapas Doña Ana',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+      latitud: '4.5789',
+      longitud: '-74.217',
+      distancia_m: '532.108',
+    };
+
+    const resultado = toApiBusiness(row);
+
+    expect(resultado.latitude).toBe(4.5789);
+    expect(resultado.longitude).toBe(-74.217);
+    expect(resultado.distanceMeters).toBe(532.108);
   });
 });
 

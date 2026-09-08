@@ -4,12 +4,14 @@ const authenticate = require('../middlewares/authenticate');
 const { optionalAuthenticate } = authenticate;
 const requireRole = require('../middlewares/requireRole');
 const { validateBody, validateUuidParam } = require('../middlewares/validate');
+const { uploadSingleFoto } = require('../middlewares/upload');
 const {
   businessInputSchema,
   locationInputSchema,
   scheduleInputSchema,
   reportInputSchema,
 } = require('../validators/business.validators');
+const { productInputSchema } = require('../validators/product.validators');
 
 const router = Router();
 
@@ -57,6 +59,23 @@ router.post(
   optionalAuthenticate,
   validateBody(reportInputSchema),
   controller.reportOutdated,
+);
+
+router.post(
+  '/:businessId/products',
+  validarBusinessId,
+  authenticate,
+  validateBody(productInputSchema),
+  controller.createProduct,
+);
+router.get('/:businessId/products', validarBusinessId, controller.listProducts);
+
+router.post(
+  '/:businessId/photos',
+  validarBusinessId,
+  authenticate,
+  uploadSingleFoto,
+  controller.uploadPhoto,
 );
 
 module.exports = router;

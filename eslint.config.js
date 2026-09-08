@@ -15,6 +15,7 @@ module.exports = [
         require: 'readonly',
         __dirname: 'readonly',
         exports: 'writable',
+        Buffer: 'readonly',
       },
     },
     rules: {

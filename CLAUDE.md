@@ -396,6 +396,53 @@ alguien tiene que cerrar durante la implementación:
   fix.
 - El plan de pruebas no incluye pruebas de carga/estrés — agregarlas para
   la Épica 4 como mínimo.
+- Épica 3: la sección 6 lista `POST /businesses/{businessId}/schedule`
+  como parte de esta épica, pero ese endpoint (RF-008) ya se implementó
+  completo en la Épica 2 (commit `fc9c729`), junto con negocios/ubicación
+  — la prosa quedó desalineada, no el código. El alcance real de la
+  Épica 3 fue solo productos y fotos (RF-006, RF-007).
+- Épica 3: las 6 rutas de productos/fotos no tenían respuestas de error
+  (`401/403/404/422`) declaradas en `openapi.yaml`, a diferencia de
+  `outdated-reports`. Se agregaron, junto con un parámetro `PhotoId`
+  reusable (antes `photoId` se definía inline solo en
+  `/photos/{photoId}`, sin seguir el mismo patrón que `BusinessId`/
+  `ProductId`/`ReviewId`). Se verificó programáticamente que los 127
+  `$ref` del documento siguen resolviendo.
+- Épica 3 (RF-007, fotos): no había dependencias para recibir
+  `multipart/form-data` (Express 5 no lo parsea solo), comprimir imágenes
+  ni hablar con un backend S3-compatible. Se agregaron `multer`
+  (parseo, en memoria, sin tocar disco), `sharp` (compresión) y
+  `@aws-sdk/client-s3` (compatible con R2/B2/MinIO vía `endpoint` +
+  `forcePathStyle: true`). La verificación real de tipo MIME (regla de
+  seguridad #7) no usa una librería de sniffing aparte: Sharp decodifica
+  el buffer y se compara el `format` que detecta (no el `Content-Type`
+  que declaró el cliente) contra una lista de formatos permitidos — un
+  SVG renombrado a `.jpg` se rechaza porque Sharp lo detecta como `svg`,
+  no como `jpeg`/`png`/`webp` (ver `src/services/imagen.service.js` y su
+  prueba unitaria). Valores fijos elegidos (no son variables de entorno,
+  igual que los límites de RF-025): `PHOTO_MAX_SIZE_BYTES` = 8 MB (tamaño
+  crudo antes de recomprimir), salida siempre reescrita como JPEG calidad
+  80 con el lado más largo limitado a 1600px — ver
+  `src/config/constants.js`.
+- Épica 3: `STORAGE_ENDPOINT=http://localhost:9000` ya estaba en
+  `.env.example`/`.env.development`/`ci.yml` desde la Épica 2 (puerto por
+  defecto de MinIO), pero ningún servicio lo levantaba — no existía forma
+  de correr una prueba de integración real de subida/borrado de fotos.
+  Se agregó MinIO a `docker-compose.yml` (con un contenedor `minio-init`
+  de un solo uso que crea el bucket `ruteando-media-dev` al levantar el
+  stack) y como service container en `ci.yml` (con un paso `mc mb` antes
+  de `npm test` para crear `ruteando-media-ci`) — mismo principio que ya
+  se sigue con Postgres: nada de mocks contra el almacenamiento.
+- Épica 3: borrar una foto (`DELETE /photos/{photoId}`) borra primero el
+  objeto remoto (best-effort — si el storage falla, no bloquea el borrado
+  de la fila, solo queda un log de advertencia) y luego la fila en
+  `fotos`. El `ON DELETE CASCADE` de `fotos.producto_id` al borrar un
+  producto (`DELETE /products/{productId}`) sí borra las filas en
+  cascada, pero no los objetos en el bucket — el service de productos
+  lista las fotos del producto antes de borrarlo y limpia cada objeto
+  aparte. No existe todavía un job de limpieza de huérfanos para el caso
+  en que el proceso se caiga a mitad de esa limpieza — pendiente si en la
+  práctica llega a acumularse basura real en el bucket.
 - El trabajo de campo con vendedores y consumidores reales de Ciudad Verde
   todavía no se ha ejecutado — los supuestos de UX (Documento 08) están
   bien fundamentados en la literatura pero no en entrevistas propias

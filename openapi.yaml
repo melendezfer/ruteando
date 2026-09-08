@@ -39,6 +39,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PhotoId:
+      name: photoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     Cursor:
       name: cursor
       in: query
@@ -719,6 +724,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
     get:
       tags: [Productos]
       summary: Listar el menú de un negocio
@@ -732,6 +741,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /products/{productId}:
     get:
@@ -745,6 +755,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [Productos]
       summary: Editar un producto
@@ -760,12 +771,19 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
     delete:
       tags: [Productos]
       summary: Eliminar un producto
       parameters: [{ $ref: "#/components/parameters/ProductId" }]
       responses:
         "204": { description: Producto eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /businesses/{businessId}/photos:
     post:
@@ -787,6 +805,17 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Photo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: >-
+            Archivo faltante, tipo no permitido, tamaño mayor al máximo
+            (ver PHOTO_MAX_SIZE_BYTES en src/config/constants.js), o
+            contenido que no decodifica como una imagen real de un formato
+            permitido (regla de seguridad #7 — verificación por contenido,
+            no por Content-Type/extensión declarados).
+          $ref: "#/components/responses/ValidationError"
 
   /products/{productId}/photos:
     post:
@@ -808,19 +837,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Photo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
   /photos/{photoId}:
     delete:
       tags: [Fotos]
       summary: Eliminar una foto
-      parameters:
-        - name: photoId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      parameters: [{ $ref: "#/components/parameters/PhotoId" }]
       responses:
         "204": { description: Foto eliminada }
-  
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 
   /businesses/{businessId}/reviews:
     post:

@@ -20,4 +20,29 @@ module.exports = {
   // negocio puntual.
   OUTDATED_REPORT_RATE_LIMIT_MAX: 3,
   OUTDATED_REPORT_RATE_LIMIT_WINDOW_MINUTES: 10,
+
+  // RF-007 (fotos de negocio/producto). Fijos por decisión de producto,
+  // no por ambiente — igual que los TTL de arriba.
+  //
+  // 8 MB: el archivo *crudo* que acepta la subida antes de recomprimir.
+  // Una foto de celular sin editar pesa fácil 3-8 MB; el objetivo (RNF-013,
+  // flujo completo < 10 min) es que el vendedor no tenga que comprimir a
+  // mano antes de subir. Multer rechaza lo que pase de aquí antes de que
+  // llegue a Sharp.
+  PHOTO_MAX_SIZE_BYTES: 8 * 1024 * 1024,
+
+  // Filtro rápido en Multer por el Content-Type que declara el cliente —
+  // no es la verificación real de seguridad #7 (ver imagen.service.js,
+  // que decodifica el buffer con Sharp y compara el formato *detectado*,
+  // no el declarado). Deliberadamente sin image/svg+xml: un SVG puede
+  // llevar <script>, nunca se acepta como "imagen" subida por usuario.
+  PHOTO_ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
+  // Mismo conjunto que arriba pero en el vocabulario de formato que usa
+  // Sharp (metadata().format), para la verificación real post-decodificado.
+  PHOTO_ALLOWED_SHARP_FORMATS: ['jpeg', 'png', 'webp'],
+
+  // Toda foto se reescribe siempre como JPEG antes de guardarse
+  // (normaliza el formato de almacenamiento, sin importar el de entrada).
+  PHOTO_MAX_DIMENSION_PX: 1600,
+  PHOTO_JPEG_QUALITY: 80,
 };

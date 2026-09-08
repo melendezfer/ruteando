@@ -25,6 +25,22 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # Backend real de almacenamiento para las pruebas de subida/borrado
+      # de fotos (RF-007, Épica 3) — mismo principio que postgres arriba:
+      # nada de mocks contra un servicio externo.
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: ci-placeholder
+          MINIO_ROOT_PASSWORD: ci-placeholder
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       NODE_ENV: development
       DATABASE_URL: postgres://ruteando:ci_password@localhost:5432/ruteando_test
@@ -50,5 +66,11 @@ jobs:
 
       - name: Aplicar migraciones (schema.sql versionado)
         run: npm run migrate:up
+
+      - name: Crear bucket de MinIO para las pruebas
+        run: |
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
+            minio/mc:latest mb --ignore-existing local/ruteando-media-ci
 
       - run: npm test

@@ -102,4 +102,7 @@ router.get(
   controller.listReviews,
 );
 
+router.post('/:businessId/favorite', validarBusinessId, authenticate, controller.markFavorite);
+router.delete('/:businessId/favorite', validarBusinessId, authenticate, controller.unmarkFavorite);
+
 module.exports = router;

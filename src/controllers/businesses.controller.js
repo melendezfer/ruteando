@@ -6,6 +6,7 @@ const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
 const perfilNegocioService = require('../services/perfilNegocio.service');
 const resenasService = require('../services/resenas.service');
+const favoritosService = require('../services/favoritos.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -97,6 +98,16 @@ async function listReviews(req, res) {
   res.status(200).json(resultado);
 }
 
+async function markFavorite(req, res) {
+  await favoritosService.marcar(req.user.id, req.params.businessId);
+  res.status(204).send();
+}
+
+async function unmarkFavorite(req, res) {
+  await favoritosService.desmarcar(req.user.id, req.params.businessId);
+  res.status(204).send();
+}
+
 module.exports = {
   create,
   list,
@@ -114,4 +125,6 @@ module.exports = {
   uploadPhoto,
   createReview,
   listReviews,
+  markFavorite,
+  unmarkFavorite,
 };

@@ -583,6 +583,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Business' }
                   pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /categories:
     get:
@@ -1049,15 +1051,25 @@ paths:
     post:
       tags: [Favoritos]
       summary: Marcar un negocio como favorito
+      description: >-
+        Idempotente: marcar un negocio que ya era favorito responde 204
+        igual, sin error.
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
         '204': { description: Marcado como favorito }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [Favoritos]
       summary: Quitar un negocio de favoritos
+      description: >-
+        Idempotente: quitar un negocio que no era favorito responde 204
+        igual, sin error.
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
         '204': { description: Favorito eliminado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /businesses/{businessId}/promotions:
     post:

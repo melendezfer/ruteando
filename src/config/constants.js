@@ -74,4 +74,14 @@ module.exports = {
   // sobra para lo que un evento de analítica necesita guardar (ej. el
   // texto buscado, el id del producto visto).
   EVENT_METADATA_MAX_BYTES: 2048,
+
+  // RF-016 (reportar reseña, Épica 6) — a diferencia de RF-025, reportar
+  // una reseña siempre requiere autenticación (no es anónimo), así que
+  // esta es la segunda capa de defensa (la primera es el UNIQUE
+  // (resena_id, usuario_id) en reportes_resena, que por sí solo ya
+  // impide que UN mismo usuario tumbe la misma reseña dos veces): cubre
+  // una cuenta reportando muchas reseñas *distintas* rápido. Es una
+  // acción deliberada y rara, igual que RF-025 — mismo valor.
+  REVIEW_REPORT_RATE_LIMIT_MAX: 3,
+  REVIEW_REPORT_RATE_LIMIT_WINDOW_MINUTES: 10,
 };

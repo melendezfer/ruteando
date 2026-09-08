@@ -5,6 +5,7 @@ const reporteNegocioService = require('../services/reporteNegocio.service');
 const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
 const perfilNegocioService = require('../services/perfilNegocio.service');
+const resenasService = require('../services/resenas.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -86,6 +87,16 @@ async function uploadPhoto(req, res) {
   res.status(201).json(photo);
 }
 
+async function createReview(req, res) {
+  const review = await resenasService.crear(req.user.id, req.params.businessId, req.body);
+  res.status(201).json(review);
+}
+
+async function listReviews(req, res) {
+  const resultado = await resenasService.listar(req.params.businessId, req.validatedQuery);
+  res.status(200).json(resultado);
+}
+
 module.exports = {
   create,
   list,
@@ -101,4 +112,6 @@ module.exports = {
   createProduct,
   listProducts,
   uploadPhoto,
+  createReview,
+  listReviews,
 };

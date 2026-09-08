@@ -673,3 +673,54 @@ alguien tiene que cerrar durante la implementación:
   tope de tamaño es un vector fácil para llenar `eventos` de basura
   (regla de seguridad #1). Se agregó un límite de 2 KB serializado
   (`EVENT_METADATA_MAX_BYTES`), también una cifra propia.
+- Épica 6 (reseñas y reportes, RF-015/016): **reportar fotos queda fuera
+  de esta épica**, aunque la prosa de la sección 6 diga "reseña o foto" —
+  decisión explícita, no un olvido. `openapi.yaml` nunca tuvo una ruta de
+  reporte de fotos, y `fotos` no tiene columna `estado_moderacion` (a
+  diferencia de `resenas`), así que haría falta una migración +
+  tabla `reportes_foto` + ruta nueva, todo simétrico a lo de reseñas.
+  Queda como pendiente documentado para cuando se aborde la Épica 9
+  (administración y moderación) — es ahí donde de todos modos hay que
+  construir el flujo de moderación completo, tiene más sentido resolver
+  ambos (reseñas y fotos) juntos en ese momento que separarlos.
+- Épica 6: la tabla `resenas` no tiene ninguna relación declarada entre
+  `usuario_id` y el dueño del negocio — nada impide que un vendedor
+  reseñe (e infle la calificación de) su propio negocio. Un `CHECK` de
+  Postgres no puede comparar contra otra tabla (haría falta un trigger,
+  algo que este proyecto no usa en ningún lado todavía), así que se
+  verifica en `resenas.service.js#crear` con el mismo criterio que el
+  resto de las reglas de autorización del proyecto: chequeo de
+  aplicación, no de base de datos.
+- Épica 6: defensa en dos capas contra RF-016 (reportar en masa la misma
+  reseña para tumbarla a "pending" repetidamente) — decidido junto con el
+  usuario antes de implementar, no solo, ver la conversación de
+  planeación:
+  1. `UNIQUE(resena_id, usuario_id)` en la tabla nueva `reportes_resena`
+     (migración `resenas-reportes`) — un segundo reporte del mismo
+     usuario sobre la misma reseña da 409, no la vuelve a tumbar.
+  2. Límite genérico de `REVIEW_REPORT_RATE_LIMIT_MAX` (3 cada 10
+     minutos, mismo valor que RF-025) por usuario, sin importar sobre
+     qué reseña — cubre una cuenta reportando muchas reseñas distintas
+     rápido, caso que el UNIQUE de arriba no alcanza.
+     A diferencia de `reportes_negocio` (RF-025, público/anónimo),
+     `POST /reviews/{reviewId}/report` siempre requiere autenticación (hereda
+     el auth global del contrato, sin `security: []`) — por eso
+     `reportes_resena.usuario_id` es `NOT NULL` y no hace falta columna
+     `ip_origen`.
+- Épica 6: un reporte exitoso mueve la reseña a
+  `estado_moderacion = 'pendiente'` de inmediato (decisión confirmada
+  explícitamente antes de implementar: un solo reporte, sin umbral,
+  saca la reseña de `GET .../reviews` hasta que la Épica 9 la revise) —
+  tal como lo pedía la prosa original de esta sección, sin condicionarlo
+  al estado anterior de la reseña.
+- Épica 6: `GET /businesses/{businessId}/reviews` reusa exactamente el
+  patrón de paginación keyset de la Épica 4/5 (`fecha_creacion::text` en
+  vez de un JS `Date`, para no reintroducir la pérdida de precisión de
+  microsegundos que ya se encontró y corrigió ahí) — se replicó desde el
+  principio en vez de volver a descubrir el mismo bug.
+- Épica 6: faltaban las respuestas de error en las 4 rutas de reseñas en
+  `openapi.yaml`, y el `409` de "reseña duplicada" estaba con una
+  descripción suelta en vez de `$ref` a un componente reusable — se
+  agregó `components/responses/Conflict` (mismo patrón que
+  `ValidationError`/`Forbidden`/etc.) y se usa también para el 409 de
+  reporte duplicado.

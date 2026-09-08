@@ -114,9 +114,9 @@ describe('GET /businesses/{businessId} (perfil público, RF-012)', () => {
     expect(res.body.products).toMatchObject([{ id: producto.body.id, name: 'Salchipapa' }]);
     expect(res.body.photos).toHaveLength(2);
     expect(res.body.photos.map((f) => f.type).sort()).toEqual(['business', 'product']);
-    // averageRating/reviewCount siguen en null/0 — todavía no existe forma
-    // de crear una reseña (Épica 6), es el resultado correcto de agregar
-    // sobre una tabla vacía, no un placeholder fijo.
+    // averageRating/reviewCount en null/0: este negocio no tiene ninguna
+    // reseña (ni aprobada ni de ningún tipo) — el agregado real sobre
+    // reseñas aprobadas de otro negocio se prueba en resenas.test.js.
     expect(res.body.averageRating).toBeNull();
     expect(res.body.reviewCount).toBe(0);
   });

@@ -110,6 +110,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Conflict:
+      description: El recurso ya existe o entra en conflicto con el estado actual
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
   schemas:
     User:
       type: object
@@ -964,6 +969,9 @@ paths:
     post:
       tags: [Reseñas]
       summary: Dejar una reseña y calificación
+      description: >-
+        RF-015: una reseña por usuario y negocio (409 si ya existe una), y
+        el dueño de un negocio no puede reseñar su propio negocio (403).
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
@@ -976,7 +984,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Review' }
-        '409': { description: 'Ya existe una reseña de este usuario para este negocio (RF-015)' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Ya existe una reseña de este usuario para este negocio (RF-015)
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
     get:
       tags: [Reseñas]
       summary: Listar reseñas aprobadas de un negocio
@@ -997,6 +1011,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Review' }
                   pagination: { $ref: '#/components/schemas/Pagination' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /reviews/{reviewId}:
     delete:
@@ -1005,14 +1021,29 @@ paths:
       parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       responses:
         '204': { description: Reseña eliminada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /reviews/{reviewId}/report:
     post:
       tags: [Reseñas]
       summary: Reportar una reseña como inapropiada
+      description: >-
+        RF-016: mueve la reseña a estado_moderacion "pending" de
+        inmediato, para revisión en la Épica 9. No es anónimo (requiere
+        autenticación) — un mismo usuario no puede reportar la misma
+        reseña dos veces (409), y hay un límite de reportes por usuario
+        en una ventana de tiempo (429).
       parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       responses:
         '202': { description: Reporte recibido para moderación }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Este usuario ya reportó esta reseña
+          $ref: '#/components/responses/Conflict'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /businesses/{businessId}/favorite:
     post:

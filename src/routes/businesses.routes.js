@@ -14,6 +14,7 @@ const {
   businessNearbyQuerySchema,
 } = require('../validators/business.validators');
 const { productInputSchema } = require('../validators/product.validators');
+const { reviewInputSchema, reviewListQuerySchema } = require('../validators/resenas.validators');
 
 const router = Router();
 
@@ -85,6 +86,20 @@ router.post(
   authenticate,
   uploadSingleFoto,
   controller.uploadPhoto,
+);
+
+router.post(
+  '/:businessId/reviews',
+  validarBusinessId,
+  authenticate,
+  validateBody(reviewInputSchema),
+  controller.createReview,
+);
+router.get(
+  '/:businessId/reviews',
+  validarBusinessId,
+  validateQuery(reviewListQuerySchema),
+  controller.listReviews,
 );
 
 module.exports = router;

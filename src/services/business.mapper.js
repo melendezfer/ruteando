@@ -122,6 +122,24 @@ function toApiPhoto(row) {
   };
 }
 
+const MODERATION_STATUS_DB_TO_API = {
+  pendiente: 'pending',
+  aprobada: 'approved',
+  rechazada: 'rejected',
+};
+
+function toApiReview(row) {
+  return {
+    id: row.id,
+    businessId: row.negocio_id,
+    userId: row.usuario_id,
+    rating: row.calificacion,
+    comment: row.comentario,
+    moderationStatus: MODERATION_STATUS_DB_TO_API[row.estado_moderacion],
+    createdAt: row.fecha_creacion,
+  };
+}
+
 /**
  * GET /businesses/{businessId} (RF-012) — perfil público completo.
  * Distinto de toApiBusiness (usado en crear/listar/cercanos): ahí
@@ -151,10 +169,12 @@ module.exports = {
   DAY_API_TO_DB,
   ORDEN_DIAS_DB,
   PHOTO_TYPE_DB_TO_API,
+  MODERATION_STATUS_DB_TO_API,
   toApiBusiness,
   toApiLocation,
   toApiScheduleDay,
   toApiProduct,
   toApiPhoto,
+  toApiReview,
   toApiBusinessProfile,
 };

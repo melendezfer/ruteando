@@ -3,6 +3,7 @@ const {
   toApiLocation,
   toApiScheduleDay,
   toApiBusinessProfile,
+  toApiReview,
   LOCATION_TYPE_API_TO_DB,
   DAY_API_TO_DB,
 } = require('../../src/services/business.mapper');
@@ -220,5 +221,49 @@ describe('toApiBusinessProfile', () => {
     expect(resultado.photos).toMatchObject([{ id: 'f-1', type: 'business' }]);
     expect(resultado.averageRating).toBe(4.5);
     expect(resultado.reviewCount).toBe(3);
+  });
+});
+
+describe('toApiReview', () => {
+  it('mapea una fila de resenas (español) al contrato Review (inglés)', () => {
+    const row = {
+      id: 'r-1',
+      negocio_id: 'b-1',
+      usuario_id: 'u-1',
+      calificacion: 4,
+      comentario: 'Muy bueno',
+      estado_moderacion: 'pendiente',
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+    };
+
+    expect(toApiReview(row)).toEqual({
+      id: 'r-1',
+      businessId: 'b-1',
+      userId: 'u-1',
+      rating: 4,
+      comment: 'Muy bueno',
+      moderationStatus: 'pending',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('mapea los 3 estados de moderación', () => {
+    const base = {
+      id: 'r-1',
+      negocio_id: 'b-1',
+      usuario_id: 'u-1',
+      calificacion: 5,
+      comentario: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+    };
+    expect(toApiReview({ ...base, estado_moderacion: 'pendiente' }).moderationStatus).toBe(
+      'pending',
+    );
+    expect(toApiReview({ ...base, estado_moderacion: 'aprobada' }).moderationStatus).toBe(
+      'approved',
+    );
+    expect(toApiReview({ ...base, estado_moderacion: 'rechazada' }).moderationStatus).toBe(
+      'rejected',
+    );
   });
 });

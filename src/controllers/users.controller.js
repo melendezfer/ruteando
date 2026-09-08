@@ -1,4 +1,5 @@
 const usuariosRepo = require('../repositories/usuarios.repository');
+const favoritosService = require('../services/favoritos.service');
 const { toApiUser } = require('../services/user.mapper');
 const { UnauthorizedError } = require('../errors');
 
@@ -12,4 +13,9 @@ async function me(req, res) {
   res.status(200).json(toApiUser(usuario));
 }
 
-module.exports = { me };
+async function listFavorites(req, res) {
+  const resultado = await favoritosService.listar(req.user.id, req.validatedQuery);
+  res.status(200).json(resultado);
+}
+
+module.exports = { me, listFavorites };

@@ -724,3 +724,18 @@ alguien tiene que cerrar durante la implementación:
   agregó `components/responses/Conflict` (mismo patrón que
   `ValidationError`/`Forbidden`/etc.) y se usa también para el 409 de
   reporte duplicado.
+- Épica 7 (favoritos, RF-017): idempotente en los dos sentidos, sin
+  409/404 por "ya estaba así" — decisión respaldada en el propio
+  contrato, no inventada: `POST /businesses/{id}/favorite` ya estaba
+  declarado con `204` sin body (no `201` con el favorito devuelto y un
+  409 para el duplicado, como sí se hizo con reseñas), señal de que se
+  diseñó como "asegurar que esté marcado", no como creación de un
+  recurso. `marcar()` usa `ON CONFLICT (usuario_id, negocio_id) DO NOTHING`;
+  `desmarcar()` es un `DELETE` normal (sin filas afectadas ya es un
+  no-op silencioso, no hace falta `ON CONFLICT` ahí). La PK
+  compuesta de `favoritos` (sin columna `id` propia) ya impedía
+  duplicados a nivel de base de datos — no hizo falta migración.
+  `GET /users/me/favorites` no filtra por `estado` del negocio (un
+  negocio favorito que luego cierra sigue apareciendo) — no estaba
+  pedido y agregarlo hubiera sido sobre-diseñar la épica más simple del
+  backlog, tal como pide la sección 6.

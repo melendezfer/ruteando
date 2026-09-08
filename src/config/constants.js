@@ -45,4 +45,13 @@ module.exports = {
   // (normaliza el formato de almacenamiento, sin importar el de entrada).
   PHOTO_MAX_DIMENSION_PX: 1600,
   PHOTO_JPEG_QUALITY: 80,
+
+  // Límite de "bomba de descompresión": PHOTO_MAX_SIZE_BYTES acota el
+  // archivo comprimido, no lo que Sharp asigna en memoria al decodificarlo
+  // — un PNG de pocos KB con dimensiones declaradas enormes puede
+  // decodificar a más de 1 GB en RAM (el límite por defecto de Sharp es
+  // ~268M píxeles). 40 millones de píxeles cubre con margen hasta la
+  // cámara de celular más exigente en uso normal (~40 MP) y acota la
+  // asignación real a un tamaño razonable.
+  PHOTO_MAX_INPUT_PIXELS: 40_000_000,
 };

@@ -169,6 +169,26 @@ describe('PATCH /products/{productId}', () => {
 
     expect(res.status).toBe(403);
   });
+
+  it('un PATCH que no manda available NO reactiva un producto marcado como agotado (regresión)', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id);
+
+    const agotado = await request(app)
+      .patch(`/products/${producto.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: producto.name, price: producto.price, available: false });
+    expect(agotado.body.available).toBe(false);
+
+    const soloPrecio = await request(app)
+      .patch(`/products/${producto.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: producto.name, price: 9999 });
+
+    expect(soloPrecio.status).toBe(200);
+    expect(soloPrecio.body.price).toBe(9999);
+    expect(soloPrecio.body.available).toBe(false); // no se reactivó solo
+  });
 });
 
 describe('DELETE /products/{productId}', () => {

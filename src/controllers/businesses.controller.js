@@ -66,7 +66,12 @@ async function listProducts(req, res) {
 }
 
 async function uploadPhoto(req, res) {
-  const photo = await fotosService.subirParaNegocio(req.user.id, req.params.businessId, req.file);
+  const photo = await fotosService.subirParaNegocio(
+    req.user.id,
+    req.params.businessId,
+    req.file,
+    req.log,
+  );
   res.status(201).json(photo);
 }
 

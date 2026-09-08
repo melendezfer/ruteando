@@ -1,35 +1,51 @@
 const pool = require('../config/db');
 
-async function crear({ negocioId, productoId, tipo, url, ordenVisualizacion }) {
-  const { rows } = await pool.query(
-    `INSERT INTO fotos (negocio_id, producto_id, tipo, url, orden_visualizacion)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [negocioId ?? null, productoId ?? null, tipo, url, ordenVisualizacion],
-  );
-  return rows[0];
-}
-
 async function buscarPorId(id) {
   const { rows } = await pool.query('SELECT * FROM fotos WHERE id = $1', [id]);
   return rows[0] || null;
 }
 
 /**
- * Siguiente orden_visualizacion libre para un negocio o producto (uno de
- * los dos siempre es null, según chk_fotos_referencia). No hay endpoint de
- * reordenamiento en el contrato — el orden se asigna solo, en el orden en
- * que se suben las fotos.
+ * Calcula el siguiente orden_visualizacion libre e inserta la foto, todo
+ * dentro de la misma transacción con un advisory lock por dueño
+ * (negocio_id o producto_id, uno de los dos siempre es null según
+ * chk_fotos_referencia). Sin el lock, dos subidas casi simultáneas del
+ * mismo negocio/producto podían calcular el mismo MAX()+1 antes de que
+ * ninguna hubiera insertado — no hay una fila existente que bloquear con
+ * FOR UPDATE porque el conflicto es sobre un agregado, no sobre una fila.
+ * No hay endpoint de reordenamiento en el contrato — el orden se asigna
+ * solo, en el orden en que se suben las fotos.
  */
-async function siguienteOrden({ negocioId, productoId }) {
+async function crearConOrdenSiguiente({ negocioId, productoId, tipo, url }) {
   const columna = negocioId ? 'negocio_id' : 'producto_id';
   const valor = negocioId ?? productoId;
-  const { rows } = await pool.query(
-    `SELECT COALESCE(MAX(orden_visualizacion), -1) + 1 AS siguiente
-     FROM fotos WHERE ${columna} = $1`,
-    [valor],
-  );
-  return rows[0].siguiente;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [String(valor)]);
+
+    const { rows: ordenRows } = await client.query(
+      `SELECT COALESCE(MAX(orden_visualizacion), -1) + 1 AS siguiente
+       FROM fotos WHERE ${columna} = $1`,
+      [valor],
+    );
+
+    const { rows } = await client.query(
+      `INSERT INTO fotos (negocio_id, producto_id, tipo, url, orden_visualizacion)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [negocioId ?? null, productoId ?? null, tipo, url, ordenRows[0].siguiente],
+    );
+
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function listarPorProducto(productoId) {
@@ -41,4 +57,4 @@ async function eliminar(id) {
   await pool.query('DELETE FROM fotos WHERE id = $1', [id]);
 }
 
-module.exports = { crear, buscarPorId, siguienteOrden, listarPorProducto, eliminar };
+module.exports = { crearConOrdenSiguiente, buscarPorId, listarPorProducto, eliminar };

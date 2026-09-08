@@ -1,7 +1,7 @@
 const sharp = require('sharp');
 const imagenService = require('../../src/services/imagen.service');
 const { ValidationError } = require('../../src/errors');
-const { PHOTO_MAX_DIMENSION_PX } = require('../../src/config/constants');
+const { PHOTO_MAX_DIMENSION_PX, PHOTO_MAX_INPUT_PIXELS } = require('../../src/config/constants');
 
 async function pngDeColorSolido(width, height) {
   return sharp({
@@ -47,4 +47,20 @@ describe('imagen.service.procesar', () => {
     );
     await expect(imagenService.procesar(svg)).rejects.toBeInstanceOf(ValidationError);
   });
+
+  it('rechaza una imagen con más píxeles que PHOTO_MAX_INPUT_PIXELS (bomba de descompresión)', async () => {
+    // No hace falta un archivo pequeño con dimensiones falsas para probar
+    // esto: cualquier imagen real por encima del límite debe rechazarse
+    // antes de decodificarla por completo, sin importar cuánto pese
+    // comprimida.
+    const width = 7000;
+    const height = Math.ceil(PHOTO_MAX_INPUT_PIXELS / width) + 1;
+    const enorme = await sharp({
+      create: { width, height, channels: 3, background: { r: 10, g: 10, b: 10 } },
+    })
+      .png()
+      .toBuffer();
+
+    await expect(imagenService.procesar(enorme)).rejects.toBeInstanceOf(ValidationError);
+  }, 20000);
 });

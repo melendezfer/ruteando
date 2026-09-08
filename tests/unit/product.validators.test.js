@@ -30,8 +30,22 @@ describe('productInputSchema', () => {
     ).toBe(false);
   });
 
-  it('default available es true cuando no se envía', () => {
+  it('available queda undefined cuando no se envía (sin .default en el schema)', () => {
+    // Regresión: con .default(true) en el schema, un PATCH que no
+    // mandaba "available" llegaba al service con el campo ya rellenado
+    // en true, y reactivaba en silencio un producto marcado como
+    // agotado. El valor por defecto de creación se aplica en
+    // productos.service.js, no aquí — ver esa prueba de integración.
     const result = productInputSchema.safeParse({ name: 'X', price: 1000 });
-    expect(result.data.available).toBe(true);
+    expect(result.data.available).toBeUndefined();
+  });
+
+  it('acepta available explícito (true o false)', () => {
+    expect(
+      productInputSchema.safeParse({ name: 'X', price: 1000, available: false }).data.available,
+    ).toBe(false);
+    expect(
+      productInputSchema.safeParse({ name: 'X', price: 1000, available: true }).data.available,
+    ).toBe(true);
   });
 });

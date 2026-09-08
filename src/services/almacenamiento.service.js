@@ -2,6 +2,15 @@ const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const s3Client = require('../config/s3Client');
 const env = require('../config/env');
 
+// STORAGE_ENDPOINT es el endpoint de la API S3 (contra el que el SDK firma
+// PUT/DELETE, ver s3Client.js) — en R2/B2 real ese host no sirve lectura
+// pública anónima. STORAGE_PUBLIC_URL es la base de lectura real; si no
+// está configurada (dev/CI con MinIO, donde el mismo endpoint sí es
+// alcanzable por el cliente) se usa STORAGE_ENDPOINT como respaldo — pero
+// env.js exige STORAGE_PUBLIC_URL explícita en production, así que ese
+// respaldo nunca aplica ahí.
+const BASE_PUBLICA = env.STORAGE_PUBLIC_URL || env.STORAGE_ENDPOINT;
+
 /**
  * Sube un objeto ya procesado (ver imagen.service.js) al bucket
  * S3-compatible configurado (MinIO en dev/CI, R2/B2 en staging/production)
@@ -16,7 +25,7 @@ async function subir(key, buffer, contentType) {
       ContentType: contentType,
     }),
   );
-  return `${env.STORAGE_ENDPOINT}/${env.STORAGE_BUCKET}/${key}`;
+  return `${BASE_PUBLICA}/${env.STORAGE_BUCKET}/${key}`;
 }
 
 async function borrar(key) {
@@ -29,7 +38,7 @@ async function borrar(key) {
  * de guardar una columna aparte solo para esto.
  */
 function extraerKeyDeUrl(url) {
-  const prefijo = `${env.STORAGE_ENDPOINT}/${env.STORAGE_BUCKET}/`;
+  const prefijo = `${BASE_PUBLICA}/${env.STORAGE_BUCKET}/`;
   return url.startsWith(prefijo) ? url.slice(prefijo.length) : null;
 }
 

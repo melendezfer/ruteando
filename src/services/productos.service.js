@@ -44,7 +44,9 @@ async function crear(usuarioId, negocioId, input) {
     nombre: input.name,
     descripcion: input.description,
     precio: input.price,
-    disponible: input.available,
+    // Sin .default(true) en el schema (ver product.validators.js) — el
+    // valor por defecto de creación se aplica aquí, no en el validador.
+    disponible: input.available !== undefined ? input.available : true,
   });
 
   return toApiProduct(producto);
@@ -91,9 +93,12 @@ async function eliminar(usuarioId, id, logger) {
   const fotos = await fotosRepo.listarPorProducto(id);
   await productosRepo.eliminar(id);
 
-  for (const foto of fotos) {
-    await almacenamientoService.borrarPorUrlSilencioso(foto.url, logger);
-  }
+  // En paralelo: son borrados independientes y borrarPorUrlSilencioso ya
+  // atrapa sus propios errores (best-effort), así que no hay nada que
+  // esperar en serie.
+  await Promise.allSettled(
+    fotos.map((foto) => almacenamientoService.borrarPorUrlSilencioso(foto.url, logger)),
+  );
 }
 
 module.exports = {

@@ -17,7 +17,12 @@ async function remove(req, res) {
 }
 
 async function uploadPhoto(req, res) {
-  const photo = await fotosService.subirParaProducto(req.user.id, req.params.productId, req.file);
+  const photo = await fotosService.subirParaProducto(
+    req.user.id,
+    req.params.productId,
+    req.file,
+    req.log,
+  );
   res.status(201).json(photo);
 }
 

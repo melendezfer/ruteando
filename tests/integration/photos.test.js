@@ -93,6 +93,24 @@ describe('POST /businesses/{businessId}/photos', () => {
     expect(res.status).toBe(403);
   });
 
+  it('dos subidas concurrentes del mismo negocio no chocan en displayOrder (regresión: race condition)', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const jpeg = await jpegDePrueba();
+
+    const subir = () =>
+      request(app)
+        .post(`/businesses/${negocio.id}/photos`)
+        .set('Authorization', `Bearer ${vendor.accessToken}`)
+        .attach('file', jpeg, 'foto.jpg');
+
+    const [a, b, c] = await Promise.all([subir(), subir(), subir()]);
+
+    expect([a.status, b.status, c.status]).toEqual([201, 201, 201]);
+    const ordenes = [a.body.displayOrder, b.body.displayOrder, c.body.displayOrder];
+    expect(new Set(ordenes).size).toBe(3); // los tres son distintos
+    expect(ordenes.sort((x, y) => x - y)).toEqual([0, 1, 2]);
+  });
+
   it('rechaza sin access token (401)', async () => {
     const { negocio } = await registrarVendedorConNegocio();
     const jpeg = await jpegDePrueba();

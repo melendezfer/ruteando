@@ -433,16 +433,80 @@ alguien tiene que cerrar durante la implementación:
   stack) y como service container en `ci.yml` (con un paso `mc mb` antes
   de `npm test` para crear `ruteando-media-ci`) — mismo principio que ya
   se sigue con Postgres: nada de mocks contra el almacenamiento.
-- Épica 3: borrar una foto (`DELETE /photos/{photoId}`) borra primero el
-  objeto remoto (best-effort — si el storage falla, no bloquea el borrado
-  de la fila, solo queda un log de advertencia) y luego la fila en
-  `fotos`. El `ON DELETE CASCADE` de `fotos.producto_id` al borrar un
-  producto (`DELETE /products/{productId}`) sí borra las filas en
-  cascada, pero no los objetos en el bucket — el service de productos
-  lista las fotos del producto antes de borrarlo y limpia cada objeto
-  aparte. No existe todavía un job de limpieza de huérfanos para el caso
-  en que el proceso se caiga a mitad de esa limpieza — pendiente si en la
-  práctica llega a acumularse basura real en el bucket.
+- Épica 3: borrar una foto (`DELETE /photos/{photoId}`) borra primero la
+  fila en `fotos` y luego, best-effort, el objeto remoto (si el storage
+  falla, no bloquea el borrado, solo queda un log de advertencia) — en ese
+  orden porque si el proceso se cae entre medio, el peor caso es un objeto
+  huérfano en el bucket, nunca una fila que sigue apuntando a un archivo
+  que ya no existe. (Una revisión posterior con `/ultrareview` encontró
+  que la primera versión tenía el orden invertido — borraba el objeto
+  remoto antes que la fila, produciendo justo el caso que el comentario
+  del código decía estar evitando; corregido.) El `ON DELETE CASCADE` de
+  `fotos.producto_id` al borrar un producto (`DELETE /products/{productId}`)
+  sí borra las filas en cascada, pero no los objetos en el bucket — el
+  service de productos lista las fotos del producto antes de borrarlo y
+  limpia cada objeto aparte (en paralelo con `Promise.allSettled`, no en
+  serie). No existe todavía un job de limpieza de huérfanos para el caso
+  en que el proceso se caiga a mitad de esa limpieza, ni para cuando falla
+  el INSERT de una foto después de que el objeto ya se subió al bucket
+  (ese segundo caso sí se cubre con un cleanup explícito en
+  `fotos.service.js`) — pendiente si en la práctica llega a acumularse
+  basura real en el bucket.
+- Épica 3, encontrado por `/ultrareview` sobre el PR: el `minio` definido
+  bajo `services:` en `ci.yml` nunca arrancaba — la imagen `minio/minio`
+  no corre el servidor por defecto (su `CMD` es solo `["minio"]`, sin
+  `server /data`) y el mecanismo `services:` de GitHub Actions no permite
+  pasar un comando (no hay `command:`, y `options:` son flags de
+  `docker create`, no argumentos después de la imagen). El health-check
+  nunca hubiera pasado y el job habría fallado en cada push/PR. Se
+  reemplazó por un paso explícito que levanta MinIO con
+  `docker run ... minio/minio:latest server /data` (igual que
+  `docker-compose.yml`) y espera a que responda antes de crear el bucket.
+- Épica 3, encontrado por `/ultrareview`: `fotos.url` se construía como
+  `STORAGE_ENDPOINT + bucket + key`, pero `STORAGE_ENDPOINT` es el
+  endpoint de la API S3 contra el que el SDK firma `PUT`/`DELETE` — en R2/B2
+  real ese host no sirve lectura pública anónima de los objetos (401/403),
+  así que la URL guardada no era la que un cliente podía usar para
+  mostrar la foto. Se agregó `STORAGE_PUBLIC_URL` (opcional, obligatoria
+  en `production` vía `env.js`) como la base de lectura pública real
+  (bucket público de R2, dominio custom, o el CDN delante de B2); si no
+  está configurada se usa `STORAGE_ENDPOINT` como respaldo, correcto solo
+  en dev/CI con MinIO (donde ese mismo endpoint sí es alcanzable por el
+  cliente).
+- Épica 3, encontrado por `/ultrareview`: `sharp(buffer).metadata()` solo
+  lee el encabezado del archivo, no decodifica los píxeles — un archivo de
+  pocos KB puede declarar dimensiones enormes y decodificar a cientos de
+  MB o más de 1 GB en RAM al procesarlo con `.resize()/.toBuffer()`
+  ("bomba de descompresión"), y cualquier vendedor autenticado puede
+  subir fotos. Se agregó `PHOTO_MAX_INPUT_PIXELS` (40 millones de píxeles,
+  cubre con margen la cámara de celular más exigente en uso normal) como
+  chequeo explícito sobre `metadata.width/height` antes de decodificar, y
+  como `limitInputPixels` al decodificar de verdad (red de seguridad para
+  el caso de que el encabezado no refleje lo que realmente se decodifica).
+- Épica 3, encontrado por `/ultrareview`: el cálculo de
+  `orden_visualizacion` (`MAX(orden_visualizacion) + 1`) se hacía con un
+  `SELECT` separado del `INSERT`, sin ningún lock — dos subidas casi
+  simultáneas del mismo negocio/producto podían calcular el mismo
+  "siguiente" antes de que ninguna hubiera insertado, dejando dos fotos
+  empatadas en la misma posición (no hay una fila existente que bloquear
+  con `FOR UPDATE` porque el conflicto es sobre un agregado). Se
+  reescribió como una sola función transaccional
+  (`fotosRepo.crearConOrdenSiguiente`) que toma un
+  `pg_advisory_xact_lock` por dueño (negocio o producto) antes de calcular
+  e insertar — ver prueba de regresión con subidas concurrentes en
+  `tests/integration/photos.test.js`.
+- Épica 3, encontrado por `/ultrareview`: `productInputSchema` (compartido
+  entre `POST` y `PATCH`, mismo patrón que `businessInputSchema`) tenía
+  `available: z.coerce.boolean().default(true)` — zod rellenaba el campo
+  con `true` antes de que `productos.service.js` lo viera, así que la
+  condición `input.available !== undefined ? ... : producto.disponible`
+  del PATCH nunca se cumplía con `undefined`, y cualquier edición parcial
+  que no mencionara `available` reactivaba en silencio un producto
+  marcado como agotado. Se quitó el `.default()` del schema (queda
+  `undefined` de verdad cuando no se envía) y el valor por defecto de
+  creación (`true`) se aplica explícitamente en `productos.service.js`,
+  no en el validador — ver prueba de regresión en
+  `tests/integration/products.test.js`.
 - El trabajo de campo con vendedores y consumidores reales de Ciudad Verde
   todavía no se ha ejecutado — los supuestos de UX (Documento 08) están
   bien fundamentados en la literatura pero no en entrevistas propias

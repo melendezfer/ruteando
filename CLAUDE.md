@@ -1,5 +1,9 @@
 # RUTEANDO — contexto del proyecto para Claude Code
 
+**Idioma**: Responde siempre en español en toda comunicación conversacional
+con el usuario, sin importar el idioma del código, los mensajes de commit
+o el contenido técnico que estés procesando.
+
 > Este archivo se coloca en la raíz del repositorio. Claude Code lo lee
 > automáticamente como contexto persistente del proyecto. Está escrito para
 > ser tan específico como sea posible: cada decisión ya fue tomada y

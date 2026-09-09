@@ -931,3 +931,170 @@ el código real que ya se sigue en este archivo.
      (Nequi, Daviplata) sin requerir tarjeta de crédito — accesible para
      el perfil de vendedor informal que es el público de la app.
   No asignada a ninguna épica todavía.
+
+## 12. Frontend — stack y arquitectura
+
+- Framework: **Next.js (React)**, App Router. Se elige sobre SvelteKit por
+  ecosistema/documentación más profundos, a costa de un poco más de peso en
+  celulares de gama baja — mitigado con code-splitting agresivo y las
+  optimizaciones de imagen nativas de Next.js (críticas aquí: casi todo el
+  contenido es fotografía de comida).
+- El frontend consume **exclusivamente** `openapi.yaml` — nunca acceso
+  directo a la base de datos ni al almacenamiento S3-compatible desde el
+  cliente.
+- **Renderizado del perfil de negocio en servidor (SSR/ISR)**, no
+  client-side puro: cuando un vendedor comparte su perfil por WhatsApp
+  (canal principal según Documento 08, personas Don Alirio/Marcela), el link
+  debe generar una vista previa enriquecida (Open Graph: foto, nombre,
+  calificación) al pegarse en el chat. Esto es imposible con un SPA
+  100% client-side. El resto de la app (mapa, búsqueda, perfil de usuario)
+  puede ser client-side normal detrás de autenticación.
+- **PWA instalable**: manifest + service worker desde la Épica F0, no como
+  capa posterior. Justificación: el backend ya implementa push vía Firebase
+  Cloud Messaging para la confirmación de disponibilidad en tiempo real
+  (`POST /users/me/device-tokens`, ver sección 6 de este archivo) — sin PWA
+  instalable con Web Push, esa funcionalidad de backend no tiene consumidor
+  del lado del cliente.
+- Sin app nativa obligatoria (coherente con la sección 2 de `CLAUDE.md`).
+
+## 13. Seguridad del lado del cliente
+
+1. El access token **nunca se guarda en `localStorage` ni `sessionStorage`**
+   (riesgo de robo vía XSS) — se mantiene solo en memoria (estado de la
+   aplicación). Al recargar la página, se intenta un refresco silencioso
+   contra `POST /auth/refresh` antes de mostrar cualquier pantalla que
+   requiera sesión.
+2. El refresh token se maneja según lo que exponga el backend en la Épica 1
+   — si el backend ya lo devuelve solo en el cuerpo de la respuesta (no en
+   cookie), el cliente lo guarda en un lugar no accesible a scripts de
+   terceros (nunca en una variable global expuesta); evaluar con Code si
+   conviene migrar `POST /auth/refresh` a un patrón de cookie `httpOnly` +
+   `Secure` + `SameSite=Strict` antes de producción — no bloquea el MVP.
+3. Content-Security-Policy estricta desde el primer despliegue (sin
+   `unsafe-inline` en scripts), para reducir superficie de XSS.
+4. Ninguna coordenada de consumidor se persiste en el cliente más allá de la
+   sesión activa, coherente con la sección 4 de `CLAUDE.md` (Ley 1581).
+5. Todo dato de usuario (nombre de negocio, reseña) se renderiza siempre
+   escapado — Next.js lo hace por defecto en JSX; nunca usar
+   `dangerouslySetInnerHTML` con texto de usuario.
+
+## 14. Autenticación — passkeys como opción adicional
+
+El login con correo/contraseña de la Épica 1 del backend **no cambia y
+sigue siendo el método por defecto** (indispensable para Don Alirio, baja
+familiaridad digital, Documento 08 sección 5.1). Se agrega WebAuthn/passkeys
+como **opción adicional** en la pantalla de login y en configuración de
+cuenta, nunca como reemplazo obligatorio:
+
+- Registrar una passkey requiere sesión ya iniciada (se ofrece desde
+  "Perfil > Configuración", no durante el primer registro, para no añadir
+  fricción al onboarding que el Documento 08 pide mantener corto).
+- El botón de login ofrece "Entrar con correo" (siempre visible, primero) y
+  "Entrar con passkey" (secundario) cuando el dispositivo/navegador lo
+  soporta — detectar soporte con `PublicKeyCredential` antes de mostrarlo,
+  nunca asumirlo.
+- Esto requiere agregar al backend (coordinar con Code al llegar a esta
+  épica): tabla de credenciales WebAuthn por usuario y dos rutas nuevas no
+  presentes hoy en `openapi.yaml` (`POST /auth/webauthn/register`,
+  `POST /auth/webauthn/login`) — agregarlas ahí junto con su definición
+  OpenAPI, mismo criterio que se usó para RF-025 en la Épica 2 del backend.
+
+## 15. Fuera de alcance — explícito, no un olvido
+
+- **Sin pagos dentro de la aplicación.** RUTEANDO es intermediario de
+  información (sección 4 de `CLAUDE.md`); ningún flujo de frontend debe
+  simular checkout, carrito o cobro. La compra ocurre en el punto de venta
+  físico, fuera de la app.
+- La idea de **"cobro por visibilidad post-piloto"** (documentada en
+  `CLAUDE.md`, ver historial de PR #14) es un modelo de negocio a futuro,
+  no una pantalla a construir ahora — no crear ninguna UI de precios,
+  planes ni facturación mientras dure el piloto.
+
+## 16. Instrumentación de eventos (transversal a todas las épicas)
+
+La tabla `eventos` y el panel de métricas del administrador (Épica 9 del
+backend) ya existen, pero dependen de que el frontend efectivamente dispare
+`POST /events` en cada interacción. Esto no es una épica aparte: cada épica
+de frontend que toque una de estas pantallas debe incluir su evento
+correspondiente antes de darse por cerrada:
+
+| `tipo_evento` | Se dispara en |
+|---|---|
+| `busqueda` | Al ejecutar una búsqueda por texto o categoría (Épica F2) |
+| `vista_negocio` | Al abrir el perfil completo de un negocio (Épica F4) |
+| `vista_producto` | Al expandir el detalle de un producto en el menú (Épica F4) |
+| `clic_contacto` | Al tocar el botón de WhatsApp en el perfil (Épica F4) |
+| `favorito_agregado` | Al marcar un negocio como favorito (Épica F8) |
+| `resena_creada` | Al publicar una reseña (Épica F7) |
+| `registro_negocio` | Al completar el registro de un negocio (Épica F5) |
+
+## 17. Patrón de interacción — mínimo scroll, expandir en el mismo lugar
+
+Decisión de diseño explícita (extiende Documento 08, sección 5.4): antes de
+crear una pantalla nueva o una navegación adicional para mostrar más
+información, preferir que el contenido se expanda en el mismo lugar
+(acordeón, "bottom sheet", tarjeta que crece) — el Documento 08 ya aplica
+esto en la tarjeta resumen del mapa (sección 5.4.2); se extiende a:
+
+- **Menú del negocio**: cada plato se expande al tocarlo (foto grande,
+  descripción completa) sin navegar a otra pantalla.
+- **Inicio**: una tarjeta de negocio se despliega in-place para mostrar
+  horario/reseñas rápidas, en vez de abrir el perfil completo salvo que el
+  usuario pida "ver perfil completo".
+- **Reseña rápida y reporte**: un "bottom sheet" que sube desde abajo, no
+  una pantalla nueva.
+- Este patrón no reemplaza la navegación de primer nivel ya fijada en la
+  sección 5.3.1 del Documento 08 (barra inferior de cuatro destinos) — aplica
+  dentro de cada pantalla, no entre ellas.
+
+## 18. Secuencia de épicas de frontend
+
+Mismo criterio que el backend (sección 6 de `CLAUDE.md`): una rama
+`feature/<nombre>` por épica, no avanzar sin pruebas pasando, revisar antes
+de la siguiente.
+
+- **Épica F0 — Preparación**: proyecto Next.js + PWA (manifest, service
+  worker), tokens de diseño del Documento 08 sección 5.5 como variables
+  CSS/config de Tailwind (colores, tipografía Plus Jakarta Sans/Inter,
+  radios, sombras), Phosphor Icons, cliente HTTP tipado desde
+  `openapi.yaml`.
+- **Épica F1 — Autenticación**: login/registro contra la Épica 1 del
+  backend, manejo de tokens en memoria (sección 13), passkeys opcionales
+  (sección 14).
+- **Épica F2 — Inicio y búsqueda** (RF-009 a RF-011): pantalla de inicio sin
+  scroll infinito, categorías rápidas, lista corta "cerca de ti", barra de
+  búsqueda, skeleton screens mientras carga.
+- **Épica F3 — Mapa**: pines agrupados, tarjeta resumen expandible in-place,
+  filtros combinables (distancia, precio, abierto ahora).
+- **Épica F4 — Perfil de negocio y menú** (RF-006 a RF-008, RF-012 a
+  RF-014): foto a color completo, estado "abierto ahora", botones WhatsApp
+  y "cómo llegar" fijos, menú con productos expandibles, reseñas.
+- **Épica F5 — Registro de negocio** (RF-004, RF-005, RF-024, RF-025): flujo
+  paso a paso con progreso visible ("Paso 2 de 5"), incluye registro
+  asistido (ya construido en backend, PR #11).
+- **Épica F6 — Perfil de usuario**: pestañas de favoritos, reseñas y
+  configuración (incluye gestión de consentimientos RF-018 y, si aplica,
+  passkeys).
+- **Épica F7 — Reseñas y reportes** (RF-015, RF-016): formulario de reseña,
+  reportar contenido.
+- **Épica F8 — Favoritos** (RF-017): la más simple, no sobre-diseñarla.
+- **Épica F9 — Panel administrador**: superficie web separada (no dentro de
+  la PWA de consumidor/vendedor), para el Equipo administrador (Documento 08,
+  persona secundaria) — aprobar negocios, moderar reseñas, ver métricas.
+- **Épica F10 — PWA y Web Push**: registro de token de dispositivo contra
+  `POST /users/me/device-tokens`, manejo de la notificación de confirmación
+  de disponibilidad en tiempo real (PR #13) en el navegador.
+
+## 19. Gaps conocidos para el frontend
+
+- Las rutas WebAuthn (sección 14) no existen todavía en `openapi.yaml` —
+  agregarlas junto con la Épica F1, no antes.
+- El patrón exacto de refresco de sesión (memoria + silent refresh vs.
+  cookie `httpOnly`) se decide en la Épica F1 con Code, evaluando el
+  esfuerzo de tocar el backend ya cerrado (Épica 1) contra el beneficio de
+  seguridad.
+- El Documento 08 no incluye wireframes del formulario de reseña ni del
+  panel administrativo (lo advierte explícitamente en su sección 5.4,
+  nota final) — estas dos pantallas se diseñan durante las Épicas F7 y F9
+  siguiendo los mismos principios ya fijados en las secciones 5.5 y 17 de
+  este archivo, sin esperar un wireframe adicional.

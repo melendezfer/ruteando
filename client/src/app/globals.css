@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+ * Tokens de diseño — Documento 08, tabla 8 (fuente confirmada).
+ *
+ * Tailwind v4 es "CSS-first": este bloque @theme ES la configuración de
+ * Tailwind (no hay tailwind.config.js/ts en este proyecto) — cada variable
+ * de acá genera las utilidades correspondientes (ej. --color-terracota
+ * habilita bg-terracota/text-terracota/border-terracota, etc.).
+ */
+:root {
+  /* Marca */
+  --color-terracota: #c1502e;
+  --color-terracota-dark: #9c3f24;
+  --color-mostaza: #e3a857;
+
+  /* Semánticos */
+  --color-verde: #2e7d32;
+  --color-ambar: #f9a825; /* advertencia, estados pendientes */
+  --color-rojo: #c62828;
+
+  /* Texto, fondo y bordes — Documento 08, tabla 8 */
+  --color-background: #fafafa;
+  --color-surface: #ffffff;
+  --color-text: #1b1b1b;
+  --color-text-muted: #555555;
+  --color-border: #e0e0e0;
+
+  /*
+   * Fondo de modo oscuro real (#121212, tabla 8) — se deja disponible
+   * como token/utilidad (bg-background-dark) pero SIN activar todavía un
+   * modo oscuro automático (prefers-color-scheme) en body: la tabla 8 no
+   * trae valores de texto/borde para modo oscuro, y --color-text
+   * (#1B1B1B, casi negro) sobre este fondo sería ilegible. Activar el
+   * media query ahora sería inventar el resto de la paleta oscura — la
+   * misma clase de suposición que se acaba de corregir en este archivo.
+   */
+  --color-background-dark: #121212;
+
+  /* Radios de esquina */
+  --radius-input: 12px;
+  --radius-card: 16px;
+
+  /* Altura estándar de botón */
+  --spacing-btn: 3rem; /* 48px */
+
+  /*
+   * Escala tipográfica (Documento 08, tabla 8) — tamaño/interlineado en
+   * sp≈px, convertidos a rem sobre base de 16px. Tailwind v4 empareja
+   * font-size + line-height con el sufijo `--line-height` en la misma
+   * clave (ver theme() en tailwindcss v4), así que cada nombre de acá
+   * habilita una sola utilidad text-* con ambos valores ya correctos.
+   * El peso/familia/mayúsculas de cada estilo NO se hornean en la
+   * utilidad de tamaño (Tailwind ya tiene font-bold/font-semibold/
+   * uppercase/tracking-* propios) — se combinan en el componente:
+   *
+   *   Display      28/34  → font-heading text-display    font-bold
+   *   Título 1     22/28  → font-heading text-title-1     font-bold
+   *   Título 2     18/24  → font-heading text-title-2     font-semibold
+   *   Cuerpo       15/22  → font-sans    text-body        font-normal
+   *   Cuerpo chico 13/18  → font-sans    text-body-sm     font-normal
+   *   Caption      11/14  → font-sans    text-caption     font-medium uppercase tracking-wide
+   *   Botón        15/20  → font-sans    text-button      font-semibold
+   */
+  --text-display: 1.75rem; /* 28px */
+  --text-display--line-height: 2.125rem; /* 34px */
+
+  --text-title-1: 1.375rem; /* 22px */
+  --text-title-1--line-height: 1.75rem; /* 28px */
+
+  --text-title-2: 1.125rem; /* 18px */
+  --text-title-2--line-height: 1.5rem; /* 24px */
+
+  --text-body: 0.9375rem; /* 15px */
+  --text-body--line-height: 1.375rem; /* 22px */
+
+  --text-body-sm: 0.8125rem; /* 13px */
+  --text-body-sm--line-height: 1.125rem; /* 18px */
+
+  --text-caption: 0.6875rem; /* 11px */
+  --text-caption--line-height: 0.875rem; /* 14px */
+
+  --text-button: 0.9375rem; /* 15px */
+  --text-button--line-height: 1.25rem; /* 20px */
+}
+
+@theme inline {
+  --color-terracota: var(--color-terracota);
+  --color-terracota-dark: var(--color-terracota-dark);
+  --color-mostaza: var(--color-mostaza);
+  --color-verde: var(--color-verde);
+  --color-ambar: var(--color-ambar);
+  --color-rojo: var(--color-rojo);
+
+  --color-background: var(--color-background);
+  --color-background-dark: var(--color-background-dark);
+  --color-surface: var(--color-surface);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+
+  --radius-input: var(--radius-input);
+  --radius-card: var(--radius-card);
+
+  --spacing-btn: var(--spacing-btn);
+
+  --text-display: var(--text-display);
+  --text-display--line-height: var(--text-display--line-height);
+  --text-title-1: var(--text-title-1);
+  --text-title-1--line-height: var(--text-title-1--line-height);
+  --text-title-2: var(--text-title-2);
+  --text-title-2--line-height: var(--text-title-2--line-height);
+  --text-body: var(--text-body);
+  --text-body--line-height: var(--text-body--line-height);
+  --text-body-sm: var(--text-body-sm);
+  --text-body-sm--line-height: var(--text-body-sm--line-height);
+  --text-caption: var(--text-caption);
+  --text-caption--line-height: var(--text-caption--line-height);
+  --text-button: var(--text-button);
+  --text-button--line-height: var(--text-button--line-height);
+
+  /* Plus Jakarta Sans para títulos/UI destacada, Inter para texto de
+     cuerpo (next/font las expone como estas variables, ver layout.tsx) —
+     el Documento 08 nombra ambas tipografías sin asignar el rol de cada
+     una; esta asignación es la convención más común para este pareo
+     (geométrica para títulos, muy legible para cuerpo) y queda fácil de
+     cambiar acá si el documento dice lo contrario. */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-plus-jakarta-sans);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

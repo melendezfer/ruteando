@@ -159,4 +159,7 @@ module.exports = {
   cercanos,
   obtenerCrudoOFallar,
   verificarPropietario,
+  // Reusada tal cual por registroAsistido.service.js — mismo chequeo,
+  // ninguna razón para duplicarlo.
+  validarCategoria,
 };

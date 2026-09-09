@@ -73,6 +73,7 @@ describe('autorización a nivel de función en /admin/*', () => {
     ['get', '/admin/photos/reported'],
     ['patch', '/admin/photos/00000000-0000-0000-0000-000000000000/moderate'],
     ['patch', '/admin/users/00000000-0000-0000-0000-000000000000/suspend'],
+    ['patch', '/admin/users/00000000-0000-0000-0000-000000000000/reissue-claim-token'],
     ['get', '/admin/outdated-reports'],
     ['patch', '/admin/outdated-reports/00000000-0000-0000-0000-000000000000/resolve'],
     ['get', '/admin/metrics'],

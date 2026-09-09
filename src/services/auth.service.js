@@ -124,4 +124,9 @@ async function logout({ refreshToken, usuarioId }) {
   }
 }
 
-module.exports = { register, login, refresh, logout };
+// emitirTokens también se exporta para registroAsistido.service.js#reclamar
+// — reclamar() emite el primer par de tokens exactamente como register(),
+// sin el chequeo de consentimiento (exigirConsentimientoCompleto), porque
+// como register(), es el primer momento en que la cuenta existe de verdad
+// para su titular.
+module.exports = { register, login, refresh, logout, emitirTokens };

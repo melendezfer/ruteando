@@ -1,8 +1,9 @@
 const { Router } = require('express');
 const usersController = require('../controllers/users.controller');
 const authenticate = require('../middlewares/authenticate');
-const { validateQuery } = require('../middlewares/validate');
+const { validateBody, validateQuery } = require('../middlewares/validate');
 const { favoritesListQuerySchema } = require('../validators/favoritos.validators');
+const { deviceTokenInputSchema } = require('../validators/deviceTokens.validators');
 
 const router = Router();
 
@@ -14,5 +15,11 @@ router.get(
   usersController.listFavorites,
 );
 router.get('/me/consents', authenticate, usersController.listConsents);
+router.post(
+  '/me/device-tokens',
+  authenticate,
+  validateBody(deviceTokenInputSchema),
+  usersController.registerDeviceToken,
+);
 
 module.exports = router;

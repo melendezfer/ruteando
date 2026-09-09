@@ -1,6 +1,7 @@
 const usuariosRepo = require('../repositories/usuarios.repository');
 const favoritosService = require('../services/favoritos.service');
 const consentimientosService = require('../services/consentimientos.service');
+const tokensDispositivoService = require('../services/tokensDispositivo.service');
 const { toApiUser } = require('../services/user.mapper');
 const { UnauthorizedError } = require('../errors');
 
@@ -24,4 +25,9 @@ async function listConsents(req, res) {
   res.status(200).json(consents);
 }
 
-module.exports = { me, listFavorites, listConsents };
+async function registerDeviceToken(req, res) {
+  await tokensDispositivoService.registrar(req.user.id, req.body.token);
+  res.status(204).send();
+}
+
+module.exports = { me, listFavorites, listConsents, registerDeviceToken };

@@ -7,6 +7,7 @@ const fotosService = require('../services/fotos.service');
 const perfilNegocioService = require('../services/perfilNegocio.service');
 const resenasService = require('../services/resenas.service');
 const favoritosService = require('../services/favoritos.service');
+const solicitudesDisponibilidadService = require('../services/solicitudesDisponibilidad.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -108,6 +109,14 @@ async function unmarkFavorite(req, res) {
   res.status(204).send();
 }
 
+async function requestAvailability(req, res) {
+  const result = await solicitudesDisponibilidadService.solicitar(
+    req.user.id,
+    req.params.businessId,
+  );
+  res.status(201).json(result);
+}
+
 module.exports = {
   create,
   list,
@@ -127,4 +136,5 @@ module.exports = {
   listReviews,
   markFavorite,
   unmarkFavorite,
+  requestAvailability,
 };

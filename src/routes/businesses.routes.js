@@ -111,4 +111,12 @@ router.get(
 router.post('/:businessId/favorite', validarBusinessId, authenticate, controller.markFavorite);
 router.delete('/:businessId/favorite', validarBusinessId, authenticate, controller.unmarkFavorite);
 
+// Confirmación de disponibilidad en tiempo real (CLAUDE.md, sección 11).
+router.post(
+  '/:businessId/availability-requests',
+  validarBusinessId,
+  authenticate,
+  controller.requestAvailability,
+);
+
 module.exports = router;

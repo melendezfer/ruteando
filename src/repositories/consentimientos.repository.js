@@ -46,4 +46,17 @@ async function tiposObligatoriosOtorgados(usuarioId) {
   return rows.map((r) => r.tipo);
 }
 
-module.exports = { crear, listarPorUsuario, tiposObligatoriosOtorgados };
+/**
+ * Chequeo genérico de "¿este usuario otorgó alguna vez este tipo de
+ * consentimiento?" — usado por solicitudesDisponibilidad.service.js para
+ * exigir tipo_consentimiento='notificaciones' antes de intentar un push.
+ */
+async function existeConsentimiento(usuarioId, tipo) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM consentimientos WHERE usuario_id = $1 AND tipo = $2 LIMIT 1',
+    [usuarioId, tipo],
+  );
+  return rows.length > 0;
+}
+
+module.exports = { crear, listarPorUsuario, tiposObligatoriosOtorgados, existeConsentimiento };

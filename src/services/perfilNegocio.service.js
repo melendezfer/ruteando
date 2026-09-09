@@ -4,7 +4,9 @@ const horariosRepo = require('../repositories/horarios.repository');
 const productosRepo = require('../repositories/productos.repository');
 const fotosRepo = require('../repositories/fotos.repository');
 const resenasRepo = require('../repositories/resenas.repository');
+const solicitudesDisponibilidadRepo = require('../repositories/solicitudesDisponibilidad.repository');
 const { toApiBusinessProfile } = require('./business.mapper');
+const { AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES } = require('../config/constants');
 
 /**
  * GET /businesses/{businessId} (RF-012): compone el perfil público
@@ -33,13 +35,18 @@ async function obtener(id, requesterId) {
   const negocio = await obtenerCrudoOFallar(id);
   const esPropietario = requesterId != null && negocio.usuario_id === requesterId;
 
-  const [ubicacion, horario, productos, fotos, agregadoResenas] = await Promise.all([
-    ubicacionesRepo.obtenerActual(id),
-    horariosRepo.listar(id),
-    productosRepo.listarPorNegocio(id),
-    fotosRepo.listarAprobadasPorNegocio(id),
-    resenasRepo.obtenerAgregado(id),
-  ]);
+  const [ubicacion, horario, productos, fotos, agregadoResenas, availabilityConfirmedAt] =
+    await Promise.all([
+      ubicacionesRepo.obtenerActual(id),
+      horariosRepo.listar(id),
+      productosRepo.listarPorNegocio(id),
+      fotosRepo.listarAprobadasPorNegocio(id),
+      resenasRepo.obtenerAgregado(id),
+      solicitudesDisponibilidadRepo.obtenerConfirmacionFresca(
+        id,
+        AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES,
+      ),
+    ]);
 
   return toApiBusinessProfile({
     negocio,
@@ -49,6 +56,7 @@ async function obtener(id, requesterId) {
     fotos,
     agregadoResenas,
     esPropietario,
+    availabilityConfirmedAt,
   });
 }
 

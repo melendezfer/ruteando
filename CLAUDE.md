@@ -868,6 +868,41 @@ el código real que ya se sigue en este archivo.
      principio que ya se aplica en RF-025 y RF-016 (límite de tasa por
      origen, respaldado en base de datos, no en memoria).
 
+  **Implementado (2026-09-09)**: `POST /businesses/{businessId}/availability-requests`
+  (crear), `GET /availability-requests/{requestId}` (consultar, solo el
+  consumidor que preguntó o el dueño del negocio), `PATCH
+  .../{requestId}/respond` (`decision: confirmed|declined` — se agregó
+  "declinar" a la idea original: sin eso, un consumidor no distinguía "el
+  vendedor ya vio el aviso y no está vendiendo" de "todavía no responde",
+  hasta que expirara la ventana completa) y `POST /users/me/device-tokens`
+  (registrar el token FCM del dispositivo actual — no existía ningún
+  concepto de token de dispositivo, tabla `tokens_dispositivo` nueva,
+  uno-a-muchos con `usuarios`, mismo criterio que `tokens_refresco`).
+  Decisiones que vale la pena dejar explícitas:
+  - **Sin exclusividad, a propósito**: cualquier número de solicitudes
+    pendientes simultáneas sobre el mismo negocio es válido — bloquear
+    con 409 al segundo consumidor que pregunta por un negocio popular en
+    hora pico perjudicaría el caso de mayor valor de esta función. Doble
+    capa de rate limit (por `negocio_id` y por `usuario_id` solicitante,
+    `AVAILABILITY_REQUEST_RATE_LIMIT_PER_*` en `constants.js`) es la única
+    protección contra spam hacia el vendedor.
+  - `solicitudes_disponibilidad.decision`/`respondida_en` son las únicas
+    columnas que algo escribe — "expired" nunca se guarda, se calcula al
+    leer comparando `expira_en` contra el reloj (expiración perezosa, sin
+    cron, mismo patrón que `codigos_recuperacion` del registro asistido).
+  - `src/config/firebaseClient.js` exporta `null` sin las tres variables
+    `FIREBASE_*` configuradas (opcionales en dev/staging, obligatorias en
+    production, mismo patrón que `SENTRY_DSN`) — `push.service.js` lo
+    trata como "no hay proveedor conectado todavía" y no envía nada, sin
+    romper la solicitud (best-effort, igual que la limpieza de storage).
+  - **Limitación real, no oculta**: sin frontend, no hay forma de que un
+    dispositivo real registre un token FCM ni de probar la entrega
+    end-to-end del push. Las pruebas (`tests/unit/push.service.test.js`,
+    `tests/integration/availabilityRequests.test.js`) mockean
+    `firebaseClient.js` y verifican que el backend invoca el SDK de
+    Firebase Admin con el payload correcto — nunca que un celular sonó de
+    verdad. Eso queda pendiente hasta que exista un cliente real.
+
 - **Cobro por visibilidad post-piloto**: idea de negocio, no de código —
   documentada aquí solamente, nada de esto se implementa todavía. Sigue
   condicionada a la disciplina de "cero monetización durante el piloto"

@@ -8,6 +8,10 @@ const STATUS_DB_TO_API = {
   activo: 'active',
   suspendido: 'suspended',
   cerrado: 'closed',
+  // Épica 9 (RF-020): valor nuevo del enum estado_negocio (ver migración
+  // estado-negocio-rechazado) — distinto de 'closed', que sigue siendo
+  // solo "estuvo activo y se cerró después".
+  rechazado: 'rejected',
 };
 
 const LOCATION_TYPE_DB_TO_API = {
@@ -59,6 +63,14 @@ function toApiBusiness(row) {
     longitude: row.longitud != null ? Number(row.longitud) : null,
     // Solo lo llena la consulta de /businesses/nearby.
     distanceMeters: row.distancia_m != null ? Number(row.distancia_m) : null,
+    // RF-020 (Épica 9): motivo que un administrador escribió al rechazar
+    // el negocio (columna motivo_rechazo, ver migración
+    // estado-negocio-rechazado) — es la única forma de que el vendedor
+    // dueño sepa qué corregir, así que se expone en la respuesta en vez
+    // de quedar solo en el log. null salvo que el negocio esté
+    // 'rechazado' (o haya estado en algún momento y luego se haya vuelto
+    // a aprobar, ver negocios.repository.js#aprobar, que lo limpia).
+    rejectionReason: row.motivo_rechazo ?? null,
   };
 }
 
@@ -110,6 +122,12 @@ function toApiProduct(row) {
   };
 }
 
+const MODERATION_STATUS_DB_TO_API = {
+  pendiente: 'pending',
+  aprobada: 'approved',
+  rechazada: 'rejected',
+};
+
 function toApiPhoto(row) {
   return {
     id: row.id,
@@ -119,14 +137,14 @@ function toApiPhoto(row) {
     url: row.url,
     displayOrder: row.orden_visualizacion,
     createdAt: row.fecha_creacion,
+    // Épica 9: null en callers que no seleccionan la columna (no aplica
+    // hoy, todos usan SELECT */RETURNING *) — presente siempre desde la
+    // migración fotos-moderacion.
+    moderationStatus: row.estado_moderacion
+      ? MODERATION_STATUS_DB_TO_API[row.estado_moderacion]
+      : null,
   };
 }
-
-const MODERATION_STATUS_DB_TO_API = {
-  pendiente: 'pending',
-  aprobada: 'approved',
-  rechazada: 'rejected',
-};
 
 function toApiReview(row) {
   return {
@@ -148,10 +166,26 @@ function toApiReview(row) {
  * contrato para un solo negocio. Las reseñas mismas NO se embeben (sin
  * límite de cuántas puede haber) — solo el agregado; la lista completa
  * vive en su propio endpoint paginado (GET .../reviews, Épica 6).
+ *
+ * esPropietario sobrescribe el rejectionReason que ya trae toApiBusiness(negocio)
+ * — este endpoint es público (sin auth obligatoria), así que el motivo de
+ * rechazo (RF-020) solo debe verse cuando quien pregunta está autenticado
+ * y es el dueño del negocio (autorización a nivel de objeto, regla de
+ * seguridad #2); para cualquier otro caso (anónimo, otro usuario) queda en
+ * null, sin importar lo que tenga la fila.
  */
-function toApiBusinessProfile({ negocio, ubicacion, horario, productos, fotos, agregadoResenas }) {
+function toApiBusinessProfile({
+  negocio,
+  ubicacion,
+  horario,
+  productos,
+  fotos,
+  agregadoResenas,
+  esPropietario,
+}) {
   return {
     ...toApiBusiness(negocio),
+    rejectionReason: esPropietario ? (negocio.motivo_rechazo ?? null) : null,
     location: ubicacion ? toApiLocation(ubicacion) : null,
     schedule: horario.map(toApiScheduleDay),
     products: productos.map(toApiProduct),

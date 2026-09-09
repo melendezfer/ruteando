@@ -76,10 +76,71 @@ async function eliminar(id) {
   await pool.query('DELETE FROM fotos WHERE id = $1', [id]);
 }
 
+/**
+ * Igual que listarPorNegocio, pero filtrando estado_moderacion='aprobada'
+ * — para el perfil público (RF-012, perfilNegocio.service.js). Distinta a
+ * propósito de listarPorNegocio/listarPorProducto: esas dos siguen sin
+ * filtrar porque productos.service.js las necesita para limpiar el bucket
+ * al borrar (una foto pendiente/rechazada también hay que borrarla del
+ * storage, no solo las aprobadas).
+ */
+async function listarAprobadasPorNegocio(negocioId) {
+  const { rows } = await pool.query(
+    `SELECT f.* FROM fotos f WHERE f.negocio_id = $1 AND f.estado_moderacion = 'aprobada'
+     UNION ALL
+     SELECT f.* FROM fotos f JOIN productos p ON p.id = f.producto_id
+       WHERE p.negocio_id = $1 AND f.estado_moderacion = 'aprobada'
+     ORDER BY orden_visualizacion`,
+    [negocioId],
+  );
+  return rows;
+}
+
+/**
+ * GET /admin/photos/reported — a diferencia de resenas.repository.js
+ * (donde TODA reseña nueva nace pendiente), toda foto nace 'aprobada'
+ * (ver migración fotos-moderacion); esta cola es de verdad solo lo que un
+ * usuario reportó (fotos.service.js#reportar). FIFO, mismo criterio que
+ * las demás colas de moderación de esta épica.
+ */
+async function listarPendientes({ cursor, limit }) {
+  const clausulas = [`estado_moderacion = 'pendiente'`];
+  const params = [];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) > ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM fotos
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+async function moderar(id, estadoModeracion) {
+  const { rows } = await pool.query(
+    'UPDATE fotos SET estado_moderacion = $2 WHERE id = $1 RETURNING *',
+    [id, estadoModeracion],
+  );
+  return rows[0];
+}
+
 module.exports = {
   crearConOrdenSiguiente,
   buscarPorId,
   listarPorProducto,
   listarPorNegocio,
+  listarAprobadasPorNegocio,
   eliminar,
+  listarPendientes,
+  moderar,
 };

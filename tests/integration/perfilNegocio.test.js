@@ -125,4 +125,12 @@ describe('GET /businesses/{businessId} (perfil público, RF-012)', () => {
     const res = await request(app).get('/businesses/00000000-0000-0000-0000-000000000000');
     expect(res.status).toBe(404);
   });
+
+  it('rechaza con 401 un token presente pero inválido (optionalAuthenticate no degrada a anónimo)', async () => {
+    const { negocio } = await registrarVendedorConNegocio();
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}`)
+      .set('Authorization', 'Bearer esto-no-es-un-jwt-valido');
+    expect(res.status).toBe(401);
+  });
 });

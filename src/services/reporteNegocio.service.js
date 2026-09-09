@@ -6,6 +6,20 @@ const {
   OUTDATED_REPORT_RATE_LIMIT_WINDOW_MINUTES,
 } = require('../config/constants');
 
+// Reusado también por admin.service.js (Épica 9: GET /admin/outdated-reports
+// y POST /admin/outdated-reports/{reportId}/resolve) — mismo shape que ya
+// devolvía crear(), con attendedAt agregado (null hasta que un
+// administrador lo marque atendido).
+function toApiReport(row) {
+  return {
+    id: row.id,
+    businessId: row.negocio_id,
+    reason: row.motivo,
+    createdAt: row.fecha_creacion,
+    attendedAt: row.atendido_en,
+  };
+}
+
 async function crear({ negocioId, usuarioId, ip, reason }) {
   await obtenerCrudoOFallar(negocioId);
 
@@ -24,12 +38,7 @@ async function crear({ negocioId, usuarioId, ip, reason }) {
 
   const reporte = await reportesRepo.crear({ negocioId, usuarioId, ip, motivo: reason });
 
-  return {
-    id: reporte.id,
-    businessId: reporte.negocio_id,
-    reason: reporte.motivo,
-    createdAt: reporte.fecha_creacion,
-  };
+  return toApiReport(reporte);
 }
 
-module.exports = { crear };
+module.exports = { crear, toApiReport };

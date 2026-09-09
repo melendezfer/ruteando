@@ -40,6 +40,81 @@ async function cerrar(id) {
 }
 
 /**
+ * GET /admin/businesses/pending (RF-019): cola de moderación, FIFO (más
+ * antiguo primero) — a diferencia de listar()/cercanos() (más reciente
+ * primero, para navegación pública), acá importa atender lo que lleva más
+ * tiempo esperando. Paginación keyset con el mismo criterio del resto del
+ * proyecto (fecha_creacion::text sin pasar por JS Date, ver
+ * negocios.service.js#listar).
+ */
+async function listarPendientes({ cursor, limit }) {
+  const clausulas = [`estado = 'pendiente'`];
+  const params = [];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) > ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM negocios
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+/**
+ * RF-019/020: aprobar()/rechazar() no filtran por estado en el UPDATE — el
+ * chequeo de "solo se puede actuar sobre un negocio pendiente" vive en
+ * negocios.service.js (fetch -> validar estado -> mutar), mismo patrón que
+ * el resto del proyecto (ej. actualizar()/cerrar() con verificarPropietario
+ * antes). motivoRechazo queda null en aprobar() a propósito, por si un
+ * negocio rechazado antes se vuelve a poner en pendiente y se aprueba
+ * después (no hay ruta para eso hoy, pero no tendría sentido dejar un
+ * motivo de rechazo viejo colgando en un negocio ya aprobado).
+ */
+async function aprobar(id) {
+  const { rows } = await pool.query(
+    `UPDATE negocios
+     SET estado = 'activo', motivo_rechazo = NULL, fecha_actualizacion = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id],
+  );
+  return rows[0];
+}
+
+async function rechazar(id, motivoRechazo) {
+  const { rows } = await pool.query(
+    `UPDATE negocios
+     SET estado = 'rechazado', motivo_rechazo = $2, fecha_actualizacion = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, motivoRechazo ?? null],
+  );
+  return rows[0];
+}
+
+/**
+ * GET /admin/metrics y GET /admin/reports/export (RF-021/022): conteo por
+ * estado en una sola consulta agregada, no un COUNT(*) separado por cada
+ * estado.
+ */
+async function contarPorEstado() {
+  const { rows } = await pool.query(
+    'SELECT estado, count(*)::int AS total FROM negocios GROUP BY estado',
+  );
+  return Object.fromEntries(rows.map((r) => [r.estado, r.total]));
+}
+
+/**
  * ILIKE trata "%" y "_" como comodines incluso viniendo de un parámetro
  * ligado (eso nunca fue una inyección SQL — el patrón sigue siendo un
  * valor, no texto de la consulta — pero sin esto un nombre real que
@@ -241,4 +316,8 @@ module.exports = {
   cercanos,
   explicarCercanos,
   escaparComodinesLike,
+  listarPendientes,
+  aprobar,
+  rechazar,
+  contarPorEstado,
 };

@@ -67,6 +67,52 @@ async function marcarPendiente(id) {
  * reseña recién creada (estado 'pendiente' por defecto) o rechazada no
  * infle el promedio antes de que un administrador la revise (Épica 9).
  */
+/**
+ * GET /admin/reviews/reported (RF-021): la cola real es "toda reseña con
+ * estado_moderacion='pendiente'", no solo las que pasaron por
+ * reportes_resena — toda reseña nueva nace pendiente (ver
+ * resenas.repository.js#crear, sin estado explícito -> default de la
+ * columna) y solo un administrador puede moverla a aprobada; el nombre de
+ * la ruta viene de la especificación original, no de un filtro por tabla
+ * de reportes. FIFO (más antigua primero), igual que
+ * negocios.repository.js#listarPendientes.
+ */
+async function listarPendientes({ cursor, limit }) {
+  const clausulas = [`estado_moderacion = 'pendiente'`];
+  const params = [];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) > ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM resenas
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+/**
+ * RF-021: sin filtro de estado en el UPDATE — resenas.service.js valida
+ * que la reseña esté 'pendiente' antes de llamar (mismo patrón fetch ->
+ * validar -> mutar que negocios.repository.js#aprobar/rechazar).
+ */
+async function moderar(id, estadoModeracion) {
+  const { rows } = await pool.query(
+    'UPDATE resenas SET estado_moderacion = $2 WHERE id = $1 RETURNING *',
+    [id, estadoModeracion],
+  );
+  return rows[0];
+}
+
 async function obtenerAgregado(negocioId) {
   const { rows } = await pool.query(
     `SELECT AVG(calificacion)::float AS promedio, count(*)::int AS total
@@ -84,4 +130,6 @@ module.exports = {
   eliminar,
   marcarPendiente,
   obtenerAgregado,
+  listarPendientes,
+  moderar,
 };

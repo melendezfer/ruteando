@@ -35,6 +35,7 @@ describe('toApiBusiness', () => {
       latitude: null,
       longitude: null,
       distanceMeters: null,
+      rejectionReason: null,
     });
   });
 

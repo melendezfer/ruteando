@@ -5,4 +5,9 @@ async function remove(req, res) {
   res.status(204).send();
 }
 
-module.exports = { remove };
+async function report(req, res) {
+  await fotosService.reportar(req.user.id, req.params.photoId);
+  res.status(202).send();
+}
+
+module.exports = { remove, report };

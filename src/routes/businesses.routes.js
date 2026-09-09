@@ -35,7 +35,13 @@ router.post(
 router.get('/nearby', validateQuery(businessNearbyQuerySchema), controller.nearby);
 router.get('/', validateQuery(businessListQuerySchema), controller.list);
 
-router.get('/:businessId', validarBusinessId, controller.getOne);
+// optionalAuthenticate (no authenticate a secas): la ruta sigue siendo
+// pública — un token ausente no la bloquea — pero si viene uno válido,
+// perfilNegocio.service.js lo usa para decidir si quien pregunta es el
+// dueño y puede ver rejectionReason (RF-020). Un token presente pero
+// inválido/expirado sí se rechaza con 401 (mismo criterio que RF-025 y
+// POST /events: no degradar en silencio a anónimo).
+router.get('/:businessId', validarBusinessId, optionalAuthenticate, controller.getOne);
 router.patch(
   '/:businessId',
   validarBusinessId,

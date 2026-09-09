@@ -49,4 +49,4 @@ async function crear({ usuarioId, ip, type, businessId, metadata }) {
   });
 }
 
-module.exports = { crear };
+module.exports = { crear, TIPO_EVENTO_API_TO_DB };

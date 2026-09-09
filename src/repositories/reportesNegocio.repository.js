@@ -31,4 +31,51 @@ async function contarRecientesDelOrigen({ negocioId, usuarioId, ip, windowMinute
   return rows[0].total;
 }
 
-module.exports = { crear, contarRecientesDelOrigen };
+/**
+ * GET /admin/outdated-reports (gap agregado en la Épica 9, ver CLAUDE.md):
+ * cola de reportes de "información desactualizada" (RF-025) sin atender
+ * todavía. FIFO, mismo criterio que las demás colas de moderación.
+ */
+async function listarPendientes({ cursor, limit }) {
+  const clausulas = ['atendido_en IS NULL'];
+  const params = [];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) > ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM reportes_negocio
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+async function marcarAtendido(id) {
+  const { rows } = await pool.query(
+    'UPDATE reportes_negocio SET atendido_en = now() WHERE id = $1 RETURNING *',
+    [id],
+  );
+  return rows[0];
+}
+
+async function buscarPorId(id) {
+  const { rows } = await pool.query('SELECT * FROM reportes_negocio WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+module.exports = {
+  crear,
+  contarRecientesDelOrigen,
+  listarPendientes,
+  marcarAtendido,
+  buscarPorId,
+};

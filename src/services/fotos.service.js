@@ -1,11 +1,20 @@
 const crypto = require('node:crypto');
 const fotosRepo = require('../repositories/fotos.repository');
+const reportesFotoRepo = require('../repositories/reportesFoto.repository');
 const negociosService = require('./negocios.service');
 const productosService = require('./productos.service');
 const imagenService = require('./imagen.service');
 const almacenamientoService = require('./almacenamiento.service');
 const { toApiPhoto } = require('./business.mapper');
-const { NotFoundError } = require('../errors');
+const { NotFoundError, ConflictError, TooManyRequestsError } = require('../errors');
+const {
+  PHOTO_REPORT_RATE_LIMIT_MAX,
+  PHOTO_REPORT_RATE_LIMIT_WINDOW_MINUTES,
+} = require('../config/constants');
+
+// Código de Postgres para unique_violation — lo lanza el UNIQUE(foto_id,
+// usuario_id) de reportes_foto (ver migración fotos-moderacion).
+const PG_UNIQUE_VIOLATION = '23505';
 
 async function subirYGuardar({ negocioId, productoId, tipo, archivo, logger }) {
   const { buffer, contentType, extension } = await imagenService.procesar(archivo.buffer);
@@ -41,6 +50,14 @@ async function subirParaProducto(usuarioId, productoId, archivo, logger) {
   return subirYGuardar({ negocioId: null, productoId, tipo: 'producto', archivo, logger });
 }
 
+async function obtenerCrudoOFallar(id) {
+  const foto = await fotosRepo.buscarPorId(id);
+  if (!foto) {
+    throw new NotFoundError('Foto no encontrada');
+  }
+  return foto;
+}
+
 async function resolverNegocioIdDeFoto(foto) {
   if (foto.negocio_id) return foto.negocio_id;
   const producto = await productosService.obtenerCrudoOFallar(foto.producto_id);
@@ -48,10 +65,7 @@ async function resolverNegocioIdDeFoto(foto) {
 }
 
 async function eliminar(usuarioId, id, logger) {
-  const foto = await fotosRepo.buscarPorId(id);
-  if (!foto) {
-    throw new NotFoundError('Foto no encontrada');
-  }
+  const foto = await obtenerCrudoOFallar(id);
 
   const negocioId = await resolverNegocioIdDeFoto(foto);
   const negocio = await negociosService.obtenerCrudoOFallar(negocioId);
@@ -66,4 +80,38 @@ async function eliminar(usuarioId, id, logger) {
   await almacenamientoService.borrarPorUrlSilencioso(foto.url, logger);
 }
 
-module.exports = { subirParaNegocio, subirParaProducto, eliminar };
+/**
+ * POST /photos/{photoId}/report (Épica 9, gap dejado pendiente desde la
+ * Épica 6) — calca resenas.service.js#reportar: siempre autenticado
+ * (mismo criterio, no es anónimo como RF-025), doble capa contra abuso
+ * (UNIQUE en base de datos + límite de tasa por origen), y un reporte
+ * exitoso mueve la foto a 'pendiente' de inmediato (sale de
+ * listarAprobadasPorNegocio hasta que la Épica 9 la revise), sin
+ * condicionarlo a su estado anterior.
+ */
+async function reportar(usuarioId, id) {
+  await obtenerCrudoOFallar(id);
+
+  const recientes = await reportesFotoRepo.contarRecientesDelOrigen({
+    usuarioId,
+    windowMinutes: PHOTO_REPORT_RATE_LIMIT_WINDOW_MINUTES,
+  });
+  if (recientes >= PHOTO_REPORT_RATE_LIMIT_MAX) {
+    throw new TooManyRequestsError(
+      `Demasiados reportes desde este usuario (máximo ${PHOTO_REPORT_RATE_LIMIT_MAX} por ${PHOTO_REPORT_RATE_LIMIT_WINDOW_MINUTES} min)`,
+    );
+  }
+
+  try {
+    await reportesFotoRepo.crear({ fotoId: id, usuarioId });
+  } catch (err) {
+    if (err.code === PG_UNIQUE_VIOLATION) {
+      throw new ConflictError('Ya reportó esta foto');
+    }
+    throw err;
+  }
+
+  await fotosRepo.moderar(id, 'pendiente');
+}
+
+module.exports = { subirParaNegocio, subirParaProducto, eliminar, reportar, obtenerCrudoOFallar };

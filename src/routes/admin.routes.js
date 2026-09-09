@@ -55,6 +55,16 @@ router.patch(
 // épica (ver CLAUDE.md, sección 10).
 router.patch('/users/:userId/suspend', validateUuidParam('userId'), controller.suspendUser);
 
+// Registro asistido (RF-018, Épica 2) — reemitir un token de reclamo para
+// un vendedor que perdió o nunca recibió el que se le entregó en la
+// creación (POST /auth/assisted-registration). 409 si la cuenta ya fue
+// reclamada, ver registroAsistido.service.js#reemitirTokenReclamo.
+router.patch(
+  '/users/:userId/reissue-claim-token',
+  validateUuidParam('userId'),
+  controller.reissueClaimToken,
+);
+
 router.get('/outdated-reports', validateListQuery, controller.listOutdatedReports);
 router.patch(
   '/outdated-reports/:reportId/resolve',

@@ -1,4 +1,5 @@
 const adminService = require('../services/admin.service');
+const registroAsistidoService = require('../services/registroAsistido.service');
 
 async function listPendingBusinesses(req, res) {
   const result = await adminService.listarNegociosPendientes(req.validatedQuery);
@@ -40,6 +41,11 @@ async function suspendUser(req, res) {
   res.status(200).json(user);
 }
 
+async function reissueClaimToken(req, res) {
+  const result = await registroAsistidoService.reemitirTokenReclamo(req.params.userId);
+  res.status(200).json(result);
+}
+
 async function listOutdatedReports(req, res) {
   const result = await adminService.listarReportesDesactualizados(req.validatedQuery);
   res.status(200).json(result);
@@ -69,6 +75,7 @@ module.exports = {
   listReportedPhotos,
   moderatePhoto,
   suspendUser,
+  reissueClaimToken,
   listOutdatedReports,
   resolveOutdatedReport,
   metrics,

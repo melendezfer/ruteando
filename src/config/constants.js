@@ -92,6 +92,13 @@ module.exports = {
   PHOTO_REPORT_RATE_LIMIT_MAX: 3,
   PHOTO_REPORT_RATE_LIMIT_WINDOW_MINUTES: 10,
 
+  // Registro asistido (RF-018, Épica 2) — a diferencia de
+  // PASSWORD_RESET_CODE_TTL_MS (15 min, pensado para un enlace que se
+  // envía por correo casi al instante), este token se entrega en persona
+  // (el administrador se lo da al vendedor directamente) — 15 minutos no
+  // alcanza. 7 días es una cifra propia, no citada de ningún documento.
+  ASSISTED_CLAIM_TOKEN_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+
   // GET /admin/reports/export (RF-022): tope propio para cada lista de
   // pendientes que incluye el export — no es un endpoint paginado (es un
   // volcado puntual), así que necesita un límite fijo para no arriesgarse

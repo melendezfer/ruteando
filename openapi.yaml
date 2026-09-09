@@ -205,6 +205,48 @@ components:
         categoryId: { type: integer }
         contactPhone: { type: string }
 
+    AssistedRegistrationInput:
+      description: >-
+        POST /auth/assisted-registration (RF-018). Anidado
+        (vendor/business) para no chocar vendor.fullName con
+        business.name — business reusa exactamente BusinessInput.
+      type: object
+      required: [vendor, business, consentTextVersion]
+      properties:
+        vendor:
+          type: object
+          required: [fullName]
+          properties:
+            fullName: { type: string, maxLength: 150 }
+            email:
+              type: string
+              format: email
+              nullable: true
+              description: Opcional — el vendedor puede no tener correo.
+            phone: { type: string, maxLength: 20, nullable: true }
+        business: { $ref: '#/components/schemas/BusinessInput' }
+        consentTextVersion: { type: string, maxLength: 20 }
+
+    AssistedRegistrationResult:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        business: { $ref: '#/components/schemas/Business' }
+        claimToken:
+          type: string
+          description: >-
+            De un solo uso. El sistema no lo envía por ningún canal —
+            viaja solo en esta respuesta, para que el administrador se
+            lo entregue al vendedor.
+        claimTokenExpiresAt: { type: string, format: date-time }
+
+    ClaimAssistedAccountInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8 }
+
     Location:
       type: object
       properties:
@@ -1478,6 +1520,32 @@ paths:
           description: El usuario ya está suspendido
           $ref: '#/components/responses/Conflict'
 
+  /admin/users/{userId}/reissue-claim-token:
+    patch:
+      tags: [Administración]
+      summary: Reemitir el token de reclamo de una cuenta de registro asistido (RF-018)
+      description: >-
+        Para un vendedor que perdió o nunca recibió el claimToken de
+        POST /auth/assisted-registration. Invalida el token anterior
+        (uno solo activo por vendedor a la vez).
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses:
+        '200':
+          description: Nuevo token de reclamo generado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  claimToken: { type: string }
+                  claimTokenExpiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La cuenta ya fue reclamada (usuarios.contrasena_establecida_en no nulo)
+          $ref: '#/components/responses/Conflict'
+
   /admin/outdated-reports:
     get:
       tags: [Administración]
@@ -1589,26 +1657,72 @@ paths:
                 items: { $ref: '#/components/schemas/Consent' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  # Registro asistido (RF-018, agrupado con la Épica 2 en CLAUDE.md): este
+  # bloque reemplaza al huérfano original de la especificación (paths ya
+  # reservados, contrato sin diseñar) — se eliminó `assistedBy` (texto
+  # libre sin verificar) porque ahora el actor es un administrador
+  # autenticado (regla de seguridad #3), un identificador verificable que
+  # ese campo no aportaba.
   /auth/assisted-registration:
     post:
       tags: [Autenticación]
-      summary: Registro de negocio asistido por un tercero en campo
+      summary: Registrar un vendedor y su negocio en su nombre (RF-018, RF-004)
+      description: >-
+        Solo administradores (403 para cualquier otro rol). Crea el
+        vendedor (correo/teléfono verdaderamente opcionales — el
+        vendedor puede no tener ninguno de los dos), su negocio (nace
+        "pending", pasa por la misma cola de aprobación que cualquier
+        otro) y el consentimiento tipo "assisted_registration". NO
+        registra los consentimientos "data_processing" ni
+        "terms_conditions" a nombre del vendedor (Ley 1581: esos dos los
+        otorga el titular, no un tercero) — el vendedor los otorga él
+        mismo, la primera vez que reclama su cuenta, vía
+        POST /consents. La respuesta incluye un claimToken de un solo
+        uso que el sistema nunca intenta enviar por ningún canal — el
+        administrador se lo entrega al vendedor por el medio que tenga a
+        mano (no hay proveedor de correo ni de SMS conectado hoy).
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              allOf:
-                - { $ref: '#/components/schemas/BusinessInput' }
-                - type: object
-                  required: [assistedBy, consentTextVersion]
-                  properties:
-                    assistedBy:
-                      { type: string, description: 'Nombre de quien realiza el registro asistido' }
-                    consentTextVersion: { type: string }
+            schema: { $ref: '#/components/schemas/AssistedRegistrationInput' }
       responses:
         '201':
-          description: Negocio y consentimiento asistido registrados
+          description: Vendedor y negocio registrados
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Business' }
+              schema: { $ref: '#/components/schemas/AssistedRegistrationResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: El correo indicado ya está registrado
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/claim-assisted-account:
+    post:
+      tags: [Autenticación]
+      summary: Reclamar una cuenta de registro asistido fijando la contraseña real (RF-018)
+      description: >-
+        Pública — el claimToken es la credencial, igual que
+        /auth/reset-password. Fija la contraseña real (a partir de ahí
+        User.active y el login normal funcionan igual que para cualquier
+        cuenta) y devuelve el primer par de tokens sin exigir
+        consentimiento todavía (mismo criterio que POST /auth/register)
+        — el candado de consentimiento de login()/refresh() se aplica
+        desde el siguiente intento.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimAssistedAccountInput' }
+      responses:
+        '200':
+          description: Cuenta reclamada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401':
+          description: claimToken inválido, expirado o ya usado
+        '422': { $ref: '#/components/responses/ValidationError' }

@@ -1,9 +1,15 @@
 const pool = require('../config/db');
 
+// contrasena_establecida_en = now(): register() es la vía normal, donde el
+// usuario fija su propia contraseña de inmediato — distinto del registro
+// asistido (registroAsistido.repository.js), que inserta directo con esta
+// columna en NULL a propósito, para que reemitirTokenReclamo() pueda
+// distinguir "todavía no reclamó su cuenta" de "ya tiene su propia
+// contraseña" (ver migración usuarios-registro-asistido).
 async function crear({ nombreCompleto, correo, contrasenaHash, rol }) {
   const { rows } = await pool.query(
-    `INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, rol)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, rol, contrasena_establecida_en)
+     VALUES ($1, $2, $3, $4, now())
      RETURNING *`,
     [nombreCompleto, correo, contrasenaHash, rol],
   );
@@ -20,10 +26,17 @@ async function buscarPorId(id) {
   return rows[0] || null;
 }
 
+// contrasena_establecida_en = now() acá también: este es el único punto de
+// escritura compartido por passwordReset.service.js#restablecerContrasena
+// y registroAsistido.service.js#reclamar — cualquiera de los dos caminos
+// que termine en "este usuario fijó una contraseña real" debe marcar la
+// cuenta como reclamada, o un vendedor que reclamó por la vía de "olvidé
+// mi contraseña" (si tenía correo) seguiría viéndose como "sin reclamar"
+// para reemitirTokenReclamo().
 async function actualizarContrasena(id, contrasenaHash) {
   await pool.query(
     `UPDATE usuarios
-     SET contrasena_hash = $2, fecha_actualizacion = now()
+     SET contrasena_hash = $2, contrasena_establecida_en = now(), fecha_actualizacion = now()
      WHERE id = $1`,
     [id, contrasenaHash],
   );

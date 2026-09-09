@@ -432,7 +432,11 @@ alguien tiene que cerrar durante la implementación:
   `openapi.yaml` asumiendo que esto ya funcionaba, no fue así hasta este
   fix.
 - El plan de pruebas no incluye pruebas de carga/estrés — agregarlas para
-  la Épica 4 como mínimo.
+  la Épica 4 como mínimo. **Resuelto (2026-09-09)**: ejecutada con éxito
+  contra 5.000 negocios sintéticos (`scripts/seedLoadTest.js`), 50 VUs
+  (`scripts/loadtest-nearby.js`, k6) — p95=97.31ms, p99=134.15ms, 0% de
+  error sobre 35.891 requests. Los umbrales propios (p95<300ms,
+  p99<800ms, error<1%) quedaron todos superados con margen amplio.
 - Épica 3: la sección 6 lista `POST /businesses/{businessId}/schedule`
   como parte de esta épica, pero ese endpoint (RF-008) ya se implementó
   completo en la Épica 2 (commit `fc9c729`), junto con negocios/ubicación
@@ -825,3 +829,37 @@ alguien tiene que cerrar durante la implementación:
   espera 200 — y queda anotado como recordatorio: "qué pruebas llaman a
   X" hay que verificarlo corriendo la suite completa, no con una
   búsqueda manual limitada a un solo archivo.
+
+## 11. Mejoras futuras propuestas
+
+Ideas fuera del alcance original de la especificación (Documentos 05-15),
+registradas aquí para no perderlas — **no son código a implementar ahora**,
+ninguna está asignada a una épica de la sección 6. Antes de convertir
+cualquiera de estas en trabajo real, hay que decidir en qué épica entra (o
+si amerita una nueva) y pasar por el mismo proceso de verificación contra
+el código real que ya se sigue en este archivo.
+
+- **Confirmación de disponibilidad en tiempo real**: un consumidor
+  autenticado podría solicitar que un negocio confirme que está vendiendo
+  en este momento — útil cuando el negocio está lejos y el consumidor no
+  quiere caminar hasta allá solo para encontrarlo cerrado (el "abierto
+  ahora" de la Épica 4 solo refleja el horario declarado, no si el
+  vendedor realmente salió hoy). El vendedor recibiría una notificación
+  push pidiendo confirmar; si confirma, el perfil/mapa del negocio
+  mostraría "confirmado vendiendo ahora" con marca de tiempo; si no
+  responde dentro de una ventana corta (a definir), la solicitud expira
+  sin cambiar ningún estado — nunca se asume disponibilidad ni
+  indisponibilidad por default. Requiere, como mínimo:
+  1. Elegir un proveedor de notificaciones push — no hay ninguno
+     conectado hoy, el mismo tipo de gap que ya existe para correo (RF-003,
+     Épica 1) y SMS (registro asistido, Épica 2): mientras no se elija
+     proveedor, no hay forma de que esto funcione de punta a punta.
+  2. El vendedor debe haber otorgado `tipo_consentimiento = 'notificaciones'`
+     — el valor ya existe en el enum (Documento 07, sección 5 de este
+     archivo) pero nunca se implementó ningún flujo que lo pida ni que lo
+     use para condicionar el envío de algo.
+  3. Limitar cuántas solicitudes puede recibir un mismo negocio en una
+     ventana de tiempo, para que un consumidor (o varios) no puedan
+     convertir esto en spam de notificaciones hacia el vendedor — mismo
+     principio que ya se aplica en RF-025 y RF-016 (límite de tasa por
+     origen, respaldado en base de datos, no en memoria).

@@ -53,6 +53,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    AvailabilityRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     Cursor:
       name: cursor
       in: query
@@ -354,6 +359,17 @@ components:
               description: >-
                 Solo cuenta reseñas aprobadas. La lista completa (paginada)
                 vive en GET /businesses/{businessId}/reviews.
+            availabilityConfirmedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: >-
+                Confirmación de disponibilidad en tiempo real (sección 11
+                de CLAUDE.md). Null salvo que el vendedor haya confirmado
+                "vendiendo ahora" (POST /availability-requests, PATCH
+                .../respond) dentro de la ventana de frescura configurada
+                — no es un estado permanente, deja de mostrarse solo con
+                el tiempo, sin que nada lo borre explícitamente.
 
     Review:
       type: object
@@ -411,6 +427,35 @@ components:
           description: >-
             Null hasta que un administrador lo marque atendido
             (PATCH /admin/outdated-reports/{reportId}/resolve, Épica 9).
+
+    DeviceTokenInput:
+      description: POST /users/me/device-tokens — confirmación de disponibilidad en tiempo real.
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, maxLength: 4096, description: Token FCM del dispositivo. }
+
+    AvailabilityRequestDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [confirmed, declined] }
+
+    AvailabilityRequest:
+      description: >-
+        Confirmación de disponibilidad en tiempo real (sección 11 de
+        CLAUDE.md). Expiración perezosa: "expired" no es un valor
+        almacenado, se calcula al leer comparando expiresAt contra el
+        reloj — nunca hay un job que lo escriba.
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        status: { type: string, enum: [pending, confirmed, declined, expired] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        respondedAt: { type: string, format: date-time, nullable: true }
 
     Promotion:
       type: object
@@ -1232,6 +1277,47 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # Confirmación de disponibilidad en tiempo real (CLAUDE.md, sección 11
+  # — mejora futura, ahora asignada). Sin exclusividad a propósito: un
+  # negocio puede tener cualquier número de solicitudes pendientes
+  # simultáneas, protegido solo por el rate limit por negocio (429) —
+  # bloquear con 409 al segundo consumidor que pregunta por un negocio
+  # popular en hora pico perjudicaría el caso de mayor valor de esta
+  # función (decisión explícita, ver conversación de planeación).
+  /businesses/{businessId}/availability-requests:
+    post:
+      tags: [Disponibilidad]
+      summary: Solicitar confirmación de disponibilidad en tiempo real
+      description: >-
+        Envía un push real al dispositivo del vendedor (Firebase Cloud
+        Messaging) pidiéndole confirmar si está vendiendo ahora mismo.
+        Requiere que el negocio esté "active", que el vendedor haya
+        otorgado tipo_consentimiento="notifications", y que quien
+        pregunta no sea el dueño del propio negocio. El envío del push es
+        best-effort — un fallo ahí (sin proveedor configurado, sin
+        dispositivos registrados, token inválido) nunca tumba la
+        solicitud, que igual queda creada y consultable.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '201':
+          description: Solicitud creada (status "pending")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailabilityRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Quien pregunta es el dueño del propio negocio
+          $ref: '#/components/responses/Forbidden'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            El negocio no está "active", o el vendedor no ha habilitado
+            notificaciones
+          $ref: '#/components/responses/Conflict'
+        '429':
+          description: Límite de solicitudes recientes excedido (por negocio o por usuario)
+          $ref: '#/components/responses/TooManyRequests'
+
   /businesses/{businessId}/promotions:
     post:
       tags: [Promociones]
@@ -1657,6 +1743,25 @@ paths:
                 items: { $ref: '#/components/schemas/Consent' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /users/me/device-tokens:
+    post:
+      tags: [Disponibilidad]
+      summary: Registrar el token de push (FCM) del dispositivo actual
+      description: >-
+        Un mismo token solo puede pertenecer a un usuario a la vez — si
+        el dispositivo cambia de cuenta, el token se reasigna al nuevo
+        usuario. No hay forma de probar esto con un dispositivo real sin
+        un cliente todavía inexistente (ver CLAUDE.md, sección 11).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceTokenInput' }
+      responses:
+        '204': { description: Token registrado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # Registro asistido (RF-018, agrupado con la Épica 2 en CLAUDE.md): este
   # bloque reemplaza al huérfano original de la especificación (paths ya
   # reservados, contrato sin diseñar) — se eliminó `assistedBy` (texto
@@ -1725,4 +1830,48 @@ paths:
               schema: { $ref: '#/components/schemas/AuthTokens' }
         '401':
           description: claimToken inválido, expirado o ya usado
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /availability-requests/{requestId}:
+    get:
+      tags: [Disponibilidad]
+      summary: Consultar el estado de una solicitud de disponibilidad
+      description: >-
+        Solo accesible por el consumidor que la creó o por el dueño del
+        negocio (autorización a nivel de objeto) — status se calcula al
+        leer (expiración perezosa), nunca se guarda un valor "expired".
+      parameters: [{ $ref: '#/components/parameters/AvailabilityRequestId' }]
+      responses:
+        '200':
+          description: Solicitud
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailabilityRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /availability-requests/{requestId}/respond:
+    patch:
+      tags: [Disponibilidad]
+      summary: Confirmar o declinar una solicitud de disponibilidad
+      description: Solo el dueño del negocio puede responder (autorización a nivel de objeto).
+      parameters: [{ $ref: '#/components/parameters/AvailabilityRequestId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AvailabilityRequestDecisionInput' }
+      responses:
+        '200':
+          description: Solicitud respondida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailabilityRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La solicitud ya fue respondida o ya expiró
+          $ref: '#/components/responses/Conflict'
         '422': { $ref: '#/components/responses/ValidationError' }

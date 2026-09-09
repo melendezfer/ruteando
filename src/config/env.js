@@ -34,6 +34,15 @@ const envSchema = z
 
     SENTRY_DSN: z.string().optional(),
 
+    // Confirmación de disponibilidad en tiempo real — credenciales de la
+    // cuenta de servicio de Firebase (ver src/config/firebaseClient.js).
+    // Opcionales en dev/staging (el envío de push se degrada a un no-op
+    // logueado sin ellas, igual que el correo de RF-003 sin proveedor
+    // elegido); obligatorias en production.
+    FIREBASE_PROJECT_ID: z.string().optional(),
+    FIREBASE_CLIENT_EMAIL: z.string().optional(),
+    FIREBASE_PRIVATE_KEY: z.string().optional(),
+
     CORS_ORIGIN: z.string().min(1, 'CORS_ORIGIN es obligatorio'),
 
     RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
@@ -50,7 +59,19 @@ const envSchema = z
     message:
       'STORAGE_PUBLIC_URL es obligatorio en production — STORAGE_ENDPOINT (la API de R2/B2) no sirve lectura pública de las fotos',
     path: ['STORAGE_PUBLIC_URL'],
-  });
+  })
+  .refine(
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      (Boolean(data.FIREBASE_PROJECT_ID) &&
+        Boolean(data.FIREBASE_CLIENT_EMAIL) &&
+        Boolean(data.FIREBASE_PRIVATE_KEY)),
+    {
+      message:
+        'FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY son obligatorias en production (confirmación de disponibilidad en tiempo real)',
+      path: ['FIREBASE_PROJECT_ID'],
+    },
+  );
 
 const parsed = envSchema.safeParse(process.env);
 

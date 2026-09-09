@@ -182,6 +182,7 @@ function toApiBusinessProfile({
   fotos,
   agregadoResenas,
   esPropietario,
+  availabilityConfirmedAt,
 }) {
   return {
     ...toApiBusiness(negocio),
@@ -192,6 +193,10 @@ function toApiBusinessProfile({
     photos: fotos.map(toApiPhoto),
     averageRating: agregadoResenas.promedio,
     reviewCount: agregadoResenas.total,
+    // Confirmación de disponibilidad en tiempo real (sección 11 de
+    // CLAUDE.md) — null salvo que exista una confirmación todavía fresca
+    // (ver solicitudesDisponibilidad.repository.js#obtenerConfirmacionFresca).
+    availabilityConfirmedAt: availabilityConfirmedAt ?? null,
   };
 }
 

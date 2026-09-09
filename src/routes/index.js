@@ -12,5 +12,6 @@ router.use('/events', require('./events.routes'));
 router.use('/reviews', require('./reviews.routes'));
 router.use('/consents', require('./consents.routes'));
 router.use('/admin', require('./admin.routes'));
+router.use('/availability-requests', require('./availabilityRequests.routes'));
 
 module.exports = router;

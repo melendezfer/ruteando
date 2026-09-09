@@ -104,4 +104,28 @@ module.exports = {
   // volcado puntual), así que necesita un límite fijo para no arriesgarse
   // a devolver miles de filas si la cola de moderación crece mucho.
   ADMIN_EXPORT_LIST_LIMIT: 100,
+
+  // Confirmación de disponibilidad en tiempo real (CLAUDE.md, sección 11).
+  // Ventana para que el vendedor responda antes de que la solicitud
+  // expire sola (expiración perezosa, sin cron — se calcula al leer,
+  // nunca se escribe). Cifra propia: "¿sigues vendiendo ahora mismo?"
+  // pierde sentido si se tarda mucho en responder.
+  AVAILABILITY_REQUEST_TTL_MINUTES: 10,
+
+  // Cuánto tiempo después de confirmada sigue mostrándose "confirmado
+  // vendiendo ahora" en el perfil público antes de dejar de considerarse
+  // vigente. Cifra propia.
+  AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES: 60,
+
+  // Doble capa de rate limit, mismo criterio que RF-016/RF-025: por
+  // negocio (protege al vendedor de que lo saturen de push, sin importar
+  // cuántos consumidores distintos preguntan) y por usuario solicitante
+  // (protege contra una sola cuenta acosando a varios negocios). El
+  // límite por negocio es más generoso que el de RF-016 a propósito — un
+  // negocio popular puede recibir preguntas legítimas de varios
+  // consumidores distintos en poco tiempo, no es spam de una sola cuenta.
+  AVAILABILITY_REQUEST_RATE_LIMIT_PER_BUSINESS_MAX: 5,
+  AVAILABILITY_REQUEST_RATE_LIMIT_PER_BUSINESS_WINDOW_MINUTES: 30,
+  AVAILABILITY_REQUEST_RATE_LIMIT_PER_USER_MAX: 3,
+  AVAILABILITY_REQUEST_RATE_LIMIT_PER_USER_WINDOW_MINUTES: 10,
 };

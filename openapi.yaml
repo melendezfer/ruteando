@@ -43,6 +43,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OutdatedReportId:
+      name: reportId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     Cursor:
       name: cursor
       in: query
@@ -149,7 +159,7 @@ components:
         categoryId: { type: integer }
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
-        status: { type: string, enum: [pending, active, suspended, closed] }
+        status: { type: string, enum: [pending, active, suspended, closed, rejected] }
         contactPhone: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -169,6 +179,22 @@ components:
           format: double
           nullable: true
           description: Distancia en metros al punto de búsqueda. Solo en GET /businesses/nearby.
+        rejectionReason:
+          type: string
+          nullable: true
+          description: >-
+            Motivo escrito por un administrador al rechazar el negocio
+            (PATCH /admin/businesses/{businessId}/reject, RF-020). Campo
+            condicional, no siempre presente: en
+            GET /businesses/{businessId} (la única operación pública que
+            puede devolver un negocio "rejected") solo viaja con su valor
+            real cuando quien pregunta está autenticado como el dueño del
+            negocio (autorización a nivel de objeto) — para cualquier
+            otro caso, incluida la petición sin token, llega como null.
+            En el resto de las operaciones (POST/PATCH, siempre ya
+            autenticadas como el dueño, y GET /businesses /
+            /businesses/nearby, que nunca devuelven un negocio "rejected")
+            es null.
 
     BusinessInput:
       type: object
@@ -242,6 +268,12 @@ components:
         url: { type: string, format: uri }
         displayOrder: { type: integer }
         createdAt: { type: string, format: date-time }
+        moderationStatus:
+          type: string
+          enum: [pending, approved, rejected]
+          description: >-
+            'approved' por defecto al subirse — solo pasa a 'pending' si
+            alguien la reporta (POST /photos/{photoId}/report, Épica 9).
 
     BusinessProfile:
       description: >-
@@ -298,6 +330,45 @@ components:
       properties:
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, maxLength: 1000 }
+
+    ModerationDecision:
+      description: >-
+        Reusado por PATCH /admin/reviews/{reviewId}/moderate y
+        PATCH /admin/photos/{photoId}/moderate — misma forma exacta.
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+
+    AdminMetrics:
+      description: GET /admin/metrics (RF-021).
+      type: object
+      properties:
+        activeBusinesses: { type: integer }
+        pendingBusinesses: { type: integer }
+        registeredUsers: { type: integer }
+        searches:
+          type: integer
+          description: Conteo de eventos type="search" (RF-023).
+        contactClicks:
+          type: integer
+          description: Conteo de eventos type="contact_click" (RF-023).
+
+    OutdatedReport:
+      description: RF-025 (Épica 2) — reporte de información desactualizada de un negocio.
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        businessId: { type: string, format: uuid }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+        attendedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Null hasta que un administrador lo marque atendido
+            (PATCH /admin/outdated-reports/{reportId}/resolve, Épica 9).
 
     Promotion:
       type: object
@@ -719,6 +790,13 @@ paths:
     get:
       tags: [Negocios]
       summary: Obtener el perfil público completo de un negocio (RF-012)
+      description: >-
+        Pública (no requiere token) — pero si el cliente manda un Bearer
+        token válido y ese usuario es el dueño del negocio,
+        BusinessProfile.rejectionReason viaja con su valor real en vez de
+        null (ver el campo en el schema Business). Un token presente pero
+        inválido o expirado sí se rechaza con 401, igual que en
+        POST /businesses/{businessId}/outdated-reports.
       security: []
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
@@ -727,6 +805,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BusinessProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Negocios]
@@ -836,13 +915,7 @@ paths:
           description: Reporte registrado
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string, format: uuid }
-                  businessId: { type: string, format: uuid }
-                  reason: { type: string }
-                  createdAt: { type: string, format: date-time }
+              schema: { $ref: '#/components/schemas/OutdatedReport' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -991,6 +1064,27 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /photos/{photoId}/report:
+    post:
+      tags: [Fotos]
+      summary: Reportar una foto como inapropiada
+      description: >-
+        Gap dejado pendiente desde la Épica 6 (ver CLAUDE.md): calca
+        POST /reviews/{reviewId}/report — mueve la foto a moderationStatus
+        "pending" de inmediato, para revisión en la Épica 9. Requiere
+        autenticación; un mismo usuario no puede reportar la misma foto
+        dos veces (409), y hay un límite de reportes por usuario en una
+        ventana de tiempo (429).
+      parameters: [{ $ref: '#/components/parameters/PhotoId' }]
+      responses:
+        '202': { description: Reporte recibido para moderación }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Este usuario ya reportó esta foto
+          $ref: '#/components/responses/Conflict'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /businesses/{businessId}/reviews:
     post:
@@ -1171,44 +1265,62 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  # Épica 9 (RF-019 a RF-023): todas las rutas /admin/* comparten
+  # requireRole('administrador') a nivel de router (regla de seguridad #3
+  # de CLAUDE.md) — 401/403 documentados una vez por operación, igual que
+  # el resto del contrato. El borrador de estas 6 rutas ya existía antes
+  # de esta épica (methods/paths definidos, sin parámetros/bodies/errores
+  # reales) — se completan aquí, sin cambiar path ni verbo, salvo
+  # /admin/businesses/{businessId}/reject: la prosa de CLAUDE.md decía
+  # "estado 'closed'", pero se decidió agregar un valor nuevo del enum
+  # ('rechazado' / 'rejected') para no mezclar "nunca se aprobó" con
+  # "estuvo activo y se cerró después" (ver migración
+  # estado-negocio-rechazado).
   /admin/businesses/pending:
     get:
       tags: [Administración]
-      summary: Listar negocios pendientes de aprobación
+      summary: Listar negocios pendientes de aprobación (RF-019)
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
         '200':
-          description: Lista de negocios pendientes
+          description: Página de negocios pendientes, más antiguos primero
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Business' }
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /admin/businesses/{businessId}/approve:
     patch:
       tags: [Administración]
-      summary: Aprobar un negocio pendiente
+      summary: Aprobar un negocio pendiente (RF-019)
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
-        '200': { description: "Negocio aprobado (estado 'active')" }
-
-  /admin/reviews/reported:
-    get:
-      tags: [Administración]
-      summary: Listar reseñas reportadas pendientes de moderación
-      responses:
         '200':
-          description: Lista de reseñas reportadas
+          description: Negocio aprobado (status "active")
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Review' }
+              schema: { $ref: '#/components/schemas/Business' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El negocio existe pero ya no está pendiente de aprobación
+          $ref: '#/components/responses/Conflict'
 
   /admin/businesses/{businessId}/reject:
     patch:
       tags: [Administración]
-      summary: Rechazar un negocio pendiente
+      summary: Rechazar un negocio pendiente (RF-020)
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         content:
@@ -1216,34 +1328,248 @@ paths:
             schema:
               type: object
               properties:
-                reason: { type: string }
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: >-
+                    Se guarda en Business.rejectionReason para que el
+                    vendedor dueño sepa qué corregir — no es un detalle
+                    solo de log.
       responses:
-        '200': { description: "Negocio rechazado (estado 'closed')" }
+        '200':
+          description: Negocio rechazado (status "rejected")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Business' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El negocio existe pero ya no está pendiente de aprobación
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/reviews/reported:
+    get:
+      tags: [Administración]
+      summary: Listar reseñas pendientes de moderación (RF-021)
+      description: >-
+        Toda reseña nueva nace con moderationStatus "pending" (no solo las
+        reportadas) — esta es la cola completa que un administrador debe
+        revisar antes de que una reseña pueda contar para el promedio
+        público del negocio.
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de reseñas pendientes, más antiguas primero
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Review' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /admin/reviews/{reviewId}/moderate:
     patch:
       tags: [Administración]
-      summary: Aprobar o rechazar una reseña reportada
+      summary: Aprobar o rechazar una reseña pendiente (RF-021)
       parameters: [{ $ref: '#/components/parameters/ReviewId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [decision]
-              properties:
-                decision: { type: string, enum: [approved, rejected] }
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
       responses:
-        '200': { description: Reseña moderada }
+        '200':
+          description: Reseña moderada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La reseña existe pero ya no está pendiente de moderación
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # Moderación de fotos — gap dejado pendiente desde la Épica 6 (ver
+  # CLAUDE.md): fotos.estado_moderacion no existía, toda foto era visible
+  # de inmediato. A diferencia de reseñas (donde TODA fila nueva nace
+  # pendiente), acá "reported" sí es literal: una foto nace "approved" y
+  # solo un reporte la mueve a "pending" (ver POST /photos/{photoId}/report).
+  /admin/photos/reported:
+    get:
+      tags: [Administración]
+      summary: Listar fotos reportadas pendientes de moderación
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de fotos reportadas, más antiguas primero
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Photo' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/photos/{photoId}/moderate:
+    patch:
+      tags: [Administración]
+      summary: Aprobar o rechazar una foto reportada
+      parameters: [{ $ref: '#/components/parameters/PhotoId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '200':
+          description: Foto moderada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Photo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La foto existe pero ya no está pendiente de moderación
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # Tres endpoints administrativos faltantes en la especificación
+  # original, agregados en la Épica 9 junto con su definición OpenAPI
+  # (mismo patrón que RF-025 en la Épica 2) — ver CLAUDE.md, sección 10.
+  /admin/users/{userId}/suspend:
+    patch:
+      tags: [Administración]
+      summary: Suspender un usuario
+      description: >-
+        Apaga User.active — ya bloqueaba login/refresh desde la Épica 1
+        (no requirió ninguna migración). Un access token ya emitido sigue
+        siendo válido hasta su TTL de 15 minutos.
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses:
+        '200':
+          description: Usuario suspendido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El usuario ya está suspendido
+          $ref: '#/components/responses/Conflict'
+
+  /admin/outdated-reports:
+    get:
+      tags: [Administración]
+      summary: Listar reportes de información desactualizada sin atender (RF-025)
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de reportes sin atender, más antiguos primero
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/OutdatedReport' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/outdated-reports/{reportId}/resolve:
+    patch:
+      tags: [Administración]
+      summary: Marcar como atendido un reporte de información desactualizada (RF-025)
+      parameters: [{ $ref: '#/components/parameters/OutdatedReportId' }]
+      responses:
+        '200':
+          description: Reporte marcado como atendido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OutdatedReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El reporte ya fue atendido
+          $ref: '#/components/responses/Conflict'
 
   /admin/metrics:
     get:
       tags: [Administración]
-      summary: Consultar métricas agregadas de uso
+      summary: Consultar métricas agregadas de uso (RF-021)
+      description: >-
+        Búsquedas y contactos generados se leen de la tabla eventos
+        (RF-023), no de un contador propio.
       responses:
         '200':
-          { description: 'Panel de métricas (negocios activos, búsquedas, reseñas por semana)' }
+          description: Panel de métricas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminMetrics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/reports/export:
+    get:
+      tags: [Administración]
+      summary: Exportar métricas y colas de moderación pendientes (RF-022)
+      description: >-
+        Volcado puntual en JSON (formato estructurado), no un endpoint
+        paginado — cada lista de pendientes queda capada a
+        ADMIN_EXPORT_LIST_LIMIT (100).
+      responses:
+        '200':
+          description: Exportación estructurada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generatedAt: { type: string, format: date-time }
+                  metrics: { $ref: '#/components/schemas/AdminMetrics' }
+                  businessesByStatus:
+                    type: object
+                    additionalProperties: { type: integer }
+                  eventsByType:
+                    type: object
+                    additionalProperties: { type: integer }
+                  pendingOutdatedReports:
+                    type: array
+                    items: { $ref: '#/components/schemas/OutdatedReport' }
+                  pendingReportedReviews:
+                    type: array
+                    items: { $ref: '#/components/schemas/Review' }
+                  pendingReportedPhotos:
+                    type: array
+                    items: { $ref: '#/components/schemas/Photo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /users/me/consents:
     get:

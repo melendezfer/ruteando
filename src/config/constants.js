@@ -84,4 +84,17 @@ module.exports = {
   // acción deliberada y rara, igual que RF-025 — mismo valor.
   REVIEW_REPORT_RATE_LIMIT_MAX: 3,
   REVIEW_REPORT_RATE_LIMIT_WINDOW_MINUTES: 10,
+
+  // Épica 9 (moderación de fotos, gap dejado pendiente desde la Épica 6) —
+  // POST /photos/{photoId}/report siempre requiere autenticación, igual
+  // que reportar una reseña (RF-016): mismo valor, mismo razonamiento
+  // (acción deliberada y rara, no tráfico de analítica).
+  PHOTO_REPORT_RATE_LIMIT_MAX: 3,
+  PHOTO_REPORT_RATE_LIMIT_WINDOW_MINUTES: 10,
+
+  // GET /admin/reports/export (RF-022): tope propio para cada lista de
+  // pendientes que incluye el export — no es un endpoint paginado (es un
+  // volcado puntual), así que necesita un límite fijo para no arriesgarse
+  // a devolver miles de filas si la cola de moderación crece mucho.
+  ADMIN_EXPORT_LIST_LIMIT: 100,
 };

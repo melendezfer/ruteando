@@ -5,6 +5,9 @@ const { validateUuidParam } = require('../middlewares/validate');
 
 const router = Router();
 
-router.delete('/:photoId', validateUuidParam('photoId'), authenticate, controller.remove);
+const validarPhotoId = validateUuidParam('photoId');
+
+router.delete('/:photoId', validarPhotoId, authenticate, controller.remove);
+router.post('/:photoId/report', validarPhotoId, authenticate, controller.report);
 
 module.exports = router;

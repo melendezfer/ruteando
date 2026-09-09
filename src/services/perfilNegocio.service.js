@@ -21,18 +21,35 @@ const { toApiBusinessProfile } = require('./business.mapper');
  * este archivo llama al repositorio directo, no al servicio, para las
  * piezas opcionales).
  */
-async function obtener(id) {
+/**
+ * requesterId es null en la ruta pública sin token (o con uno inválido —
+ * ver optionalAuthenticate, que a diferencia de tryAuthenticate sí
+ * rechaza un token roto en vez de degradarlo a anónimo). Solo se usa para
+ * decidir si el dueño real ve su propio rejectionReason (RF-020) — no
+ * afecta nada más de la respuesta, que sigue siendo la misma para
+ * cualquiera.
+ */
+async function obtener(id, requesterId) {
   const negocio = await obtenerCrudoOFallar(id);
+  const esPropietario = requesterId != null && negocio.usuario_id === requesterId;
 
   const [ubicacion, horario, productos, fotos, agregadoResenas] = await Promise.all([
     ubicacionesRepo.obtenerActual(id),
     horariosRepo.listar(id),
     productosRepo.listarPorNegocio(id),
-    fotosRepo.listarPorNegocio(id),
+    fotosRepo.listarAprobadasPorNegocio(id),
     resenasRepo.obtenerAgregado(id),
   ]);
 
-  return toApiBusinessProfile({ negocio, ubicacion, horario, productos, fotos, agregadoResenas });
+  return toApiBusinessProfile({
+    negocio,
+    ubicacion,
+    horario,
+    productos,
+    fotos,
+    agregadoResenas,
+    esPropietario,
+  });
 }
 
 module.exports = { obtener };

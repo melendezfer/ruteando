@@ -24,7 +24,7 @@ async function nearby(req, res) {
 }
 
 async function getOne(req, res) {
-  const profile = await perfilNegocioService.obtener(req.params.businessId);
+  const profile = await perfilNegocioService.obtener(req.params.businessId, req.user?.id ?? null);
   res.status(200).json(profile);
 }
 

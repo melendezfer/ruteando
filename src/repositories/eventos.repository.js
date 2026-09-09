@@ -41,4 +41,17 @@ async function contarRecientesDelOrigen({ usuarioId, ip, windowMinutes }) {
   return rows[0].total;
 }
 
-module.exports = { crear, contarRecientesDelOrigen };
+/**
+ * GET /admin/metrics y GET /admin/reports/export (RF-021/022): "búsquedas
+ * y contactos generados" se leen de la tabla eventos ya existente (RF-023),
+ * agregados por tipo en una sola consulta — no un contador propio
+ * mantenido aparte, tal como pide CLAUDE.md.
+ */
+async function contarPorTipo() {
+  const { rows } = await pool.query(
+    'SELECT tipo, count(*)::int AS total FROM eventos GROUP BY tipo',
+  );
+  return Object.fromEntries(rows.map((r) => [r.tipo, r.total]));
+}
+
+module.exports = { crear, contarRecientesDelOrigen, contarPorTipo };

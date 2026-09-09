@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/*
+ * Tokens de diseño — Documento 08, sección 5.5.
+ *
+ * Colores de marca/semánticos: valores exactos dados por el equipo de
+ * producto. Colores de texto/fondo: NO se especificaron valores exactos al
+ * momento de escribir esto — son una elección propia (paleta neutra cálida,
+ * a tono con la terracota/mostaza) y hay que confirmarlos contra el
+ * Documento 08, sección 5.5, antes de darlos por definitivos.
+ *
+ * Tailwind v4 es "CSS-first": este bloque @theme ES la configuración de
+ * Tailwind (no hay tailwind.config.js/ts en este proyecto) — cada variable
+ * de acá genera las utilidades correspondientes (ej. --color-terracota
+ * habilita bg-terracota/text-terracota/border-terracota, etc.).
+ */
+:root {
+  /* Marca */
+  --color-terracota: #c1502e;
+  --color-terracota-dark: #9c3f24;
+  --color-mostaza: #e3a857;
+
+  /* Semánticos */
+  --color-verde: #2e7d32;
+  --color-ambar: #f9a825;
+  --color-rojo: #c62828;
+
+  /* Texto y fondo — asunción propia, confirmar contra Documento 08 5.5 */
+  --color-background: #faf7f2;
+  --color-surface: #ffffff;
+  --color-text: #292524;
+  --color-text-muted: #78716c;
+  --color-border: #e7e1d8;
+
+  /* Radios de esquina */
+  --radius-input: 12px;
+  --radius-card: 16px;
+
+  /* Altura estándar de botón */
+  --spacing-btn: 3rem; /* 48px */
+}
+
+@theme inline {
+  --color-terracota: var(--color-terracota);
+  --color-terracota-dark: var(--color-terracota-dark);
+  --color-mostaza: var(--color-mostaza);
+  --color-verde: var(--color-verde);
+  --color-ambar: var(--color-ambar);
+  --color-rojo: var(--color-rojo);
+
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+
+  --radius-input: var(--radius-input);
+  --radius-card: var(--radius-card);
+
+  --spacing-btn: var(--spacing-btn);
+
+  /* Plus Jakarta Sans para títulos/UI destacada, Inter para texto de
+     cuerpo (next/font las expone como estas variables, ver layout.tsx) —
+     el Documento 08 nombra ambas tipografías sin asignar el rol de cada
+     una; esta asignación es la convención más común para este pareo
+     (geométrica para títulos, muy legible para cuerpo) y queda fácil de
+     cambiar acá si el documento dice lo contrario. */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-plus-jakarta-sans);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

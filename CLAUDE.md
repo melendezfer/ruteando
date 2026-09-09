@@ -867,3 +867,28 @@ el código real que ya se sigue en este archivo.
      convertir esto en spam de notificaciones hacia el vendedor — mismo
      principio que ya se aplica en RF-025 y RF-016 (límite de tasa por
      origen, respaldado en base de datos, no en memoria).
+
+- **Cobro por visibilidad post-piloto**: idea de negocio, no de código —
+  documentada aquí solamente, nada de esto se implementa todavía. Sigue
+  condicionada a la disciplina de "cero monetización durante el piloto"
+  del Documento 03 — una vez el piloto muestre evidencia suficiente (KPI
+  de contactos generados, Documento 03 sección 8.10; sigue siendo una
+  condición que se cumple, no una fecha fija en el calendario), el
+  negocio podría pagar por visibilidad destacada por un período elegido
+  (semana, 15 días, mes, trimestre, año), con promociones de atracción
+  como prueba gratis por tiempo limitado o para los primeros N registros.
+  Requeriría, cuando llegue ese momento:
+  1. Una tabla nueva (ej. `planes_negocio`) con `negocio_id`, tipo de
+     plan, `origen` (`'pagado' | 'promocion' | 'prueba_gratis'`),
+     `fecha_inicio`, `fecha_fin`, y una referencia de pago — el id que
+     devuelve la pasarela, nunca datos de tarjeta ni de cuenta bancaria:
+     eso lo maneja completamente la pasarela, misma disciplina que ya
+     aplica el resto del proyecto con contraseñas (nunca se guarda el
+     secreto, solo una referencia/hash a lo que lo verifica).
+  2. El vencimiento se calcula al leer comparando `fecha_fin` contra el
+     reloj — mismo patrón de expiración perezosa ya usado en el resto de
+     este archivo, sin introducir un cron nuevo.
+  3. Pasarela sugerida: PSE, por permitir pago desde billeteras digitales
+     (Nequi, Daviplata) sin requerir tarjeta de crédito — accesible para
+     el perfil de vendedor informal que es el público de la app.
+  No asignada a ninguna épica todavía.

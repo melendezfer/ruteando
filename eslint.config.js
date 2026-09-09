@@ -50,6 +50,17 @@ module.exports = [
     },
   },
   {
-    ignores: ['node_modules/', 'coverage/'],
+    // client/ es un proyecto Next.js aparte, con su propia configuración
+    // de ESLint (client/eslint.config.mjs, flat config vía
+    // eslint-config-next) y su propio node_modules — sin este ignore,
+    // `eslint .` desde la raíz también intenta analizar client/ y
+    // termina cargando el eslint-plugin-react de client/node_modules
+    // contra el ESLint (versión distinta) instalado en la raíz, lo que
+    // revienta con un TypeError de incompatibilidad de API
+    // (contextOrFilename.getFilename is not a function) en vez de dar un
+    // error de lint real. El lint de client/ corre aparte, con `npm run
+    // lint` parado en client/ (su propio eslint.config.mjs, su propio
+    // ESLint) — no está cableado en .github/workflows/ci.yml todavía.
+    ignores: ['node_modules/', 'coverage/', 'client/'],
   },
 ];

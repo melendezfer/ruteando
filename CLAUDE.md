@@ -844,15 +844,19 @@ el código real que ya se sigue en este archivo.
   en este momento — útil cuando el negocio está lejos y el consumidor no
   quiere caminar hasta allá solo para encontrarlo cerrado (el "abierto
   ahora" de la Épica 4 solo refleja el horario declarado, no si el
-  vendedor realmente salió hoy). El vendedor recibiría una notificación
-  push pidiendo confirmar; si confirma, el perfil/mapa del negocio
-  mostraría "confirmado vendiendo ahora" con marca de tiempo; si no
-  responde dentro de una ventana corta (a definir), la solicitud expira
-  sin cambiar ningún estado — nunca se asume disponibilidad ni
-  indisponibilidad por default. Requiere, como mínimo:
-  1. Elegir un proveedor de notificaciones push — no hay ninguno
-     conectado hoy, el mismo tipo de gap que ya existe para correo (RF-003,
-     Épica 1) y SMS (registro asistido, Épica 2): mientras no se elija
+  vendedor realmente salió hoy). El vendedor recibiría un aviso push real
+  al celular — que le suene o aparezca en la pantalla del dispositivo
+  aunque no tenga la app abierta en ese momento, no un simple aviso
+  dentro de la app que solo se ve si la abre — pidiendo confirmar; si
+  confirma, el perfil/mapa del negocio mostraría "confirmado vendiendo
+  ahora" con marca de tiempo; si no responde dentro de una ventana corta
+  (a definir), la solicitud expira sin cambiar ningún estado — nunca se
+  asume disponibilidad ni indisponibilidad por default. Requiere, como
+  mínimo:
+  1. Integrar Firebase Cloud Messaging (o equivalente) para el envío real
+     al dispositivo — no hay ningún proveedor de push conectado hoy, el
+     mismo tipo de gap que ya existe para correo (RF-003, Épica 1) y SMS
+     (registro asistido, Épica 2): mientras no se elija e integre un
      proveedor, no hay forma de que esto funcione de punta a punta.
   2. El vendedor debe haber otorgado `tipo_consentimiento = 'notificaciones'`
      — el valor ya existe en el enum (Documento 07, sección 5 de este

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CaretDown, CaretUp, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -22,6 +22,14 @@ const TODAY_INDEX_TO_DAY: Record<number, string> = {
 interface BusinessCardProps {
   business: Business;
   categoryName: string | null;
+  /**
+   * El mapa (Épica F3) llega acá con la tarjeta ya desplegada: tocar un
+   * pin es en sí mismo la acción de "ver resumen" (Documento 08 §5.4.2),
+   * no debería exigir un segundo toque para expandirla. La lista de
+   * Inicio (Épica F2) no pasa esta prop y conserva su comportamiento
+   * original (colapsada hasta que se toca).
+   */
+  defaultExpanded?: boolean;
 }
 
 /**
@@ -37,22 +45,43 @@ interface BusinessCardProps {
  * deferido a la Épica F4 (la que construye esa pantalla) — enlazar hoy a
  * una ruta que todavía no existe sería peor que no ofrecerlo.
  */
-export function BusinessCard({ business, categoryName }: BusinessCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export function BusinessCard({ business, categoryName, defaultExpanded = false }: BusinessCardProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+
+  const loadProfile = useCallback(async () => {
+    if (!business.id) return;
+    setLoadingProfile(true);
+    const { data } = await api.GET("/businesses/{businessId}", {
+      params: { path: { businessId: business.id } },
+    });
+    if (data) setProfile(data);
+    setLoadingProfile(false);
+  }, [business.id]);
+
+  useEffect(() => {
+    if (!defaultExpanded) return;
+    // Solo al montar: si el negocio seleccionado cambia, el mapa vuelve a
+    // montar esta tarjeta con un `key` distinto (ver map-screen.tsx), no
+    // reutiliza esta instancia — no hace falta re-disparar por cambios de
+    // props. El `.then()` mueve el setState inicial de loadProfile fuera
+    // de la fase síncrona del efecto (mismo motivo que en home-screen.tsx,
+    // react-hooks/set-state-in-effect).
+    let ignore = false;
+    Promise.resolve().then(() => {
+      if (!ignore) loadProfile();
+    });
+    return () => {
+      ignore = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function toggleExpanded() {
     const next = !expanded;
     setExpanded(next);
-    if (next && !profile && business.id) {
-      setLoadingProfile(true);
-      const { data } = await api.GET("/businesses/{businessId}", {
-        params: { path: { businessId: business.id } },
-      });
-      if (data) setProfile(data);
-      setLoadingProfile(false);
-    }
+    if (next && !profile) await loadProfile();
   }
 
   const todayDay = TODAY_INDEX_TO_DAY[new Date().getDay()];

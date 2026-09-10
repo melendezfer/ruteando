@@ -22,6 +22,8 @@ interface LeafletMapProps {
   businesses: BusinessPin[];
   selectedBusinessId: string | null;
   onSelectBusiness: (business: BusinessPin) => void;
+  /** Entrega la instancia real de L.Map apenas está lista — usada por el botón "Mi ubicación" para recentrar sin pasar por fitBounds. */
+  onMapReady?: (map: L.Map) => void;
 }
 
 /**
@@ -46,7 +48,14 @@ interface LeafletMapProps {
  * bundler no resuelve solo); un ícono propio evita el problema por
  * completo y de paso combina con los tokens de marca.
  */
-export function LeafletMap({ center, userLocation, businesses, selectedBusinessId, onSelectBusiness }: LeafletMapProps) {
+export function LeafletMap({
+  center,
+  userLocation,
+  businesses,
+  selectedBusinessId,
+  onSelectBusiness,
+  onMapReady,
+}: LeafletMapProps) {
   const businessIcon = useMemo(() => createPinIcon("var(--color-terracota)"), []);
   const selectedBusinessIcon = useMemo(() => createPinIcon("var(--color-mostaza)"), []);
   const userIcon = useMemo(() => createUserIcon(), []);
@@ -60,6 +69,7 @@ export function LeafletMap({ center, userLocation, businesses, selectedBusinessI
     // encontrado verificando el mapa contra un navegador real).
     <MapContainer center={[center.lat, center.lng]} zoom={14} scrollWheelZoom className="h-full w-full">
       <FitToResults center={center} userLocation={userLocation} businesses={businesses} />
+      <ExposeMapInstance onMapReady={onMapReady} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -126,6 +136,17 @@ function FitToResults({
 
     map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
   }, [map, businesses, userLocation, center.lat, center.lng]);
+
+  return null;
+}
+
+/** Entrega la instancia de L.Map al padre apenas react-leaflet la crea — ver LeafletMapProps.onMapReady. */
+function ExposeMapInstance({ onMapReady }: { onMapReady?: (map: L.Map) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    onMapReady?.(map);
+  }, [map, onMapReady]);
 
   return null;
 }

@@ -1,53 +1,65 @@
-import { NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import type { ReactNode } from "react";
+
+export interface FloatingAction {
+  icon: ReactNode;
+  /** aria-label del botón/enlace — también su nombre accesible para pruebas. */
+  label: string;
+  /** Si viene, la acción es un enlace (se abre en una pestaña nueva) — ej. wa.me, Google Maps. */
+  href?: string;
+  /** Si viene, la acción es un botón local (recentrar el mapa, abrir un panel, etc). */
+  onClick?: () => void;
+}
 
 interface FloatingActionStackProps {
-  /** null cuando el negocio no tiene teléfono de contacto — oculta el botón en vez de enlazar a nada. */
-  whatsappHref: string | null;
-  /** null cuando el negocio no tiene ubicación registrada todavía. */
-  directionsHref: string | null;
-  onWhatsAppClick?: () => void;
+  /** Acción principal — círculo grande (h-16 w-16), terracota, la más cercana a la esquina. null la oculta sin dejar un hueco. */
+  primary: FloatingAction | null;
+  /** Acción secundaria — círculo más chico (h-12 w-12), con borde, apilada encima de la principal. */
+  secondary?: FloatingAction | null;
 }
 
 /**
- * Reemplaza los dos botones horizontales que describía originalmente el
- * Documento 08 para el perfil de negocio: acá WhatsApp es la acción
- * principal (círculo grande, terracota) y "Cómo llegar" la secundaria
- * (círculo más chico), apiladas como un stack flotante — no existía
- * ningún componente con este nombre en el código antes de esta épica; se
- * construye acá siguiendo exactamente la composición que pidió el
- * usuario para reemplazar el layout original.
- *
- * Ambos enlaces abren fuera de la app (`wa.me` y Google Maps) — "Cómo
- * llegar" no reimplementa navegación (CLAUDE.md Épica 5).
+ * Ver CLAUDE.md, sección "FloatingActionStack" — esta es la única fuente
+ * de verdad de su especificación (props, tamaños, colores); no
+ * documentarla aparte. Construido en la Épica F4 para el perfil de
+ * negocio (WhatsApp como principal, "Cómo llegar" como secundaria) y
+ * generalizado para el Mapa (Épica F3, fix/mapa-floating-action-stack:
+ * "Mi ubicación" como principal, "Filtros" como secundaria) — mismo
+ * componente en ambos casos, solo cambian los `FloatingAction` que
+ * recibe.
  */
-export function FloatingActionStack({ whatsappHref, directionsHref, onWhatsAppClick }: FloatingActionStackProps) {
-  if (!whatsappHref && !directionsHref) return null;
+export function FloatingActionStack({ primary, secondary }: FloatingActionStackProps) {
+  if (!primary && !secondary) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-3">
-      {directionsHref && (
-        <a
-          href={directionsHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Cómo llegar"
+      {secondary && (
+        <FloatingActionButton
+          action={secondary}
           className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg transition-transform hover:scale-105"
-        >
-          <NavigationArrow size={22} weight="fill" />
-        </a>
+        />
       )}
-      {whatsappHref && (
-        <a
-          href={whatsappHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onWhatsAppClick}
-          aria-label="Contactar por WhatsApp"
+      {primary && (
+        <FloatingActionButton
+          action={primary}
           className="flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl transition-transform hover:scale-105"
-        >
-          <WhatsappLogo size={32} weight="fill" />
-        </a>
+        />
       )}
     </div>
+  );
+}
+
+function FloatingActionButton({ action, className }: { action: FloatingAction; className: string }) {
+  if (action.href) {
+    return (
+      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={action.onClick} aria-label={action.label} className={className}>
+        {action.icon}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" onClick={action.onClick} aria-label={action.label} className={className}>
+      {action.icon}
+    </button>
   );
 }

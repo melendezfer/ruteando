@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { CookingPot } from "@phosphor-icons/react/dist/ssr";
+import { CookingPot, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { ProductRow } from "@/components/business/product-row";
@@ -93,11 +93,27 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
       </section>
 
       <FloatingActionStack
-        whatsappHref={whatsappHref}
-        directionsHref={directionsHref}
-        onWhatsAppClick={() => {
-          if (profile.id) logContactClickEvent(profile.id);
-        }}
+        primary={
+          whatsappHref
+            ? {
+                icon: <WhatsappLogo size={32} weight="fill" />,
+                label: "Contactar por WhatsApp",
+                href: whatsappHref,
+                onClick: () => {
+                  if (profile.id) logContactClickEvent(profile.id);
+                },
+              }
+            : null
+        }
+        secondary={
+          directionsHref
+            ? {
+                icon: <NavigationArrow size={22} weight="fill" />,
+                label: "Cómo llegar",
+                href: directionsHref,
+              }
+            : null
+        }
       />
     </div>
   );

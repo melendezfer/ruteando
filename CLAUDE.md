@@ -1098,3 +1098,63 @@ de la siguiente.
   nota final) — estas dos pantallas se diseñan durante las Épicas F7 y F9
   siguiendo los mismos principios ya fijados en las secciones 5.5 y 17 de
   este archivo, sin esperar un wireframe adicional.
+- **Hallazgo (2026-09-10)**: `FloatingActionStack` se construyó durante la
+  Épica F4 (perfil de negocio) pero nunca quedó documentado acá — la
+  Épica F3 (mapa), que se cerró antes, no lo usaba y sus propios controles
+  (filtros, ubicación) se quedaron como una barra fija y sin acción de
+  "recentrar". Corregido en `fix/mapa-floating-action-stack`: el mapa
+  ahora usa el mismo componente (ver sección 20 de este archivo) y ese
+  retrofit generalizó `FloatingActionStack` de "WhatsApp/Cómo llegar"
+  (hardcodeado) a dos acciones configurables — su forma final, no la
+  original de F4, es la que documenta la sección 20.
+
+## 20. Componente FloatingActionStack
+
+`client/src/components/ui/floating-action-stack.tsx` — reemplaza, para
+cualquier pantalla que lo necesite, el patrón de "dos botones horizontales
+fijos" que describía originalmente el Documento 08 (ej. WhatsApp/Cómo
+llegar en el perfil de negocio, sección 5.4.3). Esta sección es la única
+fuente de verdad de su especificación — si el componente cambia, actualizar
+acá también, no dejar que el código y este archivo diverjan.
+
+**Props** (`primary: FloatingAction | null`, `secondary?: FloatingAction | null`):
+
+```ts
+interface FloatingAction {
+  icon: ReactNode;
+  label: string;      // aria-label, también el nombre accesible para pruebas
+  href?: string;       // si viene, la acción es un enlace externo (target="_blank")
+  onClick?: () => void; // si viene, la acción es un botón local (recentrar, abrir un panel, analítica)
+}
+```
+
+- `primary` es el círculo grande (`h-16 w-16`, `bg-terracota text-white`,
+  `shadow-xl`) — la acción más cercana a la esquina de la pantalla.
+- `secondary` es el círculo más chico (`h-12 w-12`, `border border-border
+  bg-surface text-terracota`, `shadow-lg`), apilado **encima** del
+  principal (mismo orden en el DOM: secundaria primero, principal
+  después, dentro de un `flex flex-col`).
+- El stack completo es `fixed bottom-6 right-6 z-40`, con `gap-3` entre
+  los dos círculos. Si ambas props son `null`, el componente no renderiza
+  nada (sin dejar un contenedor vacío).
+- Cada acción decide su propio elemento: con `href` es un `<a>` (abre en
+  pestaña nueva, `rel="noopener noreferrer"`); sin `href` es un
+  `<button type="button">`. `onClick` funciona en los dos casos (en el
+  `<a>` no bloquea la navegación — sirve para analítica best-effort antes
+  de que el enlace abra).
+- Si falta el dato que una acción necesita (ej. un negocio sin teléfono,
+  o sin ubicación registrada), quien llama pasa `null` en esa posición —
+  el botón correspondiente desaparece por completo, nunca queda un botón
+  que enlaza a nada.
+
+**Usos actuales:**
+
+| Pantalla | `primary` (círculo grande) | `secondary` (círculo chico) |
+|---|---|---|
+| Perfil de negocio (Épica F4, `business-profile-screen.tsx`) | WhatsApp — `WhatsappLogo`, `href` a `wa.me` con mensaje prellenado, `onClick` dispara `clic_contacto` | Cómo llegar — `NavigationArrow`, `href` a Google Maps con las coordenadas de la ubicación |
+| Mapa (Épica F3, retrofit `fix/mapa-floating-action-stack`, `map-screen.tsx`) | Mi ubicación — `Crosshair`, `onClick` recentra el mapa sobre la posición del usuario (o reintenta el permiso de geolocalización si todavía no fue concedido) | Filtros — `SlidersHorizontal`, `onClick` abre/cierra el panel de distancia/precio/abierto-ahora como bottom sheet (sección 17) |
+
+Cualquier pantalla nueva que necesite dos acciones flotantes (una
+principal, una secundaria opcional) debe reutilizar este componente en
+vez de construir un stack de círculos aparte — es exactamente el motivo
+por el que se generalizó en el retrofit del mapa.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { CaretDown, CaretUp, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -41,9 +42,9 @@ interface BusinessCardProps {
  * separa Business de BusinessProfile en el contrato, para no desperdiciar
  * ancho de banda en cada búsqueda.
  *
- * El enlace "ver perfil completo" que menciona la sección 17 queda
- * deferido a la Épica F4 (la que construye esa pantalla) — enlazar hoy a
- * una ruta que todavía no existe sería peor que no ofrecerlo.
+ * El enlace "ver perfil completo" que menciona la sección 17 apunta a
+ * /negocios/{id} (Épica F4) — antes de esa épica no existía esa ruta y
+ * este enlace quedaba deliberadamente sin ofrecerse.
  */
 export function BusinessCard({ business, categoryName, defaultExpanded = false }: BusinessCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -131,6 +132,14 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
                   ? `${profile.averageRating.toFixed(1)} (${profile.reviewCount} reseña${profile.reviewCount === 1 ? "" : "s"})`
                   : "Todavía sin reseñas"}
               </p>
+              {business.id && (
+                <Link
+                  href={`/negocios/${business.id}`}
+                  className="font-sans text-body-sm font-medium text-terracota hover:underline"
+                >
+                  Ver perfil completo
+                </Link>
+              )}
             </>
           )}
 

@@ -6,6 +6,7 @@ const fotosRepo = require('../repositories/fotos.repository');
 const resenasRepo = require('../repositories/resenas.repository');
 const solicitudesDisponibilidadRepo = require('../repositories/solicitudesDisponibilidad.repository');
 const { toApiBusinessProfile } = require('./business.mapper');
+const { estaAbiertoAhora, momentoActualBogota } = require('./disponibilidad.service');
 const { AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES } = require('../config/constants');
 
 /**
@@ -48,6 +49,16 @@ async function obtener(id, requesterId) {
       ),
     ]);
 
+  // Épica F4 (frontend): "abierto ahora" en el perfil se calcula acá, no
+  // en el cliente — reutiliza la MISMA función pura que ya usa el filtro
+  // openNow de /businesses y /businesses/nearby (negocios.repository.js),
+  // en vez de que el frontend reimplemente la regla de turnos nocturnos
+  // que cruzan medianoche (ya documentada como un caso no trivial en
+  // disponibilidad.service.js) contra el `schedule` que ya viaja en este
+  // mismo perfil.
+  const { hoyDb, horaActual } = momentoActualBogota();
+  const isOpenNow = estaAbiertoAhora({ hoyDb, horaActual, horarios: horario });
+
   return toApiBusinessProfile({
     negocio,
     ubicacion,
@@ -57,6 +68,7 @@ async function obtener(id, requesterId) {
     agregadoResenas,
     esPropietario,
     availabilityConfirmedAt,
+    isOpenNow,
   });
 }
 

@@ -370,6 +370,16 @@ components:
                 .../respond) dentro de la ventana de frescura configurada
                 — no es un estado permanente, deja de mostrarse solo con
                 el tiempo, sin que nada lo borre explícitamente.
+            isOpenNow:
+              type: boolean
+              description: >-
+                "Abierto ahora" (Épica F4 del frontend) calculado contra
+                `schedule` y la hora actual (America/Bogota) en el momento
+                de la petición — misma función que ya usa el filtro
+                openNow de GET /businesses y /businesses/nearby
+                (disponibilidad.service.js), incluida la regla de turnos
+                nocturnos que cruzan medianoche. El cliente nunca debe
+                recalcular esto por su cuenta.
 
     Review:
       type: object

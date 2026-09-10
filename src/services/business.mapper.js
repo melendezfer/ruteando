@@ -183,6 +183,7 @@ function toApiBusinessProfile({
   agregadoResenas,
   esPropietario,
   availabilityConfirmedAt,
+  isOpenNow,
 }) {
   return {
     ...toApiBusiness(negocio),
@@ -197,6 +198,10 @@ function toApiBusinessProfile({
     // CLAUDE.md) — null salvo que exista una confirmación todavía fresca
     // (ver solicitudesDisponibilidad.repository.js#obtenerConfirmacionFresca).
     availabilityConfirmedAt: availabilityConfirmedAt ?? null,
+    // "Abierto ahora" (Épica F4 del frontend) — calculado acá contra
+    // `schedule` en el mismo instante de la petición, nunca cacheado ni
+    // recalculado en el cliente.
+    isOpenNow: Boolean(isOpenNow),
   };
 }
 

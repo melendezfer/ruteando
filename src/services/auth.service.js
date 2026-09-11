@@ -10,10 +10,35 @@ const { ConflictError, UnauthorizedError, ConsentRequiredError } = require('../e
 // RF-018: chequeo compartido por login() y refresh(), en ambos casos
 // ANTES de emitir/rotar tokens — register() no lo usa, no cambia (ver
 // CLAUDE.md sección "Épica 8").
-async function exigirConsentimientoCompleto(usuarioId) {
+//
+// Extendido (2026-09-11) para cerrar un candado real que dejaba cuentas
+// creadas antes de que el frontend pidiera este consentimiento (o
+// cualquiera que nunca lo haya otorgado) bloqueadas para siempre: sin
+// tokens no hay forma de llamar POST /consents (exige autenticación), y
+// login()/refresh() nunca los emiten sin consentimiento — un callejón
+// sin salida real, no solo una pantalla incómoda. login() ahora acepta
+// un `consentsProvistos` opcional en el mismo request: la contraseña ya
+// se verificó arriba (prueba de identidad suficiente), así que si cubre
+// exactamente lo que falta, se otorga ahí mismo y se continúa sin un
+// segundo viaje de ida y vuelta. Si no alcanza (o no viene, como en
+// refresh(), que sigue llamando esta función sin ese argumento), se
+// rechaza igual que antes, con missingConsentTypes para que el cliente
+// sepa qué pedir.
+async function exigirOConcederConsentimiento(usuarioId, consentsProvistos) {
   const faltantes = await consentimientosService.obtenerTiposObligatoriosFaltantes(usuarioId);
-  if (faltantes.length > 0) {
+  if (faltantes.length === 0) return;
+
+  const provistosPorTipo = new Map((consentsProvistos ?? []).map((c) => [c.type, c]));
+  const todosCubiertos = faltantes.every((tipo) => provistosPorTipo.has(tipo));
+  if (!todosCubiertos) {
     throw new ConsentRequiredError(faltantes);
+  }
+
+  // Solo los que de verdad faltaban — nunca duplica uno ya otorgado, ni
+  // aunque el cliente lo haya vuelto a mandar.
+  for (const tipo of faltantes) {
+    const { textVersion } = provistosPorTipo.get(tipo);
+    await consentimientosService.crear({ actorUserId: usuarioId, body: { type: tipo, textVersion } });
   }
 }
 
@@ -54,7 +79,7 @@ async function register({ fullName, email, password, role }) {
   return emitirTokens(usuario);
 }
 
-async function login({ email, password }) {
+async function login({ email, password, consents }) {
   const usuario = await usuariosRepo.buscarPorCorreo(email);
 
   const passwordOk = await argon2.verify(usuario ? usuario.contrasena_hash : DUMMY_HASH, password);
@@ -65,7 +90,7 @@ async function login({ email, password }) {
     throw new UnauthorizedError('Credenciales inválidas');
   }
 
-  await exigirConsentimientoCompleto(usuario.id);
+  await exigirOConcederConsentimiento(usuario.id, consents);
 
   return emitirTokens(usuario);
 }
@@ -99,7 +124,13 @@ async function refresh({ refreshToken }) {
   // marcarRevocado más abajo cierra la vieja) — así, si falta
   // consentimiento, el refresh token original queda intacto por
   // construcción, no por un rollback aparte: nunca se llega a rotar.
-  await exigirConsentimientoCompleto(usuario.id);
+  // Sin `consents` (a diferencia de login()) — refresh() es una llamada
+  // silenciosa en segundo plano (auth-context.tsx la dispara al montar
+  // la app), sin ninguna pantalla propia donde pedirle algo al usuario;
+  // el camino de recuperación real para una cuenta bloqueada sigue
+  // siendo login(), que si falla aquí, deja sesión "unauthenticated" y
+  // al usuario en la pantalla de login normal.
+  await exigirOConcederConsentimiento(usuario.id);
 
   const tokens = await emitirTokens(usuario);
 

@@ -137,6 +137,93 @@ describe('POST /auth/login', () => {
     expect(res.body.missingConsentTypes).toEqual(['terms_conditions']);
   });
 
+  // Bug real reportado en producción (2026-09-11): una cuenta creada sin
+  // otorgar consentimiento quedaba bloqueada para siempre — sin tokens
+  // no hay forma de llamar POST /consents (exige autenticación), y sin
+  // consentimiento login()/refresh() nunca los emiten. Las tres pruebas
+  // siguientes cubren la salida real: reintentar el mismo login con
+  // `consents`, ya verificada la contraseña.
+  it('otorga los consentimientos y emite tokens en el mismo request cuando `consents` cubre lo que falta (200)', async () => {
+    const email = correoDePrueba();
+    const registro = await registrar({ email }); // sin otorgar ningún consentimiento
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({
+        email,
+        password: 'password123',
+        consents: [
+          { type: 'data_processing', textVersion: '1.0' },
+          { type: 'terms_conditions', textVersion: '1.0' },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe(email);
+    expect(typeof res.body.accessToken).toBe('string');
+
+    const { rows } = await pool.query(
+      `SELECT tipo, texto_version FROM consentimientos WHERE usuario_id = $1 ORDER BY tipo`,
+      [registro.body.user.id],
+    );
+    expect(rows.map((r) => r.tipo).sort()).toEqual(['terminos_condiciones', 'tratamiento_datos']);
+    expect(rows.every((r) => r.texto_version === '1.0')).toBe(true);
+
+    // Y ese login ya autenticado normalmente después, sin volver a pasar
+    // `consents` — el candado quedó cerrado de verdad, no solo esta vez.
+    const segundoLogin = await request(app).post('/auth/login').send({ email, password: 'password123' });
+    expect(segundoLogin.status).toBe(200);
+  });
+
+  it('rechaza (sin otorgar nada) cuando `consents` cubre solo UNO de los dos tipos que faltan', async () => {
+    const email = correoDePrueba();
+    const registro = await registrar({ email });
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({
+        email,
+        password: 'password123',
+        consents: [{ type: 'data_processing', textVersion: '1.0' }],
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.missingConsentTypes.sort()).toEqual(['data_processing', 'terms_conditions']);
+
+    // Todo o nada: no se otorgó ni siquiera el tipo que sí venía cubierto.
+    const { rows } = await pool.query('SELECT 1 FROM consentimientos WHERE usuario_id = $1', [
+      registro.body.user.id,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('con `consents`, solo otorga el tipo que de verdad faltaba (no duplica el que ya tenía)', async () => {
+    const email = correoDePrueba();
+    const registro = await registrar({ email });
+    await pool.query(
+      `INSERT INTO consentimientos (usuario_id, tipo, texto_version) VALUES ($1, 'tratamiento_datos', 'v1')`,
+      [registro.body.user.id],
+    );
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({
+        email,
+        password: 'password123',
+        consents: [{ type: 'terms_conditions', textVersion: '1.0' }],
+      });
+
+    expect(res.status).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT tipo, texto_version FROM consentimientos WHERE usuario_id = $1 ORDER BY tipo`,
+      [registro.body.user.id],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.tipo === 'tratamiento_datos').texto_version).toBe('v1');
+    expect(rows.find((r) => r.tipo === 'terminos_condiciones').texto_version).toBe('1.0');
+  });
+
   it('rechaza una contraseña incorrecta con el mismo mensaje genérico', async () => {
     const email = correoDePrueba();
     await registrar({ email });

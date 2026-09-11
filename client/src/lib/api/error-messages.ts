@@ -15,6 +15,7 @@
 type ProblemDetailsLike = {
   detail?: string;
   errors?: { field?: string; message?: string }[];
+  missingConsentTypes?: unknown;
 };
 
 function isProblemDetailsLike(value: unknown): value is ProblemDetailsLike {
@@ -30,6 +31,25 @@ export function getFieldErrors(errorBody: unknown): Record<string, string> {
   return result;
 }
 
+/**
+ * ConsentRequiredProblem.missingConsentTypes (POST /auth/login, 403) —
+ * leído de forma defensiva en vez de tipado contra el schema generado,
+ * mismo criterio que el resto de este archivo (ver comentario de
+ * cabecera): openapi-fetch tipa `error` como la unión de los cuerpos de
+ * TODAS las respuestas de error declaradas para la operación (acá,
+ * también Unauthorized, que no trae este campo), así que acceder
+ * directo exige un cast en el sitio de llamada de todas formas.
+ */
+export function getMissingConsentTypes(
+  errorBody: unknown,
+): ("data_processing" | "terms_conditions")[] {
+  if (!isProblemDetailsLike(errorBody) || !Array.isArray(errorBody.missingConsentTypes)) return [];
+  return errorBody.missingConsentTypes.filter(
+    (type): type is "data_processing" | "terms_conditions" =>
+      type === "data_processing" || type === "terms_conditions",
+  );
+}
+
 const GENERIC_ERROR = "Algo salió mal. Intenta de nuevo en un momento.";
 
 export function getLoginErrorMessage(status: number | undefined): string {
@@ -42,7 +62,10 @@ export function getLoginErrorMessage(status: number | undefined): string {
 }
 
 export function getRegisterErrorMessage(status: number | undefined): string {
-  if (status === 409) return "Ya existe una cuenta con ese correo.";
+  // 409: el texto completo ("...inicia sesión") lo arma register/page.tsx
+  // con un <Link> real al final — acá solo la primera mitad, la que no
+  // depende de JSX.
+  if (status === 409) return "Ya existe una cuenta con este correo.";
   if (status === 422) return "Revisa los datos del formulario.";
   return GENERIC_ERROR;
 }

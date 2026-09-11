@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
 import { TextField } from "@/components/ui/text-field";
 import { Button } from "@/components/ui/button";
+import { CONSENT_TYPE_INFO } from "@/lib/api/consents";
 
 type Role = "consumer" | "vendor";
 
@@ -17,14 +18,25 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("consumer");
+  // RF-018 (Ley 1581, CLAUDE.md sección 4) — bug real corregido
+  // 2026-09-11: el formulario emitía la cuenta sin pedir este
+  // consentimiento, y como login()/refresh() sí lo exigen para emitir
+  // tokens, cualquier cuenta creada así quedaba bloqueada para siempre
+  // (sin sesión no hay forma de otorgarlo por ningún otro camino). El
+  // checkbox es obligatorio (atributo `required`, nunca solo un texto
+  // decorativo) y register() otorga los dos consentimientos justo
+  // después de crear la cuenta (ver auth-context.tsx).
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formErrorStatus, setFormErrorStatus] = useState<number | undefined>(undefined);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setFormError(null);
+    setFormErrorStatus(undefined);
     setFieldErrors({});
 
     const result = await register({ fullName, email, password, role });
@@ -36,6 +48,7 @@ export default function RegisterPage() {
 
     setSubmitting(false);
     setFormError(result.message ?? null);
+    setFormErrorStatus(result.status);
     setFieldErrors(result.fieldErrors ?? {});
   }
 
@@ -110,9 +123,52 @@ export default function RegisterPage() {
           </label>
         </fieldset>
 
-        {formError && <p className="font-sans text-body-sm text-rojo">{formError}</p>}
+        <label className="flex items-start gap-2 font-sans text-body-sm text-text">
+          <input
+            type="checkbox"
+            required
+            checked={consentAccepted}
+            onChange={(event) => setConsentAccepted(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Acepto{" "}
+            <Link
+              href={CONSENT_TYPE_INFO.data_processing.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-terracota underline"
+            >
+              el tratamiento de mis datos personales
+            </Link>{" "}
+            y los{" "}
+            <Link
+              href={CONSENT_TYPE_INFO.terms_conditions.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-terracota underline"
+            >
+              términos y condiciones
+            </Link>
+            .
+          </span>
+        </label>
 
-        <Button type="submit" loading={submitting}>
+        {formError && (
+          <p className="font-sans text-body-sm text-rojo">
+            {formError}
+            {formErrorStatus === 409 && (
+              <>
+                {" "}
+                <Link href="/login" className="font-medium text-terracota underline">
+                  Inicia sesión
+                </Link>
+              </>
+            )}
+          </p>
+        )}
+
+        <Button type="submit" loading={submitting} disabled={!consentAccepted}>
           Crear cuenta
         </Button>
       </form>

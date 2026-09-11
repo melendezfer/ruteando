@@ -19,9 +19,11 @@ import {
 import {
   getFieldErrors,
   getLoginErrorMessage,
+  getMissingConsentTypes,
   getNetworkErrorMessage,
   getRegisterErrorMessage,
 } from "@/lib/api/error-messages";
+import { grantMandatoryConsents, type MandatoryConsentType } from "@/lib/api/consents";
 import type { components } from "@/lib/api/schema";
 
 type User = components["schemas"]["User"];
@@ -32,6 +34,16 @@ export interface AuthResult {
   ok: boolean;
   message?: string;
   fieldErrors?: Record<string, string>;
+  status?: number;
+  /**
+   * Presente (y no vacío) solo cuando POST /auth/login devolvió 403
+   * consent-required — la pantalla de login lo usa para abrir
+   * ConsentRequiredModal en vez de mostrar `message` como un error de
+   * formulario sin salida (RF-018, bug real: una cuenta ya creada sin
+   * este consentimiento quedaba bloqueada para siempre, ver
+   * CLAUDE.md).
+   */
+  missingConsentTypes?: MandatoryConsentType[];
 }
 
 interface RegisterInput {
@@ -41,10 +53,15 @@ interface RegisterInput {
   role: "consumer" | "vendor";
 }
 
+interface LoginConsentInput {
+  type: MandatoryConsentType;
+  textVersion: string;
+}
+
 interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
-  login: (email: string, password: string) => Promise<AuthResult>;
+  login: (email: string, password: string, consents?: LoginConsentInput[]) => Promise<AuthResult>;
   register: (input: RegisterInput) => Promise<AuthResult>;
   logout: () => Promise<void>;
 }
@@ -137,17 +154,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applySessionAndFetchUser]);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<AuthResult> => {
+    async (email: string, password: string, consents?: LoginConsentInput[]): Promise<AuthResult> => {
       const { data, error, response } = await api.POST("/auth/login", {
-        body: { email, password },
+        body: { email, password, ...(consents ? { consents } : {}) },
       });
 
       if (error || !data?.accessToken) {
         if (!response) return { ok: false, message: getNetworkErrorMessage() };
+
+        // 403 en /auth/login es siempre consent-required (el único 403
+        // que declara esa ruta) — bug real reportado en producción
+        // (2026-09-11): una cuenta ya creada sin este consentimiento
+        // (ej. de antes de que el registro pidiera el checkbox) quedaba
+        // bloqueada para siempre, sin ninguna pantalla donde otorgarlo.
+        // LoginPage usa este campo para abrir ConsentRequiredModal en
+        // vez de mostrar `message` como un callejón sin salida.
+        const missingConsentTypes = response.status === 403 ? getMissingConsentTypes(error) : [];
+
         return {
           ok: false,
           message: getLoginErrorMessage(response.status),
           fieldErrors: getFieldErrors(error),
+          status: response.status,
+          missingConsentTypes: missingConsentTypes.length > 0 ? missingConsentTypes : undefined,
         };
       }
 
@@ -167,19 +196,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ok: false,
           message: getRegisterErrorMessage(response.status),
           fieldErrors: getFieldErrors(error),
+          status: response.status,
         };
       }
 
-      // register() nunca exige consentimiento (a diferencia de
-      // login()/refresh()) — la cuenta queda con sesión de inmediato,
-      // aunque otorgar tratamiento_datos/terminos_condiciones (RF-018)
-      // es responsabilidad de la Épica F6 (gestión de consentimientos),
-      // no de esta pantalla. Sin otorgarlos, el próximo login/refresh
-      // real (pasados los 15 min del access token) va a rechazar con
-      // 403 hasta que el usuario los otorgue — gap conocido, documentado
-      // acá para no perderlo, no resuelto en este commit.
       const ok = await applySessionAndFetchUser(data);
-      return ok ? { ok: true } : { ok: false, message: getNetworkErrorMessage() };
+      if (!ok) return { ok: false, message: getNetworkErrorMessage() };
+
+      // El formulario de registro exige el checkbox de tratamiento de
+      // datos/términos y condiciones antes de poder enviarse (RF-018,
+      // Ley 1581, sección 4 de CLAUDE.md) — se otorgan acá, ya
+      // autenticados con el token recién emitido por
+      // applySessionAndFetchUser, en vez de agregarlos al propio
+      // POST /auth/register (que a propósito no cambia, ver CLAUDE.md
+      // sección 10 "Épica 8"). Best-effort: si esta llamada falla (red,
+      // etc.), la cuenta ya quedó creada y con sesión igual —
+      // ConsentRequiredModal (login) es la red de seguridad la próxima
+      // vez que login()/refresh() lo exijan, en vez de dejar la cuenta
+      // bloqueada para siempre como el bug que esto corrige.
+      await grantMandatoryConsents().catch(() => undefined);
+
+      return { ok: true };
     },
     [applySessionAndFetchUser],
   );

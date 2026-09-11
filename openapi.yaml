@@ -601,6 +601,17 @@ paths:
     post:
       tags: [Autenticación]
       summary: Iniciar sesión
+      description: >-
+        Si faltan consentimientos obligatorios, devuelve 403
+        (ConsentRequiredProblem) sin emitir tokens. Para una cuenta que
+        cayó en ese estado sin ninguna pantalla previa donde otorgarlos
+        (ej. creada antes de que el cliente pidiera este consentimiento),
+        el mismo request se puede reintentar agregando `consents` con
+        exactamente los tipos listados en `missingConsentTypes` — la
+        contraseña ya verificada es prueba de identidad suficiente, así
+        que se otorgan ahí mismo y se emiten los tokens en la misma
+        llamada, sin un viaje aparte a POST /consents (que de todas
+        formas exige un token que en este estado no existe).
       security: []
       requestBody:
         required: true
@@ -612,6 +623,20 @@ paths:
               properties:
                 email: { type: string, format: email }
                 password: { type: string }
+                consents:
+                  type: array
+                  maxItems: 2
+                  description: >-
+                    Opcional. Solo tiene efecto cuando cubre exactamente
+                    los tipos que este mismo login devolvería en
+                    `missingConsentTypes` — de lo contrario se rechaza
+                    igual que sin este campo.
+                  items:
+                    type: object
+                    required: [type, textVersion]
+                    properties:
+                      type: { type: string, enum: [data_processing, terms_conditions] }
+                      textVersion: { type: string, maxLength: 20 }
       responses:
         '200':
           description: Sesión iniciada

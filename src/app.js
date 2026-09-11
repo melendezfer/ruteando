@@ -29,6 +29,12 @@ app.use(pinoHttp({ logger }));
 // esquema actual (Bearer en el header, no cookies) pero se deja
 // habilitado desde ya para no tener que revisar esto de nuevo cuando la
 // sección 13 de CLAUDE.md migre /auth/refresh a una cookie httpOnly.
+//
+// env.CORS_ORIGIN ya es un array (env.js lo separa por comas) — el
+// paquete `cors` compara el Origin de cada request contra la lista
+// completa, no solo contra un valor único. Con un solo origen
+// configurado (el caso normal) el comportamiento es idéntico a pasar un
+// string suelto.
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 
 app.use(express.json());

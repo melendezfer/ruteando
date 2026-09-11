@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "predev": "npm run generate:api",
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 3001 -H 0.0.0.0",
     "prebuild": "npm run generate:api",
     "build": "next build",
     "start": "next start -p 3001",

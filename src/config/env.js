@@ -43,7 +43,24 @@ const envSchema = z
     FIREBASE_CLIENT_EMAIL: z.string().optional(),
     FIREBASE_PRIVATE_KEY: z.string().optional(),
 
-    CORS_ORIGIN: z.string().min(1, 'CORS_ORIGIN es obligatorio'),
+    // Uno o más orígenes separados por coma (ej.
+    // "http://localhost:3001,http://192.168.1.23:3001") — así, para
+    // probar la app desde un celular en la misma red WiFi (accediendo al
+    // frontend por la IP de red local del computador, no por
+    // "localhost", que en el celular se referiría a sí mismo), basta con
+    // agregar esa IP acá sin dejar de aceptar "localhost" para el uso
+    // normal desde el mismo computador. `cors` (el paquete, ver app.js)
+    // acepta un array de orígenes de forma nativa — con un solo valor
+    // (sin comas) el comportamiento es idéntico al de antes.
+    CORS_ORIGIN: z
+      .string()
+      .min(1, 'CORS_ORIGIN es obligatorio')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean),
+      ),
 
     RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
   })

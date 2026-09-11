@@ -1611,3 +1611,79 @@ quien.
   `env.CORS_ORIGIN[0]`, portable entre entornos con distinto valor
   configurado, ver `ci.yml`) que un origen permitido recibe el header
   `Access-Control-Allow-Origin` y uno no permitido no lo recibe.
+
+## 25. Datos de demo: `scripts/seedDemoBusinesses.js`
+
+Petición directa del usuario, sin RF asociado — script para poblar el
+mapa con negocios visualmente explorables en desarrollo, propia rama
+(`chore/seed-demo-businesses`). **Deliberadamente separado de
+`scripts/seedLoadTest.js`** en vez de extenderlo: ese script existe para
+medir rendimiento (miles de filas anónimas bajo un único dueño sintético,
+pensado para borrarse sin mirarlas) y este existe para mirarlas — 5
+negocios curados, cada uno con nombre, categoría, foto, WhatsApp y estado
+abierto/cerrado propios, pensados para explorarse a ojo en el mapa y para
+poder iniciar sesión como cualquiera de los vendedores.
+
+**Uso**:
+
+```
+npm run seed:demo          # siembra (o resiembra: limpia primero, idempotente)
+npm run seed:demo:clean    # solo elimina los datos de demo
+```
+
+**Qué siembra** (todo bajo Ciudad Verde, Soacha — mismo `CENTRO` que
+`seedLoadTest.js`/`discovery.test.js`/`map-screen.tsx`):
+
+| Negocio | Categoría | Distancia | Estado ahora* |
+|---|---|---|---|
+| Arepas Doña Rosa | Arepas | ~250 m | abierto |
+| Perros El Parche | Perros calientes y salchipapas | ~350 m | abierto |
+| Dulces La Abuela | Dulces y postres | ~900 m | **cerrado** |
+| Jugos Frutti Verde | Jugos naturales | ~1.4 km | abierto |
+| Empanadas El Fogón | Empanadas | ~3 km | **cerrado** |
+
+\* El horario se calcula contra el día de HOY en hora de Bogotá
+(`momentoActualBogota()`, el mismo helper puro de
+`disponibilidad.service.js`) — los dos negocios "cerrado" quedan cerrados
+específicamente hoy (el resto de la semana con horario normal
+08:00–20:00), no eternamente cerrados; los "abierto" quedan 00:00–23:59
+todos los días, mismo truco que ya usa `seedLoadTest.js` para garantizar
+"abierto ahora" sin depender de la hora exacta en que se corra el script.
+Si se corre el script otro día de la semana, cuáles negocios aparecen
+"cerrado ahora mismo" no cambia — sigue siendo estos dos.
+
+**Decisiones que valen la pena dejar explícitas**:
+
+- `telefono_verificado = true` se fija directamente en el `INSERT` (se
+  salta el flujo real de OTP por SMS, a propósito) — sin esto ningún
+  negocio aparecería en `/businesses`/`/businesses/nearby` desde que
+  existe la verificación de teléfono (sección 21).
+- `ubicaciones.mostrar_ubicacion_exacta = true` (a diferencia del default
+  `false` de producción, sección 22) para que el mapa muestre la
+  coordenada calculada tal cual, no la versión redondeada a ~111 m de
+  "zona aproximada" — así las distancias pedidas (200 m, 900 m, 3 km...)
+  se pueden verificar a ojo en vez de quedar enmascaradas.
+- Cada negocio tiene su **propia** cuenta de vendedor (a diferencia del
+  dueño único compartido de `seedLoadTest.js`), con argon2 real
+  (`password123` para los 5) y ambos consentimientos obligatorios
+  (`tratamiento_datos`, `terminos_condiciones`) otorgados directamente
+  por SQL — para poder iniciar sesión como cualquiera de ellos y probar
+  el lado del vendedor (interruptor de ubicación, etc.) sin que
+  `ConsentRequiredModal` bloquee y sin pasar por el registro completo.
+  Correos bajo `@ruteando.test` (`demo-<slug>@ruteando.test`), igual que
+  el resto de las cuentas sintéticas del proyecto.
+- Foto de relleno vía `picsum.photos/seed/<slug>/900/600` (servicio
+  externo de placeholders) en vez de subir un archivo real — evita tocar
+  el pipeline de compresión/S3 (sección Épica 3), fuera del alcance de
+  un script de datos de prueba.
+- Categorías (Arepas, Perros calientes y salchipapas, Dulces y postres,
+  Jugos naturales, Empanadas) **no se borran** con `--clean` — a
+  diferencia de la categoría descartable de `seedLoadTest.js`
+  ("Seed Load Test"), son categorías reales y reutilizables que tiene
+  sentido conservar aunque se borren los negocios de demo.
+- `--clean` borra `consentimientos` **antes** que `usuarios` — esa FK es
+  `ON DELETE SET NULL`, no `CASCADE` (mismo motivo documentado en la
+  sección 23 para `solicitudes_eliminacion_cuenta`); sin este orden
+  quedarían filas huérfanas con `usuario_id = NULL`, imposibles de
+  volver a limpiar selectivamente. `negocios` sí cascadea
+  (ubicaciones/horarios/fotos), así que no necesita el mismo cuidado.

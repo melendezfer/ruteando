@@ -22,6 +22,8 @@
     "migrate:create": "node-pg-migrate create",
     "seed:loadtest": "node scripts/seedLoadTest.js",
     "seed:loadtest:clean": "node scripts/seedLoadTest.js --clean",
+    "seed:demo": "node scripts/seedDemoBusinesses.js",
+    "seed:demo:clean": "node scripts/seedDemoBusinesses.js --clean",
     "loadtest": "k6 run scripts/loadtest-nearby.js"
   },
   "repository": {

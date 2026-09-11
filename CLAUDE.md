@@ -1523,3 +1523,91 @@ deliberadamente distinto.
   página hace reaparecer el botón, pero tocarlo de nuevo no crea una
   segunda solicitud (el backend ya es idempotente) — la única pérdida es
   la confirmación en pantalla, no el estado real.
+
+## 24. Acceso desde la red local (LAN) para probar en un celular real
+
+Fuera del alcance de los Documentos 05-15 — configuración de desarrollo,
+no una funcionalidad del producto. Petición directa del usuario, propia
+rama (`chore/lan-mobile-dev-access`).
+
+**Qué se ajustó**:
+
+1. `client/package.json`: `"dev": "next dev -p 3001 -H 0.0.0.0"` — antes
+   ya bindeaba a todas las interfaces por default (verificado con
+   `ss -ltnp`, mostraba `*:3001`, no `127.0.0.1:3001`), pero dejarlo
+   implícito depende de que ese default no cambie en una versión futura
+   de Next.js. Ahora es explícito.
+2. `src/config/env.js`: `CORS_ORIGIN` ahora acepta una lista separada
+   por comas (`env.CORS_ORIGIN` pasa de `string` a `string[]`) — el
+   paquete `cors` (`app.js`) ya soporta un array de orígenes de forma
+   nativa, así que con un solo valor (sin comas) el comportamiento
+   sigue siendo idéntico al de antes; no rompe ningún despliegue
+   existente (production/staging/CI, que hoy solo configuran un
+   origen).
+3. `client/.env.example` y `.env.example` (raíz) documentan el caso de
+   uso: agregar la IP de red local del computador a
+   `NEXT_PUBLIC_API_BASE_URL` (frontend) y a `CORS_ORIGIN` (backend),
+   sin dejar de aceptar `localhost` para el uso normal desde el mismo
+   computador. Ninguno de los dos archivos `.env.development`/`.env.local`
+   reales se tocó — son personales, gitignored, y la IP de red local es
+   distinta para cada quien.
+
+**Por qué NEXT_PUBLIC_API_BASE_URL no se cambió en código**: ya era
+exactamente lo que hacía falta (`process.env.NEXT_PUBLIC_API_BASE_URL ??
+"http://localhost:3000"`, `client/src/lib/api/client.ts`) — el único
+ajuste real es de configuración (qué valor tiene esa variable en
+`client/.env.local`), no de código.
+
+**Hallazgo verificado en vivo, no solo en teoría**: se confirmó con
+`curl` que Next.js sirve la página completa (HTML + referencias a los
+chunks de JS) sin ningún bloqueo al pedirla por una IP que no es
+`localhost` — la protección `allowedDevOrigins` de Next.js (agregada en
+versiones recientes contra sitios externos que intenten leer los
+assets de desarrollo por CORS) no aplica a una navegación directa como
+la de un celular escribiendo la URL en la barra de direcciones, porque
+el navegador trata esa IP como el origen propio de la página, no como
+un origen cruzado. No hizo falta configurar `allowedDevOrigins` en
+`next.config.ts`.
+
+**Advertencia real para quien desarrolla dentro de WSL2 (Windows)**: los
+tres ajustes de arriba resuelven el problema *dentro* de Linux/WSL2,
+pero no alcanzan solos si el modo de red de WSL2 es NAT (el default
+histórico) — en ese modo, WSL2 tiene su propia IP interna (ej.
+`172.28.x.x`, verificado con `ip addr` en este entorno), **inalcanzable
+desde otros dispositivos de la red física** como un celular; solo el
+mismo Windows host puede llegar a esa IP. La IP que un celular necesita
+escribir es la del adaptador WiFi/Ethernet real de Windows (la que
+muestra `ipconfig` en Windows, no `ip addr` dentro de WSL), y para que
+el tráfico llegue de ahí hasta el servidor dentro de WSL2 hace falta
+una de estas dos cosas:
+
+- **Recomendado**: activar el modo de red "mirrored" de WSL2 (Windows
+  11 con una versión reciente de WSL) — agregar a
+  `%UserProfile%\.wslconfig`:
+  ```
+  [wsl2]
+  networkingMode=mirrored
+  ```
+  y reiniciar WSL (`wsl --shutdown` desde PowerShell, volver a abrir la
+  terminal). Con esto, WSL2 comparte la IP real de Windows directamente
+  — sin reenvío manual de puertos.
+- **Alternativa** (WSL2 más antiguo, sin modo mirrored): reenviar los
+  puertos 3000 y 3001 desde Windows hacia la IP interna de WSL2 con
+  `netsh interface portproxy` (PowerShell como administrador) más una
+  regla de Firewall de Windows que permita esos puertos entrantes — la
+  IP interna de WSL2 cambia en cada reinicio, así que este reenvío hay
+  que rehacerlo (o automatizarlo) cada vez.
+
+No se automatizó ninguna de las dos — son pasos del lado de Windows, no
+de este repositorio, y dependen de la versión de Windows/WSL de cada
+quien.
+
+### Pruebas
+
+- `tests/unit/env.cors.test.js`: el parseo de `CORS_ORIGIN` (un origen,
+  varios separados por coma, espacios/entradas vacías recortadas).
+- `tests/integration/cors.test.js`: confirma contra la app real
+  (`GET /health`, sin depender de un valor fijo — lee
+  `env.CORS_ORIGIN[0]`, portable entre entornos con distinto valor
+  configurado, ver `ci.yml`) que un origen permitido recibe el header
+  `Access-Control-Allow-Origin` y uno no permitido no lo recibe.

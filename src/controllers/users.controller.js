@@ -3,6 +3,7 @@ const favoritosService = require('../services/favoritos.service');
 const consentimientosService = require('../services/consentimientos.service');
 const resenasService = require('../services/resenas.service');
 const tokensDispositivoService = require('../services/tokensDispositivo.service');
+const solicitudEliminacionCuentaService = require('../services/solicitudEliminacionCuenta.service');
 const { toApiUser } = require('../services/user.mapper');
 const { UnauthorizedError } = require('../errors');
 
@@ -36,4 +37,16 @@ async function registerDeviceToken(req, res) {
   res.status(204).send();
 }
 
-module.exports = { me, listFavorites, listConsents, listReviews, registerDeviceToken };
+async function requestAccountDeletion(req, res) {
+  const resultado = await solicitudEliminacionCuentaService.solicitar(req.user.id, req.body);
+  res.status(201).json(resultado);
+}
+
+module.exports = {
+  me,
+  listFavorites,
+  listConsents,
+  listReviews,
+  registerDeviceToken,
+  requestAccountDeletion,
+};

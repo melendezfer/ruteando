@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
+import { Button } from "@/components/ui/button";
+import { AccountDeletionRequestModal } from "@/components/profile/account-deletion-request-modal";
 
 type User = components["schemas"]["User"];
 type Consent = components["schemas"]["Consent"];
+type AccountDeletionRequest = components["schemas"]["AccountDeletionRequest"];
 
 const ROLE_LABELS: Record<NonNullable<User["role"]>, string> = {
   consumer: "Consumidor",
@@ -46,6 +49,14 @@ interface SettingsTabProps {
  */
 export function SettingsTab({ user }: SettingsTabProps) {
   const [consents, setConsents] = useState<Consent[] | null>(null);
+  const [showDeletionModal, setShowDeletionModal] = useState(false);
+  // Estado puramente local, no se vuelve a pedir al servidor al recargar
+  // la pantalla — no existe (a propósito, no se pidió) un
+  // GET "¿ya tengo una solicitud activa?"; POST
+  // /users/me/account-deletion-request es idempotente en el backend, así
+  // que volver a tocar el botón después de recargar la página no crea
+  // una segunda solicitud, solo pierde esta confirmación en pantalla.
+  const [deletionRequest, setDeletionRequest] = useState<AccountDeletionRequest | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -115,6 +126,48 @@ export function SettingsTab({ user }: SettingsTabProps) {
           </ul>
         )}
       </section>
+
+      <section className="flex flex-col gap-3 rounded-card border border-rojo/30 bg-rojo/5 px-4 py-4">
+        <h2 className="font-heading text-title-2 font-semibold text-text">Eliminar cuenta</h2>
+
+        {deletionRequest ? (
+          <div className="flex items-start gap-2">
+            <CheckCircle size={20} weight="fill" className="mt-0.5 shrink-0 text-verde" />
+            <p className="font-sans text-body-sm text-text">
+              Solicitud recibida el{" "}
+              {deletionRequest.createdAt && DATE_FORMATTER.format(new Date(deletionRequest.createdAt))}.
+              Tu cuenta y tus datos se procesarán conforme a la Ley 1581 de 2012 dentro de los próximos
+              días hábiles.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="font-sans text-body-sm text-text-muted">
+              Tu cuenta no se elimina al instante: queda registrada una solicitud para que el equipo de
+              Ruteando la procese dentro de los próximos días hábiles, conforme a la Ley 1581 de 2012.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowDeletionModal(true)}
+              className="w-full justify-center gap-2 border-rojo text-rojo hover:bg-rojo/10"
+            >
+              <Warning size={18} weight="bold" />
+              Solicitar eliminación de mi cuenta y mis datos
+            </Button>
+          </>
+        )}
+      </section>
+
+      {showDeletionModal && (
+        <AccountDeletionRequestModal
+          onCancel={() => setShowDeletionModal(false)}
+          onSubmitted={(request) => {
+            setDeletionRequest(request);
+            setShowDeletionModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

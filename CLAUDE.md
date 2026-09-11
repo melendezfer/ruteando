@@ -1423,3 +1423,103 @@ el mismo dominio que `tipo`/`direccion_referencia` en esa misma tabla.
   columna de la fila `es_actual`, sin pasar por
   `reemplazarActual()` (que inserta una fila nueva — no es un
   reemplazo de ubicación, es una preferencia).
+
+## 23. Solicitud de eliminación de cuenta (Configuración, Ley 1581)
+
+Fuera del alcance original de los Documentos 05-15 (sin RF asociado) —
+petición directa del usuario, propia rama
+(`feature/solicitud-eliminacion-cuenta`). Botón "Solicitar eliminación
+de mi cuenta y mis datos" en Configuración (Épica F6, ya construida en
+`settings-tab.tsx`).
+
+**Qué hace**: la cuenta **no se elimina al instante**. Tocar el botón
+abre `AccountDeletionRequestModal` con una encuesta de salida corta y
+completamente opcional ("¿nos cuentas por qué te vas?": 4 opciones
+rápidas + un comentario libre) — omitirla por completo y tocar "Enviar
+solicitud" funciona exactamente igual. Al enviar, se crea una fila en
+`solicitudes_eliminacion_cuenta` con fecha; el usuario ve una
+confirmación en la misma pantalla ("Solicitud recibida el [fecha]... se
+procesarán conforme a la Ley 1581 de 2012 dentro de los próximos días
+hábiles"). La solicitud queda visible para el equipo administrador vía
+`GET /admin/account-deletion-requests` (Épica 9) para procesarla — el
+**borrado real de los datos personales queda deliberadamente fuera de
+esta funcionalidad**: no existe todavía ningún endpoint que borre o
+anonimice una cuenta de verdad. `PATCH .../resolve` solo marca la
+solicitud como atendida (mismo patrón que `outdated-reports`, RF-025) —
+es responsabilidad de quien la atienda (manual por ahora, o de la Épica
+9 cuando se construya el resto del panel) hacer el borrado real por
+fuera de este endpoint.
+
+### Por qué el motivo/comentario sobreviven a la cuenta
+
+`solicitudes_eliminacion_cuenta.usuario_id` tiene `ON DELETE SET NULL`
+(no `CASCADE`) — el día que exista un proceso real de borrado y la fila
+de `usuarios` desaparezca, esta fila **sobrevive** con `usuario_id =
+NULL`, `motivo`/`comentario` intactos. Es exactamente lo que separa la
+retroalimentación de producto (útil incluso después de que la cuenta ya
+no exista) de los datos personales que sí se van a eliminar — verificado
+con una prueba de integración que borra la fila de `usuarios` a mano y
+confirma que la solicitud sigue ahí, desacoplada
+(`solicitudesEliminacionCuenta.test.js`).
+
+### Modelo de datos
+
+- `motivo_eliminacion_cuenta` (ENUM nuevo, no uno de los 8 originales
+  del Documento 07 — mismo criterio que `estado_negocio` ganando el
+  valor `'rechazado'` después): `ya_no_lo_necesito`,
+  `no_encontre_lo_que_buscaba`, `problema_tecnico`, `otro`. ENUM real, no
+  texto libre como `reportes_negocio.motivo` (RF-025), porque acá las
+  opciones son fijas y cerradas por diseño (las 3-4 opciones rápidas del
+  botón).
+- `solicitudes_eliminacion_cuenta`: `usuario_id` (nullable, `ON DELETE
+  SET NULL`), `motivo` (nullable), `comentario` (`TEXT`, nullable),
+  `fecha_creacion`, `atendido_en` (nullable — `NULL` hasta que un
+  administrador la marque atendida).
+- Índice único parcial `WHERE atendido_en IS NULL AND usuario_id IS NOT
+  NULL` — impide que la misma cuenta tenga dos solicitudes activas a la
+  vez; es la base de la idempotencia de
+  `POST /users/me/account-deletion-request` (ver abajo).
+
+### Endpoints
+
+- `POST /users/me/account-deletion-request` — body completamente
+  opcional (`reason`/`comment`, o ninguno; un POST sin body en absoluto
+  también es válido, ver el `.default({})` en
+  `solicitudEliminacionCuenta.validators.js`). **Idempotente**: si ya
+  existe una solicitud activa para el usuario, la devuelve tal cual (no
+  la sobrescribe, no crea una segunda) — un doble clic en el botón no es
+  un error confuso para alguien que ya está por irse.
+- `GET /admin/account-deletion-requests` + `PATCH
+  .../{requestId}/resolve` — mismo patrón exacto que
+  `outdated-reports`/RF-025 (cola FIFO paginada, `armarPagina`,
+  fetch→validar→mutar). El admin sí ve `userId` en la lista (necesita
+  saber a quién procesarle la solicitud mientras la cuenta todavía
+  existe) — no es un dato que se oculte de ese lado.
+
+### Hallazgo: `DELETE /users/me` no es este flujo
+
+`DELETE /users/me` ya estaba declarado en `openapi.yaml` desde antes de
+esta funcionalidad ("Eliminar la cuenta propia", `204`), pero **nunca
+tuvo ruta ni implementación** — ni en `users.routes.js` ni en
+`users.controller.js`. Se dejó así a propósito, con una nota en el
+contrato: un `DELETE` con semántica de "borrado en el acto" no puede
+representar el flujo real bajo Ley 1581 (que exige un plazo de
+procesamiento, no un borrado instantáneo), así que no se intentó
+"completar" ese verbo — el flujo real es este endpoint nuevo,
+deliberadamente distinto.
+
+### Frontend
+
+- `account-deletion-request-modal.tsx` (nuevo) — mismo patrón visual
+  que `ConsentRequiredModal` (PR de consentimientos): overlay
+  `fixed inset-0`, panel `rounded-t-card`/`rounded-card`. A diferencia
+  de ese modal (bloqueante, con checkboxes obligatorios), acá nada es
+  obligatorio — el botón "Enviar solicitud" nunca queda deshabilitado.
+- `settings-tab.tsx`: sección "Eliminar cuenta" (estilo de alerta,
+  borde/fondo en rojo) — antes de enviar, muestra el botón; después,
+  reemplaza el botón por la confirmación con fecha y el plazo de días
+  hábiles. Estado puramente local (no hay, a propósito, un
+  `GET "¿ya tengo una solicitud activa?"` — no se pidió): recargar la
+  página hace reaparecer el botón, pero tocarlo de nuevo no crea una
+  segunda solicitud (el backend ya es idempotente) — la única pérdida es
+  la confirmación en pantalla, no el estado real.

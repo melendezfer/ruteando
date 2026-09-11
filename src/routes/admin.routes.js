@@ -72,6 +72,22 @@ router.patch(
   controller.resolveOutdatedReport,
 );
 
+// "Solicitar eliminación de mi cuenta" (Configuración, Épica F6) — ver
+// CLAUDE.md. "resolve" acá solo marca la solicitud como atendida, igual
+// que outdated-reports arriba: NO borra los datos del usuario por sí
+// solo — el borrado real de datos personales sigue siendo un proceso
+// aparte (manual, o de la Épica 9 cuando se aborde), a propósito.
+router.get(
+  '/account-deletion-requests',
+  validateListQuery,
+  controller.listAccountDeletionRequests,
+);
+router.patch(
+  '/account-deletion-requests/:requestId/resolve',
+  validateUuidParam('requestId'),
+  controller.resolveAccountDeletionRequest,
+);
+
 router.get('/metrics', controller.metrics);
 router.get('/reports/export', controller.exportReports);
 

@@ -3,11 +3,13 @@ const resenasRepo = require('../repositories/resenas.repository');
 const fotosRepo = require('../repositories/fotos.repository');
 const usuariosRepo = require('../repositories/usuarios.repository');
 const reportesNegocioRepo = require('../repositories/reportesNegocio.repository');
+const solicitudesEliminacionRepo = require('../repositories/solicitudesEliminacionCuenta.repository');
 const eventosRepo = require('../repositories/eventos.repository');
 const negociosService = require('./negocios.service');
 const resenasService = require('./resenas.service');
 const fotosService = require('./fotos.service');
 const reporteNegocioService = require('./reporteNegocio.service');
+const solicitudEliminacionCuentaService = require('./solicitudEliminacionCuenta.service');
 const { TIPO_EVENTO_API_TO_DB } = require('./eventos.service');
 const cursorUtil = require('../utils/cursor');
 const { toApiBusiness, toApiReview, toApiPhoto, STATUS_DB_TO_API } = require('./business.mapper');
@@ -160,6 +162,34 @@ async function marcarReporteAtendido(id) {
 }
 
 /**
+ * GET /admin/account-deletion-requests (Configuración, Épica F6 — ver
+ * CLAUDE.md). "resolve" (abajo) solo marca la solicitud como atendida;
+ * el borrado real de los datos personales del usuario es un paso
+ * aparte, deliberadamente fuera de este endpoint (manual por ahora, o
+ * de la Épica 9 cuando se aborde el resto del panel de administrador).
+ */
+async function listarSolicitudesEliminacionCuenta({ cursor, limit }) {
+  const cursorDecodificado = cursorUtil.decodificarCursorFechaId(cursor);
+  const filas = await solicitudesEliminacionRepo.listarPendientes({
+    cursor: cursorDecodificado,
+    limit,
+  });
+  return armarPagina(filas, limit, solicitudEliminacionCuentaService.toApiRequest);
+}
+
+async function marcarSolicitudEliminacionAtendida(id) {
+  const solicitud = await solicitudesEliminacionRepo.buscarPorId(id);
+  if (!solicitud) {
+    throw new NotFoundError('Solicitud no encontrada');
+  }
+  if (solicitud.atendido_en) {
+    throw new ConflictError('La solicitud ya fue atendida');
+  }
+  const actualizada = await solicitudesEliminacionRepo.marcarAtendida(id);
+  return solicitudEliminacionCuentaService.toApiRequest(actualizada);
+}
+
+/**
  * GET /admin/metrics (RF-021): "negocios activos, usuarios registrados,
  * búsquedas y contactos generados" — búsquedas/contactos se leen de
  * eventos (RF-023), ya poblada desde la Épica 5, en vez de mantener un
@@ -230,6 +260,8 @@ module.exports = {
   suspenderUsuario,
   listarReportesDesactualizados,
   marcarReporteAtendido,
+  listarSolicitudesEliminacionCuenta,
+  marcarSolicitudEliminacionAtendida,
   obtenerMetricas,
   exportarReportes,
 };

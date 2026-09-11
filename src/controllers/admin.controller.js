@@ -56,6 +56,16 @@ async function resolveOutdatedReport(req, res) {
   res.status(200).json(report);
 }
 
+async function listAccountDeletionRequests(req, res) {
+  const result = await adminService.listarSolicitudesEliminacionCuenta(req.validatedQuery);
+  res.status(200).json(result);
+}
+
+async function resolveAccountDeletionRequest(req, res) {
+  const request = await adminService.marcarSolicitudEliminacionAtendida(req.params.requestId);
+  res.status(200).json(request);
+}
+
 async function metrics(req, res) {
   const result = await adminService.obtenerMetricas();
   res.status(200).json(result);
@@ -78,6 +88,8 @@ module.exports = {
   reissueClaimToken,
   listOutdatedReports,
   resolveOutdatedReport,
+  listAccountDeletionRequests,
+  resolveAccountDeletionRequest,
   metrics,
   exportReports,
 };

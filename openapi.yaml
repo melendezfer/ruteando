@@ -58,6 +58,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    AccountDeletionRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     Cursor:
       name: cursor
       in: query
@@ -492,6 +497,49 @@ components:
       properties:
         token: { type: string, maxLength: 4096, description: Token FCM del dispositivo. }
 
+    AccountDeletionRequestInput:
+      description: >-
+        POST /users/me/account-deletion-request (Configuración, Épica
+        F6) — "¿nos cuentas por qué te vas?", completamente opcional: se
+        puede omitir por completo (body vacío) y la solicitud se crea
+        igual.
+      type: object
+      properties:
+        reason:
+          type: string
+          enum: [no_longer_needed, could_not_find_what_i_needed, technical_problem, other]
+          nullable: true
+        comment: { type: string, maxLength: 1000, nullable: true }
+
+    AccountDeletionRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Null una vez que la cuenta se elimine de verdad (proceso
+            aparte, fuera de este endpoint) — reason/comment, si los
+            hay, sobreviven como retroalimentación de producto sin
+            ningún dato personal asociado (ver CLAUDE.md).
+        reason:
+          type: string
+          enum: [no_longer_needed, could_not_find_what_i_needed, technical_problem, other]
+          nullable: true
+        comment: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        attendedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Null hasta que el equipo administrador la marque atendida
+            (PATCH /admin/account-deletion-requests/{requestId}/resolve,
+            Épica 9) — marcarla atendida no borra los datos por sí solo,
+            ver CLAUDE.md.
+
     AvailabilityRequestDecisionInput:
       type: object
       required: [decision]
@@ -826,6 +874,13 @@ paths:
     delete:
       tags: [Usuarios]
       summary: Eliminar la cuenta propia
+      description: >-
+        Declarado en la especificación original pero nunca implementado
+        (sin ruta, ver CLAUDE.md) — la eliminación de cuenta real no
+        puede ser instantánea bajo Ley 1581 (exige un plazo de
+        procesamiento), así que este verbo con semántica de "borrado en
+        el acto" queda sin resolver a propósito. El flujo real es
+        POST /users/me/account-deletion-request.
       responses:
         '204': { description: Cuenta eliminada }
 
@@ -1887,6 +1942,54 @@ paths:
           description: El reporte ya fue atendido
           $ref: '#/components/responses/Conflict'
 
+  # "Solicitar eliminación de mi cuenta" (Configuración, Épica F6) — ver
+  # CLAUDE.md.
+  /admin/account-deletion-requests:
+    get:
+      tags: [Administración]
+      summary: Listar solicitudes de eliminación de cuenta sin atender
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de solicitudes sin atender, más antiguas primero
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountDeletionRequest' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/account-deletion-requests/{requestId}/resolve:
+    patch:
+      tags: [Administración]
+      summary: Marcar como atendida una solicitud de eliminación de cuenta
+      description: >-
+        Solo marca la solicitud como atendida — NO elimina los datos del
+        usuario por sí sola. El borrado real de datos personales es un
+        proceso aparte (manual por ahora, o de la Épica 9 cuando se
+        aborde el resto del panel de administrador).
+      parameters: [{ $ref: '#/components/parameters/AccountDeletionRequestId' }]
+      responses:
+        '200':
+          description: Solicitud marcada como atendida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountDeletionRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La solicitud ya fue atendida
+          $ref: '#/components/responses/Conflict'
+
   /admin/metrics:
     get:
       tags: [Administración]
@@ -1973,6 +2076,39 @@ paths:
             schema: { $ref: '#/components/schemas/DeviceTokenInput' }
       responses:
         '204': { description: Token registrado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # "Solicitar eliminación de mi cuenta y mis datos" (Configuración,
+  # Épica F6) — ver CLAUDE.md. Distinto, a propósito, del
+  # DELETE /users/me ya declarado más arriba en este archivo: ese verbo
+  # nunca tuvo ruta ni implementación (hallazgo de esta épica, ver
+  # CLAUDE.md) y sigue igual — la eliminación real de una cuenta no
+  # puede ser instantánea bajo Ley 1581 (exige un plazo de
+  # procesamiento), así que se modela como una solicitud aparte, nunca
+  # como un DELETE que borra en el acto.
+  /users/me/account-deletion-request:
+    post:
+      tags: [Usuarios]
+      summary: Solicitar la eliminación de la cuenta propia y sus datos (Ley 1581)
+      description: >-
+        La cuenta NO se elimina al instante — crea una solicitud visible
+        para el equipo administrador
+        (GET /admin/account-deletion-requests, Épica 9), que se procesa
+        dentro de los próximos días hábiles. Idempotente: si ya existe
+        una solicitud activa (sin atender) para esta cuenta, devuelve
+        esa misma en vez de crear una segunda.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountDeletionRequestInput' }
+      responses:
+        '201':
+          description: Solicitud registrada (o la que ya existía, sin atender)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountDeletionRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
 

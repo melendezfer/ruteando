@@ -5,6 +5,9 @@ const { validateBody, validateQuery } = require('../middlewares/validate');
 const { favoritesListQuerySchema } = require('../validators/favoritos.validators');
 const { reviewListQuerySchema } = require('../validators/resenas.validators');
 const { deviceTokenInputSchema } = require('../validators/deviceTokens.validators');
+const {
+  accountDeletionRequestInputSchema,
+} = require('../validators/solicitudEliminacionCuenta.validators');
 
 const router = Router();
 
@@ -27,6 +30,19 @@ router.post(
   authenticate,
   validateBody(deviceTokenInputSchema),
   usersController.registerDeviceToken,
+);
+
+// "Solicitar eliminación de mi cuenta y mis datos" (Configuración,
+// Épica F6) — ver CLAUDE.md. La cuenta NO se elimina acá; el DELETE
+// /users/me que ya estaba declarado en la especificación original nunca
+// tuvo ruta ni implementación (gap encontrado leyendo este archivo, ver
+// CLAUDE.md) y sigue así, sin tocar — este es un endpoint nuevo y
+// distinto, deliberadamente sin semántica de "borrado inmediato".
+router.post(
+  '/me/account-deletion-request',
+  authenticate,
+  validateBody(accountDeletionRequestInputSchema),
+  usersController.requestAccountDeletion,
 );
 
 module.exports = router;

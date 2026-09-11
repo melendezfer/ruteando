@@ -76,6 +76,8 @@ describe('autorización a nivel de función en /admin/*', () => {
     ['patch', '/admin/users/00000000-0000-0000-0000-000000000000/reissue-claim-token'],
     ['get', '/admin/outdated-reports'],
     ['patch', '/admin/outdated-reports/00000000-0000-0000-0000-000000000000/resolve'],
+    ['get', '/admin/account-deletion-requests'],
+    ['patch', '/admin/account-deletion-requests/00000000-0000-0000-0000-000000000000/resolve'],
     ['get', '/admin/metrics'],
     ['get', '/admin/reports/export'],
   ];
@@ -441,6 +443,68 @@ describe('GET /admin/outdated-reports + resolve (RF-025)', () => {
   it('resolver un reporte inexistente responde 404', async () => {
     const res = await request(app)
       .patch('/admin/outdated-reports/00000000-0000-0000-0000-000000000000/resolve')
+      .set('Authorization', `Bearer ${tokenAdmin()}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /admin/account-deletion-requests + resolve (Configuración, Épica F6)', () => {
+  it('lista solo solicitudes sin atender y resolve las saca de la lista (200)', async () => {
+    const usuario = await registrar('consumer');
+    const solicitud = await request(app)
+      .post('/users/me/account-deletion-request')
+      .set('Authorization', `Bearer ${usuario.accessToken}`)
+      .send({ reason: 'other', comment: 'Cambié de ciudad' });
+
+    const antes = await request(app)
+      .get('/admin/account-deletion-requests')
+      .set('Authorization', `Bearer ${tokenAdmin()}`);
+    expect(antes.body.data.map((r) => r.id)).toContain(solicitud.body.id);
+    const encontrada = antes.body.data.find((r) => r.id === solicitud.body.id);
+    // El admin sí ve el userId (necesita saber a quién procesarle la
+    // solicitud) — a diferencia de lo que verá cualquier otra persona.
+    expect(encontrada.userId).toBe(usuario.user.id);
+    expect(encontrada.comment).toBe('Cambié de ciudad');
+
+    const res = await request(app)
+      .patch(`/admin/account-deletion-requests/${solicitud.body.id}/resolve`)
+      .set('Authorization', `Bearer ${tokenAdmin()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.attendedAt).not.toBeNull();
+
+    const despues = await request(app)
+      .get('/admin/account-deletion-requests')
+      .set('Authorization', `Bearer ${tokenAdmin()}`);
+    expect(despues.body.data.map((r) => r.id)).not.toContain(solicitud.body.id);
+
+    // Marcarla atendida NO borra la cuenta por sí sola — ver CLAUDE.md.
+    const me = await request(app)
+      .get('/users/me')
+      .set('Authorization', `Bearer ${usuario.accessToken}`);
+    expect(me.status).toBe(200);
+  });
+
+  it('resolver dos veces la misma solicitud responde 409 la segunda vez', async () => {
+    const usuario = await registrar('consumer');
+    const solicitud = await request(app)
+      .post('/users/me/account-deletion-request')
+      .set('Authorization', `Bearer ${usuario.accessToken}`)
+      .send({});
+    const admin = tokenAdmin();
+
+    await request(app)
+      .patch(`/admin/account-deletion-requests/${solicitud.body.id}/resolve`)
+      .set('Authorization', `Bearer ${admin}`);
+
+    const res = await request(app)
+      .patch(`/admin/account-deletion-requests/${solicitud.body.id}/resolve`)
+      .set('Authorization', `Bearer ${admin}`);
+    expect(res.status).toBe(409);
+  });
+
+  it('resolver una solicitud inexistente responde 404', async () => {
+    const res = await request(app)
+      .patch('/admin/account-deletion-requests/00000000-0000-0000-0000-000000000000/resolve')
       .set('Authorization', `Bearer ${tokenAdmin()}`);
     expect(res.status).toBe(404);
   });

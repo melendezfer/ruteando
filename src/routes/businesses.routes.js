@@ -10,6 +10,7 @@ const {
   locationInputSchema,
   scheduleInputSchema,
   reportInputSchema,
+  phoneVerificationConfirmSchema,
   businessListQuerySchema,
   businessNearbyQuerySchema,
 } = require('../validators/business.validators');
@@ -110,6 +111,24 @@ router.get(
 
 router.post('/:businessId/favorite', validarBusinessId, authenticate, controller.markFavorite);
 router.delete('/:businessId/favorite', validarBusinessId, authenticate, controller.unmarkFavorite);
+
+// Verificación de teléfono de vendedores (ver CLAUDE.md) — ambas rutas
+// solo para el dueño del negocio (autorización a nivel de objeto,
+// verificada en verificacionTelefono.service.js, no solo por tener un
+// token válido cualquiera).
+router.post(
+  '/:businessId/phone-verification',
+  validarBusinessId,
+  authenticate,
+  controller.sendPhoneVerification,
+);
+router.post(
+  '/:businessId/phone-verification/confirm',
+  validarBusinessId,
+  authenticate,
+  validateBody(phoneVerificationConfirmSchema),
+  controller.confirmPhoneVerification,
+);
 
 // Confirmación de disponibilidad en tiempo real (CLAUDE.md, sección 11).
 router.post(

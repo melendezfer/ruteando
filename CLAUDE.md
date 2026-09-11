@@ -1193,3 +1193,148 @@ Cualquier pantalla nueva que necesite dos acciones flotantes (una
 principal, una secundaria opcional) debe reutilizar este componente en
 vez de construir un stack de círculos aparte — es exactamente el motivo
 por el que se generalizó en el retrofit del mapa.
+
+## 21. Verificación de teléfono de vendedores (SMS OTP)
+
+Fuera del alcance original de los Documentos 05-15 (como el registro
+asistido o la confirmación de disponibilidad en tiempo real) — agregada
+después, en su propia rama (`feature/verificacion-telefono-vendedor`),
+para reducir vendedores fantasma/cuentas falsas durante el piloto.
+
+**Qué hace**: un negocio no aparece en `GET /businesses` ni
+`GET /businesses/nearby` (mapa/búsqueda pública) hasta que su dueño
+confirme, por SMS, el mismo número de teléfono que de todas formas iba a
+publicar como contacto de WhatsApp — la aprobación de un administrador
+(RF-019, Épica 9) sigue siendo necesaria pero ya no es suficiente por sí
+sola: hacen falta **las dos** condiciones (`status = 'active'` y
+`phoneVerified = true`). `GET /businesses/{businessId}` (perfil por id
+directo) no aplica este filtro — es ahí donde el propio dueño ve el
+estado "pendiente de verificación" de su negocio y puede resolverlo.
+
+**Por qué teléfono y no cédula/identidad completa, en esta etapa**:
+decisión explícita, no un atajo técnico. El público objetivo (Documento
+08, persona "Don Alirio") son vendedores informales sin registro
+mercantil ni facturación electrónica (sección 0/1 de este archivo) — muchos
+no tienen o no cargan encima una cédula digitalizable, y exigirla
+convertiría el piloto en una barrera de entrada que contradice el
+objetivo explícito de RNF-013 (registro completo en menos de 10
+minutos) y la premisa completa del proyecto. Verificar el teléfono de
+WhatsApp:
+1. No agrega fricción real — es un dato que el vendedor ya iba a dar
+   para que los consumidores lo contacten (RF-012 a RF-014).
+2. Da una señal razonable de que la cuenta es de una persona real,
+   activa, con acceso al número que publica — suficiente para el
+   objetivo declarado (reducir vendedores fantasma), no un sistema de
+   verificación de identidad (KYC) completo.
+3. No depende de tener documentos formales que buena parte del público
+   objetivo puede no tener a mano.
+
+Si el piloto muestra evidencia de abuso que esto no cubre (números
+reciclados, verificación por terceros, etc.), subir el nivel de
+verificación es una decisión de producto futura, no algo que deba
+resolverse de más ahora — igual que la sección 11 trata el cobro por
+visibilidad.
+
+### Modelo de datos
+
+- `negocios.telefono_verificado` (`BOOLEAN NOT NULL DEFAULT false`,
+  migración `verificacion-telefono-vendedor`) — todo negocio existente
+  (solo datos sintéticos/de desarrollo a esta altura del proyecto, sin
+  vendedores reales todavía) queda sin verificar; sin backfill a `true`,
+  sería fingir una verificación que nunca ocurrió.
+- `codigos_verificacion_telefono` (nueva tabla) — OTP de 6 dígitos, no
+  el patrón de `codigos_recuperacion` (token opaco de 256 bits): **sin
+  `UNIQUE` en `codigo_hash`** (un choque entre dos códigos de 6 dígitos
+  es perfectamente posible, a diferencia de un token de 256 bits) y
+  **con `intentos`** (que `codigos_recuperacion` no necesita — un OTP de
+  6 dígitos, 10⁶ combinaciones, sí es adivinable por fuerza bruta sin un
+  tope de intentos fallidos).
+- `usuarios.ip_origen` (`INET`, nullable) — respaldo interno, nunca
+  expuesto en la API ni visible para el propio usuario (`user.mapper.js`
+  no lo mapea), por si alguna vez hace falta colaborar con una autoridad
+  ante un reporte de actividad ilegal. Solo se registra en
+  `POST /auth/register` (`auth.service.js`, vía `req.ip` —
+  `app.set('trust proxy', 1)` ya estaba configurado desde RF-025). El
+  registro asistido (`registroAsistido.repository.js`, INSERT propio,
+  no pasa por `usuarios.repository.js#crear`) lo deja `NULL` a propósito
+  — la IP de esa petición es la del administrador, no la del vendedor.
+
+### Envío de SMS — sin proveedor real todavía (piloto)
+
+`src/services/smsSender.service.js` es la única pieza que sabe "enviar"
+un código — mismo patrón que el correo de RF-003 y el push de
+disponibilidad en tiempo real (sección 10/11 de este archivo): sin
+proveedor de SMS elegido ni activado (piloto, sin costo de por medio
+todavía), el código se registra en el log estructurado (pino) con un
+`TODO` explícito. `verificacionTelefono.service.js` (que genera el
+código, lo hashea y lo guarda) llama a esta función sin saber que no hay
+envío real detrás — cuando se elija un proveedor (Twilio, Labsmobile,
+cualquiera con cobertura en Colombia y cobro por SMS enviado, no plan
+mensual fijo), reemplazar el cuerpo de esa función es el único cambio
+necesario.
+
+### Límites y expiración (valores propios, no citados de ningún documento)
+
+- `PHONE_VERIFICATION_CODE_TTL_MS`: 10 minutos (pedido explícito de
+  producto: "~10 minutos").
+- `PHONE_VERIFICATION_MAX_ATTEMPTS`: 5 intentos fallidos antes de
+  invalidar el código activo (protección de fuerza bruta contra el
+  espacio de 10⁶ combinaciones).
+- `PHONE_VERIFICATION_RATE_LIMIT_MAX`/`_WINDOW_MINUTES`: 3 reenvíos cada
+  10 minutos por negocio — mismo valor que RF-025/RF-016, aunque acá la
+  ruta siempre requiere autenticación como dueño del negocio.
+
+### Endpoints nuevos
+
+`POST /businesses/{businessId}/phone-verification` (enviar/reenviar) y
+`POST /businesses/{businessId}/phone-verification/confirm` (confirmar) —
+ambos solo para el dueño del negocio. Ambos son idempotentes hacia un
+negocio ya verificado: reenviar no genera un código nuevo, confirmar de
+nuevo devuelve 200 sin exigir un código vigente.
+
+### Frontend
+
+- El paso de datos del asistente de registro (Épica F5,
+  `details-step.tsx`) hace `contactPhone` obligatorio — BusinessInput lo
+  sigue declarando opcional en el backend (para otros llamadores, ej.
+  registro asistido), pero el asistente es hoy el único camino que tiene
+  un vendedor para registrar su propio negocio, y sin teléfono no hay
+  forma de completar la verificación ni, hoy, ninguna pantalla de
+  "editar negocio" fuera de este flujo para agregarlo después.
+- `client/src/components/business/phone-verification-panel.tsx` —
+  componente compartido entre la pantalla final del asistente
+  (`done-step.tsx`) y el perfil de negocio (`business-profile-screen.tsx`,
+  solo visible para el dueño mientras `phoneVerified` sea `false`). Sin
+  envío automático al montar (cada envío cuenta contra el límite de
+  reenvíos): el primer paso siempre es un clic explícito.
+- `business-profile-screen.tsx` decide si quien mira es el dueño
+  comparando `profile.ownerId === user?.id` **del lado del cliente**
+  (`useAuth()`, después de la hidratación) — no con un campo
+  "esPropietario" resuelto en el Server Component
+  (`app/negocios/[businessId]/page.tsx`): ese componente usa el cliente
+  HTTP compartido durante el renderizado en servidor, que nunca lleva el
+  access token (vive en una variable de módulo exclusiva del navegador,
+  ver `token-store.ts`) — un campo resuelto ahí para "el dueño" daría
+  siempre `false` para el dueño real. `ownerId` ya viajaba sin protección
+  en `Business` desde antes de esta épica, así que compararlo en el
+  cliente no expone nada nuevo. (Esta misma limitación de fondo — el
+  perfil renderizado en servidor nunca ve el token del navegador — ya
+  afectaba a `rejectionReason`, sin resolver; no se tocó acá por no ser
+  parte de esta funcionalidad.)
+
+### Gaps conocidos
+
+- `scripts/seedLoadTest.js` (y su acompañante `scripts/loadtest-nearby.js`)
+  **no se tocaron a propósito** (instrucción explícita: mantener esta
+  funcionalidad separada del script de datos de prueba) — siembran
+  negocios `activo` sin `telefono_verificado`, así que hoy quedarían
+  invisibles para `/businesses/nearby` y la prueba de carga documentada
+  en la sección 10 dejaría de medir un escenario real hasta que ese
+  script se actualice aparte (agregar `telefono_verificado = true` al
+  `INSERT` masivo, mismo ajuste que se hizo en
+  `tests/integration/nearbyIndexPlan.test.js`).
+- Sin panel de administrador que muestre el estado de verificación de
+  teléfono en la cola de aprobación (Épica 9/F9) — no se pidió para esta
+  funcionalidad; un administrador ve `phoneVerified` en la respuesta de
+  `GET /businesses/{businessId}` como cualquier otro consumidor de la
+  API, pero no hay una vista dedicada todavía.

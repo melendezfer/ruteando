@@ -62,7 +62,10 @@ async function emitirTokens(usuario) {
   return { accessToken, refreshToken, tokenType: 'Bearer', user: toApiUser(usuario) };
 }
 
-async function register({ fullName, email, password, role }) {
+// ip: respaldo interno (usuarios.ip_origen, ver
+// usuarios.repository.js#crear) — nunca influye en si el registro tiene
+// éxito ni se devuelve en la respuesta, solo se guarda.
+async function register({ fullName, email, password, role, ip }) {
   const existente = await usuariosRepo.buscarPorCorreo(email);
   if (existente) {
     throw new ConflictError('El correo ya está registrado');
@@ -74,6 +77,7 @@ async function register({ fullName, email, password, role }) {
     correo: email,
     contrasenaHash,
     rol: ROLE_API_TO_DB[role],
+    ipOrigen: ip,
   });
 
   return emitirTokens(usuario);

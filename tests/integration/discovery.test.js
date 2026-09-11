@@ -19,8 +19,16 @@ async function crearCategoria() {
   return rows[0].id;
 }
 
+// telefono_verificado = true: desde la verificación de teléfono de
+// vendedores (ver CLAUDE.md), un negocio 'activo' sin el teléfono
+// verificado tampoco aparece en /businesses ni /businesses/nearby — esta
+// suite prueba el descubrimiento, no ese flujo aparte, así que se activa
+// directo por SQL igual que el estado.
 async function activar(negocioId) {
-  await pool.query("UPDATE negocios SET estado = 'activo' WHERE id = $1", [negocioId]);
+  await pool.query(
+    "UPDATE negocios SET estado = 'activo', telefono_verificado = true WHERE id = $1",
+    [negocioId],
+  );
 }
 
 /**
@@ -321,14 +329,14 @@ describe('GET /businesses (lista con filtros, sin coordenada)', () => {
       .set('Authorization', `Bearer ${registro2.body.accessToken}`)
       .send({ name: 'Microsegundo B', categoryId });
 
-    await pool.query(`UPDATE negocios SET estado = 'activo', fecha_creacion = $2 WHERE id = $1`, [
-      negocio1.body.id,
-      '2026-01-01 00:00:00.123900+00',
-    ]);
-    await pool.query(`UPDATE negocios SET estado = 'activo', fecha_creacion = $2 WHERE id = $1`, [
-      negocio2.body.id,
-      '2026-01-01 00:00:00.123100+00',
-    ]);
+    await pool.query(
+      `UPDATE negocios SET estado = 'activo', telefono_verificado = true, fecha_creacion = $2 WHERE id = $1`,
+      [negocio1.body.id, '2026-01-01 00:00:00.123900+00'],
+    );
+    await pool.query(
+      `UPDATE negocios SET estado = 'activo', telefono_verificado = true, fecha_creacion = $2 WHERE id = $1`,
+      [negocio2.body.id, '2026-01-01 00:00:00.123100+00'],
+    );
 
     const pagina1 = await request(app).get(`/businesses?categoryId=${categoryId}&limit=1`);
     expect(pagina1.body.data).toHaveLength(1);

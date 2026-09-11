@@ -5,7 +5,7 @@ const passwordResetService = require('../services/passwordReset.service');
 // error handler central — no hace falta try/catch en cada controlador.
 
 async function register(req, res) {
-  const result = await authService.register(req.body);
+  const result = await authService.register({ ...req.body, ip: req.ip });
   res.status(201).json(result);
 }
 

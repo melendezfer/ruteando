@@ -96,3 +96,17 @@ export function getAssistedRegistrationErrorMessage(status: number | undefined):
   if (status === 422) return "Revisa los datos del formulario.";
   return GENERIC_ERROR;
 }
+
+/** POST /businesses/{businessId}/phone-verification — enviar/reenviar el código. */
+export function getSendPhoneCodeErrorMessage(status: number | undefined): string {
+  if (status === 422) return "Este negocio todavía no tiene un teléfono de contacto registrado.";
+  if (status === 429) return "Espera unos minutos antes de pedir otro código.";
+  return GENERIC_ERROR;
+}
+
+/** POST /businesses/{businessId}/phone-verification/confirm. */
+export function getConfirmPhoneCodeErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Código incorrecto o vencido — revísalo o pide uno nuevo.";
+  if (status === 429) return "Demasiados intentos fallidos — solicita un código nuevo.";
+  return GENERIC_ERROR;
+}

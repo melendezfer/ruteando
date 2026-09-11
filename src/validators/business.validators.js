@@ -72,6 +72,14 @@ const reportInputSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
+// Verificación de teléfono de vendedores (ver CLAUDE.md) — el código
+// siempre son 6 dígitos (generarCodigo() en
+// verificacionTelefono.service.js), así que cualquier otra forma es
+// rechazable antes de tocar la base de datos.
+const phoneVerificationConfirmSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'El código debe tener exactamente 6 dígitos'),
+});
+
 // Filtros combinables de RF-010/011, compartidos por GET /businesses y
 // GET /businesses/nearby (ver negocios.repository.js#agregarFiltrosComunes).
 // query params siempre llegan como string — z.coerce.boolean() NO sirve
@@ -123,6 +131,7 @@ module.exports = {
   locationInputSchema,
   scheduleInputSchema,
   reportInputSchema,
+  phoneVerificationConfirmSchema,
   businessListQuerySchema,
   businessNearbyQuerySchema,
 };

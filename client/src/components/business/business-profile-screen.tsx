@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CookingPot, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
+import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewList } from "@/components/business/review-list";
+import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -22,12 +24,30 @@ interface BusinessProfileScreenProps {
  * no duplicar la llamada que ya hizo el render de servidor.
  */
 export function BusinessProfileScreen({ profile, categoryName }: BusinessProfileScreenProps) {
+  const { user } = useAuth();
+  // Estado local aparte de `profile` (inmutable, viene del Server
+  // Component) — así, al confirmar el código, el aviso desaparece de
+  // inmediato sin depender de recargar la página o volver a pedir el
+  // perfil completo solo por este campo.
+  const [phoneVerified, setPhoneVerified] = useState(Boolean(profile.phoneVerified));
+
   useEffect(() => {
     if (profile.id) logBusinessViewEvent(profile.id);
     // Una sola vez por montaje real de esta pantalla — no por cada
     // cambio de `profile` (que ni siquiera cambia de referencia acá).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // La comparación es puramente del lado del cliente (useAuth(), después
+  // de la hidratación) a propósito: el Server Component que resuelve
+  // `profile` (src/app/negocios/[businessId]/page.tsx) usa el cliente
+  // HTTP compartido, que nunca lleva el access token en memoria durante
+  // el renderizado en servidor (token-store.ts es una variable de
+  // módulo, exclusiva del navegador) — un campo "esPropietario" resuelto
+  // ahí siempre daría false para el dueño real. `ownerId` no es un dato
+  // sensible (ya viaja siempre en Business), así que comparar acá evita
+  // depender de eso.
+  const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
   const heroPhoto = profile.photos?.find((photo) => photo.type === "business") ?? null;
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
@@ -66,6 +86,16 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
           <p className="font-sans text-body-sm text-text-muted">{profile.location.referenceAddress}</p>
         )}
       </div>
+
+      {isOwner && !phoneVerified && profile.id && (
+        <div className="px-5 pb-4">
+          <PhoneVerificationPanel
+            businessId={profile.id}
+            contactPhone={profile.contactPhone ?? null}
+            onVerified={() => setPhoneVerified(true)}
+          />
+        </div>
+      )}
 
       <section className="flex flex-col gap-3 px-5 py-4">
         <h2 className="font-heading text-title-2 font-semibold text-text">Menú</h2>

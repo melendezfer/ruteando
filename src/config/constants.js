@@ -13,6 +13,24 @@ module.exports = {
   REFRESH_TOKEN_TTL_MS: 30 * 24 * 60 * 60 * 1000,
   PASSWORD_RESET_CODE_TTL_MS: 15 * 60 * 1000,
 
+  // Verificación de teléfono de vendedores por SMS (ver CLAUDE.md) —
+  // "~10 minutos" es un requisito propio del producto, no citado de
+  // ningún documento de especificación original (esta funcionalidad es
+  // posterior a los Documentos 05-15).
+  PHONE_VERIFICATION_CODE_TTL_MS: 10 * 60 * 1000,
+  // Máximo de intentos de código incorrecto antes de invalidar el código
+  // activo y obligar a pedir uno nuevo — a diferencia de
+  // PASSWORD_RESET_CODE_TTL_MS (token opaco de 256 bits, no adivinable),
+  // un OTP de 6 dígitos (10^6 combinaciones) sí lo es por fuerza bruta
+  // sin este límite.
+  PHONE_VERIFICATION_MAX_ATTEMPTS: 5,
+  // Límite de reenvíos por negocio — mismo criterio/valor que
+  // OUTDATED_REPORT_RATE_LIMIT_MAX más abajo (acción deliberada y rara,
+  // aunque acá sí requiere autenticación como dueño del negocio, a
+  // diferencia de RF-025).
+  PHONE_VERIFICATION_RATE_LIMIT_MAX: 3,
+  PHONE_VERIFICATION_RATE_LIMIT_WINDOW_MINUTES: 10,
+
   // RF-025 es público (sin auth obligatoria) — límite de abuso por
   // negocio + origen (usuario_id si está logueado, si no ip_origen).
   // 3 en 10 minutos: deja pasar el uso legítimo (alguien nota algo raro y

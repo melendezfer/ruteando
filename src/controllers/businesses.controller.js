@@ -8,6 +8,7 @@ const perfilNegocioService = require('../services/perfilNegocio.service');
 const resenasService = require('../services/resenas.service');
 const favoritosService = require('../services/favoritos.service');
 const solicitudesDisponibilidadService = require('../services/solicitudesDisponibilidad.service');
+const verificacionTelefonoService = require('../services/verificacionTelefono.service');
 
 async function create(req, res) {
   const business = await negociosService.crear(req.user.id, req.body);
@@ -109,6 +110,20 @@ async function unmarkFavorite(req, res) {
   res.status(204).send();
 }
 
+async function sendPhoneVerification(req, res) {
+  await verificacionTelefonoService.enviarCodigo(req.user.id, req.params.businessId);
+  res.status(202).send();
+}
+
+async function confirmPhoneVerification(req, res) {
+  const business = await verificacionTelefonoService.confirmarCodigo(
+    req.user.id,
+    req.params.businessId,
+    req.body.code,
+  );
+  res.status(200).json(business);
+}
+
 async function requestAvailability(req, res) {
   const result = await solicitudesDisponibilidadService.solicitar(
     req.user.id,
@@ -136,5 +151,7 @@ module.exports = {
   listReviews,
   markFavorite,
   unmarkFavorite,
+  sendPhoneVerification,
+  confirmPhoneVerification,
   requestAvailability,
 };

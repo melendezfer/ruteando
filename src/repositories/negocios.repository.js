@@ -16,14 +16,36 @@ async function buscarPorId(id) {
   return rows[0] || null;
 }
 
+/**
+ * telefono_verificado se recalcula en la misma consulta (no en
+ * negocios.service.js aparte): solo se conserva si el negocio ya estaba
+ * verificado Y el teléfono entrante es exactamente el mismo que ya tenía
+ * — verificar el número A nunca debe dejar "verificado" un número B
+ * nuevo. IS NOT DISTINCT FROM (no `=`) para que pasar de NULL a un
+ * número real (o de un número a NULL) también cuente como "cambió", sin
+ * el caso especial que `=` tendría con NULL.
+ */
 async function actualizar(id, { categoriaId, nombre, descripcion, telefonoContacto }) {
   const { rows } = await pool.query(
     `UPDATE negocios
      SET categoria_id = $2, nombre = $3, descripcion = $4, telefono_contacto = $5,
+         telefono_verificado = (telefono_verificado AND telefono_contacto IS NOT DISTINCT FROM $5::varchar),
          fecha_actualizacion = now()
      WHERE id = $1
      RETURNING *`,
     [id, categoriaId, nombre, descripcion ?? null, telefonoContacto ?? null],
+  );
+  return rows[0];
+}
+
+/** POST /businesses/{businessId}/phone-verification/confirm, tras validar el código — ver verificacionTelefono.service.js. */
+async function marcarTelefonoVerificado(id) {
+  const { rows } = await pool.query(
+    `UPDATE negocios
+     SET telefono_verificado = true, fecha_actualizacion = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id],
   );
   return rows[0];
 }
@@ -194,7 +216,13 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
  * src/utils/cursor.js).
  */
 async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limit }) {
-  const clausulas = [`n.estado = 'activo'`];
+  // telefono_verificado = true: verificación de teléfono de vendedores
+  // (ver CLAUDE.md) — un negocio 'activo' (aprobado por un administrador)
+  // igual no aparece en búsquedas públicas hasta que su dueño verifique
+  // el teléfono de contacto por SMS. GET /businesses/{businessId} (perfil
+  // por id directo) NO tiene este filtro a propósito: ahí es donde el
+  // propio dueño ve el estado "pendiente de verificación" de su negocio.
+  const clausulas = [`n.estado = 'activo'`, `n.telefono_verificado = true`];
   const params = [];
 
   agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
@@ -257,7 +285,8 @@ function construirConsultaCercanos({
   cursor,
   limit,
 }) {
-  const clausulas = [`n.estado = 'activo'`];
+  // Ver el comentario equivalente en listar() sobre telefono_verificado.
+  const clausulas = [`n.estado = 'activo'`, `n.telefono_verificado = true`];
   const params = [lng, lat]; // $1, $2 — el punto objetivo
   params.push(radiusKm * 1000); // $3 — radio en metros
   clausulas.push(`ST_DWithin(u.punto, objetivo.punto, $3)`);
@@ -311,6 +340,7 @@ module.exports = {
   crear,
   buscarPorId,
   actualizar,
+  marcarTelefonoVerificado,
   cerrar,
   listar,
   cercanos,

@@ -211,6 +211,70 @@ describe('GET /businesses/{businessId}/reviews', () => {
   });
 });
 
+describe('GET /users/me/reviews (Épica F6)', () => {
+  it('lista las reseñas propias, con el nombre del negocio, sin importar el estado de moderación', async () => {
+    const categoryId = await crearCategoria();
+    const vendorA = await registrar('vendor');
+    const vendorB = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const negocioA = await crearNegocio(vendorA.accessToken, categoryId, { name: 'Negocio A' });
+    const negocioB = await crearNegocio(vendorB.accessToken, categoryId, { name: 'Negocio B' });
+
+    const reviewA = await request(app)
+      .post(`/businesses/${negocioA.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 4 });
+    const reviewB = await request(app)
+      .post(`/businesses/${negocioB.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 2 });
+    await aprobar(reviewA.body.id); // reviewB queda pendiente a propósito
+
+    const res = await request(app)
+      .get('/users/me/reviews')
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    const porId = Object.fromEntries(res.body.data.map((r) => [r.id, r]));
+    expect(porId[reviewA.body.id]).toMatchObject({
+      businessId: negocioA.id,
+      businessName: 'Negocio A',
+      moderationStatus: 'approved',
+    });
+    expect(porId[reviewB.body.id]).toMatchObject({
+      businessId: negocioB.id,
+      businessName: 'Negocio B',
+      moderationStatus: 'pending',
+    });
+  });
+
+  it('nunca devuelve reseñas de otro usuario', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumerA = await registrar('consumer');
+    const consumerB = await registrar('consumer');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    await request(app)
+      .post(`/businesses/${negocio.id}/reviews`)
+      .set('Authorization', `Bearer ${consumerA.accessToken}`)
+      .send({ rating: 5 });
+
+    const res = await request(app)
+      .get('/users/me/reviews')
+      .set('Authorization', `Bearer ${consumerB.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('rechaza sin token (401)', async () => {
+    const res = await request(app).get('/users/me/reviews');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('DELETE /reviews/{reviewId}', () => {
   it('permite al autor borrar su propia reseña (204)', async () => {
     const categoryId = await crearCategoria();

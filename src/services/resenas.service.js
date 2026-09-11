@@ -110,6 +110,27 @@ async function listar(negocioId, { cursor, limit }) {
   };
 }
 
+/** GET /users/me/reviews (Épica F6) — ver resenas.repository.js#listarPorUsuario. */
+async function listarPorUsuario(usuarioId, { cursor, limit }) {
+  const cursorDecodificado = decodificarCursor(cursor);
+
+  const filas = await resenasRepo.listarPorUsuario({ usuarioId, cursor: cursorDecodificado, limit });
+  const hasMore = filas.length > limit;
+  const pagina = hasMore ? filas.slice(0, limit) : filas;
+  const ultima = pagina[pagina.length - 1];
+
+  return {
+    data: pagina.map((fila) => ({ ...toApiReview(fila), businessName: fila.negocio_nombre })),
+    pagination: {
+      nextCursor:
+        hasMore && ultima
+          ? cursorUtil.codificar({ fechaCreacion: ultima.fecha_creacion_cursor, id: ultima.id })
+          : null,
+      hasMore,
+    },
+  };
+}
+
 async function eliminar(usuarioId, id) {
   const resena = await obtenerCrudoOFallar(id);
   verificarAutor(resena, usuarioId);
@@ -141,4 +162,12 @@ async function reportar(usuarioId, id) {
   await resenasRepo.marcarPendiente(id);
 }
 
-module.exports = { crear, listar, eliminar, reportar, obtenerCrudoOFallar, verificarAutor };
+module.exports = {
+  crear,
+  listar,
+  listarPorUsuario,
+  eliminar,
+  reportar,
+  obtenerCrudoOFallar,
+  verificarAutor,
+};

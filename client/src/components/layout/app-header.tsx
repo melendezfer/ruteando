@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@/components/ui/button";
 
 interface AppHeaderProps {
-  activeTab: "inicio" | "mapa";
+  activeTab: "inicio" | "mapa" | "perfil";
 }
 
 /**
@@ -57,6 +57,14 @@ export function AppHeader({ activeTab }: AppHeaderProps) {
             {user?.role === "administrator" ? "Registro asistido" : "Registrar negocio"}
           </Link>
         )}
+        <Link
+          href="/perfil"
+          className={`font-sans text-body-sm font-medium ${
+            activeTab === "perfil" ? "text-terracota" : "text-text-muted hover:text-text"
+          }`}
+        >
+          Perfil
+        </Link>
       </nav>
       <Button type="button" variant="secondary" onClick={() => logout()}>
         Cerrar sesión

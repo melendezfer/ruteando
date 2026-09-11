@@ -1107,6 +1107,20 @@ de la siguiente.
   retrofit generalizó `FloatingActionStack` de "WhatsApp/Cómo llegar"
   (hardcodeado) a dos acciones configurables — su forma final, no la
   original de F4, es la que documenta la sección 20.
+- **Hallazgo (2026-09-11, Épica F5)**: la prosa de la sección 18 describe
+  el registro asistido como "una opción del flujo", lo que sugería un
+  selector libre entre "registro propio" y "registro asistido". Leyendo
+  el backend real (`businesses.routes.js`, `auth.routes.js`) resultó que
+  no hay tal elección: `POST /businesses` exige
+  `requireRole('vendor')` y `POST /auth/assisted-registration` exige
+  `requireRole('administrator')` — son mutuamente excluyentes por rol, no
+  una preferencia del usuario. El asistente de registro
+  (`business-registration-wizard.tsx`) por eso no tiene pantalla de
+  elección: rama directo según `user.role` (vendor → asistente de 3
+  pasos; administrator → formulario de registro asistido; consumer →
+  pantalla explicando que necesita una cuenta de vendedor o que un
+  administrador lo registre por él). Verificado de punta a punta contra
+  el backend real con los tres roles.
 
 ## 20. Componente FloatingActionStack
 

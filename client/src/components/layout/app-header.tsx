@@ -17,7 +17,14 @@ interface AppHeaderProps {
  * alcanzables entre sí sin duplicar el logout en cada pantalla.
  */
 export function AppHeader({ activeTab }: AppHeaderProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Único punto de entrada al asistente de registro de negocio (Épica
+  // F5) — solo se ofrece a roles que de verdad pueden completarlo
+  // (businesses.routes.js/auth.routes.js exigen 'vendor' o
+  // 'administrator' respectivamente); un consumidor no tiene forma de
+  // usarlo todavía, así que no vale la pena mostrarle un enlace muerto.
+  const canRegisterBusiness = user?.role === "vendor" || user?.role === "administrator";
 
   return (
     <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
@@ -42,6 +49,14 @@ export function AppHeader({ activeTab }: AppHeaderProps) {
         >
           Mapa
         </Link>
+        {canRegisterBusiness && (
+          <Link
+            href="/negocios/nuevo"
+            className="font-sans text-body-sm font-medium text-text-muted hover:text-text"
+          >
+            {user?.role === "administrator" ? "Registro asistido" : "Registrar negocio"}
+          </Link>
+        )}
       </nav>
       <Button type="button" variant="secondary" onClick={() => logout()}>
         Cerrar sesión

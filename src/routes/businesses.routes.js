@@ -8,6 +8,7 @@ const { uploadSingleFoto } = require('../middlewares/upload');
 const {
   businessInputSchema,
   locationInputSchema,
+  locationVisibilityInputSchema,
   scheduleInputSchema,
   reportInputSchema,
   phoneVerificationConfirmSchema,
@@ -52,13 +53,28 @@ router.patch(
 );
 router.delete('/:businessId', validarBusinessId, authenticate, controller.remove);
 
-router.get('/:businessId/location', validarBusinessId, controller.getLocation);
+// optionalAuthenticate (no pública a secas): ubicacionService.obtenerActual
+// usa el token, si viene uno válido, para decidir si quien pregunta es
+// el dueño y por lo tanto ve la coordenada exacta sin importar
+// showExactLocation (ver CLAUDE.md) — mismo criterio que
+// GET /:businessId con rejectionReason.
+router.get('/:businessId/location', validarBusinessId, optionalAuthenticate, controller.getLocation);
 router.put(
   '/:businessId/location',
   validarBusinessId,
   authenticate,
   validateBody(locationInputSchema),
   controller.putLocation,
+);
+// "Mostrar mi dirección exacta" vs. "Mostrar solo la zona aproximada" —
+// interruptor aparte de PUT .../location a propósito: el vendedor puede
+// cambiarlo "cuando quiera" sin tener que volver a mandar type/lat/lng.
+router.patch(
+  '/:businessId/location/visibility',
+  validarBusinessId,
+  authenticate,
+  validateBody(locationVisibilityInputSchema),
+  controller.updateLocationVisibility,
 );
 
 router.get('/:businessId/schedule', validarBusinessId, controller.getSchedule);

@@ -14,6 +14,7 @@ export interface BusinessLocationValues {
   referenceAddress: string;
   latitude: string;
   longitude: string;
+  showExactLocation: boolean;
 }
 
 interface LocationStepProps {
@@ -48,6 +49,14 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
  * una expansión — se reutiliza en cambio useConsumerGeolocation (ya
  * construido en la Épica F2/F3) como atajo, con los campos numéricos
  * siempre editables a mano para corregir la posición exacta del puesto.
+ *
+ * "Mostrar dirección exacta" vs. "zona aproximada" (ver CLAUDE.md) —
+ * default `showExactLocation: false` en EMPTY_LOCATION
+ * (business-registration-wizard.tsx), pedido explícito: protege por
+ * defecto a un vendedor que opera desde su casa sin que tenga que saber
+ * que la opción existe. Se puede cambiar después, cuando quiera, desde
+ * el perfil del negocio (business-profile-screen.tsx) sin volver a
+ * pasar por este formulario completo.
  */
 export function LocationStep({ initialValues, submitting, error, fieldErrors, onSubmit, onBack }: LocationStepProps) {
   const geolocation = useConsumerGeolocation();
@@ -57,6 +66,7 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
   const [referenceAddress, setReferenceAddress] = useState(initialValues.referenceAddress);
   const [latitude, setLatitude] = useState(initialValues.latitude);
   const [longitude, setLongitude] = useState(initialValues.longitude);
+  const [showExactLocation, setShowExactLocation] = useState(initialValues.showExactLocation);
 
   useEffect(() => {
     if (hasAutoFilled.current) return;
@@ -96,7 +106,7 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit({ type, referenceAddress, latitude, longitude });
+    onSubmit({ type, referenceAddress, latitude, longitude, showExactLocation });
   }
 
   return (
@@ -120,6 +130,38 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
         </select>
       </div>
 
+      <fieldset className="flex flex-col gap-2 rounded-card border border-border px-4 py-3">
+        <legend className="px-1 font-sans text-body-sm font-medium text-text">
+          Privacidad de tu ubicación
+        </legend>
+        <label className="flex items-start gap-2 font-sans text-body text-text">
+          <input
+            type="radio"
+            name="showExactLocation"
+            checked={!showExactLocation}
+            onChange={() => setShowExactLocation(false)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium">Zona aproximada</span> (recomendado) — en el mapa se muestra tu
+            manzana o conjunto, nunca el punto exacto.
+          </span>
+        </label>
+        <label className="flex items-start gap-2 font-sans text-body text-text">
+          <input
+            type="radio"
+            name="showExactLocation"
+            checked={showExactLocation}
+            onChange={() => setShowExactLocation(true)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium">Dirección exacta</span> — útil para un puesto fijo fácil de
+            identificar en la calle.
+          </span>
+        </label>
+      </fieldset>
+
       <TextField
         label="Referencia (opcional)"
         type="text"
@@ -128,6 +170,11 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
         value={referenceAddress}
         onChange={(event) => setReferenceAddress(event.target.value)}
       />
+      {!showExactLocation && (
+        <p className="-mt-2 font-sans text-caption text-text-muted">
+          Con zona aproximada elegida, evita escribir aquí el número exacto de apartamento o casa.
+        </p>
+      )}
 
       <Button
         type="button"

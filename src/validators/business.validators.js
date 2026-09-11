@@ -22,6 +22,12 @@ const locationInputSchema = z
     referenceAddress: z.string().max(255).optional(),
     latitude: z.coerce.number().min(-90).max(90),
     longitude: z.coerce.number().min(-180).max(180),
+    // "Mostrar mi dirección exacta" vs. "Mostrar solo la zona
+    // aproximada" (petición del usuario, ver CLAUDE.md) — default false
+    // ("zona aproximada") a propósito: protege por defecto a un
+    // vendedor que opera desde su casa, sin que tenga que saber que la
+    // opción existe.
+    showExactLocation: z.boolean().default(false),
   })
   .refine(
     (data) =>
@@ -34,6 +40,14 @@ const locationInputSchema = z
       path: ['latitude'],
     },
   );
+
+// PATCH /businesses/{businessId}/location/visibility — a diferencia de
+// locationInputSchema, acá showExactLocation es obligatorio (es lo único
+// que este endpoint recibe) y sin default: pedirlo sin mandarlo sería un
+// 422, no "no cambies nada".
+const locationVisibilityInputSchema = z.object({
+  showExactLocation: z.boolean(),
+});
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -129,6 +143,7 @@ const businessNearbyQuerySchema = z
 module.exports = {
   businessInputSchema,
   locationInputSchema,
+  locationVisibilityInputSchema,
   scheduleInputSchema,
   reportInputSchema,
   phoneVerificationConfirmSchema,

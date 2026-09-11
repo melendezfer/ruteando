@@ -217,7 +217,7 @@ describe('GET/PUT /businesses/{businessId}/location', () => {
     expect(res.status).toBe(422);
   });
 
-  it('PUT válido, luego GET público lo devuelve', async () => {
+  it('PUT válido, luego GET del dueño lo devuelve exacto', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const negocio = await crearNegocio(vendor.accessToken, categoryId);
@@ -233,10 +233,54 @@ describe('GET/PUT /businesses/{businessId}/location', () => {
       });
     expect(put.status).toBe(200);
     expect(put.body.isCurrent).toBe(true);
+    // El dueño siempre ve la coordenada real, sin importar
+    // showExactLocation (default false acá, ni siquiera se mandó).
+    expect(put.body).toMatchObject({ type: 'stall', latitude: 4.5789, longitude: -74.217 });
 
-    const get = await request(app).get(`/businesses/${negocio.id}/location`);
+    const get = await request(app)
+      .get(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
     expect(get.status).toBe(200);
     expect(get.body).toMatchObject({ type: 'stall', latitude: 4.5789, longitude: -74.217 });
+  });
+
+  it('"zona aproximada" (default): GET anónimo redondea la coordenada, PUT/GET del dueño la devuelven exacta', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'home', latitude: 4.578912, longitude: -74.216543 });
+
+    const anonimo = await request(app).get(`/businesses/${negocio.id}/location`);
+    expect(anonimo.status).toBe(200);
+    expect(anonimo.body.showExactLocation).toBe(false);
+    expect(anonimo.body.latitude).toBeCloseTo(4.579, 5);
+    expect(anonimo.body.longitude).toBeCloseTo(-74.217, 5);
+
+    const dueño = await request(app)
+      .get(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(dueño.body.latitude).toBe(4.578912);
+    expect(dueño.body.longitude).toBe(-74.216543);
+  });
+
+  it('showExactLocation: true en el PUT hace que el GET anónimo también vea la coordenada real', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'storefront', latitude: 4.578912, longitude: -74.216543, showExactLocation: true });
+
+    const anonimo = await request(app).get(`/businesses/${negocio.id}/location`);
+    expect(anonimo.body.showExactLocation).toBe(true);
+    expect(anonimo.body.latitude).toBe(4.578912);
+    expect(anonimo.body.longitude).toBe(-74.216543);
   });
 
   it('rotar la ubicación conserva historial pero solo una fila queda es_actual (isCurrent)', async () => {
@@ -275,6 +319,96 @@ describe('GET/PUT /businesses/{businessId}/location', () => {
       .send({ type: 'fixed', latitude: 4.6, longitude: -74.2 });
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('PATCH /businesses/{businessId}/location/visibility', () => {
+  it('cambia showExactLocation sin tocar type/lat/lng', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'home', latitude: 4.578912, longitude: -74.216543 });
+
+    const patch = await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ showExactLocation: true });
+
+    expect(patch.status).toBe(200);
+    expect(patch.body).toMatchObject({
+      type: 'home',
+      showExactLocation: true,
+      latitude: 4.578912,
+      longitude: -74.216543,
+    });
+
+    const anonimo = await request(app).get(`/businesses/${negocio.id}/location`);
+    expect(anonimo.body.latitude).toBe(4.578912);
+
+    // Y se puede volver a "zona aproximada" cuando quiera.
+    await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ showExactLocation: false });
+
+    const anonimoDespues = await request(app).get(`/businesses/${negocio.id}/location`);
+    expect(anonimoDespues.body.showExactLocation).toBe(false);
+    expect(anonimoDespues.body.latitude).toBeCloseTo(4.579, 5);
+  });
+
+  it('rechaza con 403 a quien no es el dueño', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const otro = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'home', latitude: 4.6, longitude: -74.2 });
+
+    const res = await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .set('Authorization', `Bearer ${otro.accessToken}`)
+      .send({ showExactLocation: true });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('responde 404 si el negocio todavía no tiene ninguna ubicación registrada', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    const res = await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ showExactLocation: true });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('rechaza sin token (401) y con un body inválido (422)', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'home', latitude: 4.6, longitude: -74.2 });
+
+    const sinToken = await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .send({ showExactLocation: true });
+    expect(sinToken.status).toBe(401);
+
+    const bodyInvalido = await request(app)
+      .patch(`/businesses/${negocio.id}/location/visibility`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ showExactLocation: 'si' });
+    expect(bodyInvalido.status).toBe(422);
   });
 });
 

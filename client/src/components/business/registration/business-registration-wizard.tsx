@@ -42,6 +42,9 @@ const EMPTY_LOCATION: BusinessLocationValues = {
   referenceAddress: "",
   latitude: "",
   longitude: "",
+  // "Zona aproximada" por defecto — pedido explícito del usuario, ver
+  // CLAUDE.md: protege por defecto a un vendedor que opera desde su casa.
+  showExactLocation: false,
 };
 
 /**
@@ -180,6 +183,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
         referenceAddress: values.referenceAddress.trim() ? values.referenceAddress.trim() : undefined,
         latitude,
         longitude,
+        showExactLocation: values.showExactLocation,
       },
     });
 

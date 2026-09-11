@@ -41,12 +41,21 @@ async function remove(req, res) {
 }
 
 async function getLocation(req, res) {
-  const location = await ubicacionService.obtenerActual(req.params.businessId);
+  const location = await ubicacionService.obtenerActual(req.params.businessId, req.user?.id ?? null);
   res.status(200).json(location);
 }
 
 async function putLocation(req, res) {
   const location = await ubicacionService.actualizar(req.user.id, req.params.businessId, req.body);
+  res.status(200).json(location);
+}
+
+async function updateLocationVisibility(req, res) {
+  const location = await ubicacionService.actualizarVisibilidad(
+    req.user.id,
+    req.params.businessId,
+    req.body.showExactLocation,
+  );
   res.status(200).json(location);
 }
 
@@ -140,6 +149,7 @@ module.exports = {
   update,
   remove,
   getLocation,
+  updateLocationVisibility,
   putLocation,
   getSchedule,
   putSchedule,

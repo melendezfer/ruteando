@@ -52,10 +52,15 @@ async function crearNegocioActivo({ categoryId, lat, lng, name = 'Negocio de Pru
     .send({ name, categoryId: catId });
 
   if (lat != null && lng != null) {
+    // showExactLocation: true — esta suite prueba búsqueda/distancia, no
+    // la aproximación de "zona aproximada" (eso vive en
+    // businesses.test.js); sin esto, el default (false) redondearía las
+    // coordenadas devueltas y podría desalinear aserciones de distancia
+    // exacta en pruebas que no tienen nada que ver con esa funcionalidad.
     await request(app)
       .put(`/businesses/${negocio.body.id}/location`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ type: 'stall', latitude: lat, longitude: lng });
+      .send({ type: 'stall', latitude: lat, longitude: lng, showExactLocation: true });
   }
 
   await activar(negocio.body.id);

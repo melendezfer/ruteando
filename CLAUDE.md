@@ -1338,3 +1338,88 @@ nuevo devuelve 200 sin exigir un código vigente.
   funcionalidad; un administrador ve `phoneVerified` en la respuesta de
   `GET /businesses/{businessId}` como cualquier otro consumidor de la
   API, pero no hay una vista dedicada todavía.
+
+## 22. Ubicación aproximada vs. dirección exacta
+
+Fuera del alcance original de los Documentos 05-15 (sin RF asociado) —
+petición directa del usuario, propia rama
+(`feature/ubicacion-aproximada-negocio`).
+
+**Qué hace**: cada ubicación de negocio (`ubicaciones`) tiene un
+interruptor — "Mostrar mi dirección exacta" vs. "Mostrar solo la zona
+aproximada" — que decide qué coordenada expone el mapa/búsqueda
+**pública**. La coordenada real (`ubicaciones.punto`) se guarda siempre
+tal cual, sin importar el interruptor — es solo una cuestión de qué se
+**muestra**, nunca de qué se **guarda** ("logística interna" sigue
+teniendo el dato completo). Default `false` ("zona aproximada") a
+propósito, pedido explícito del usuario: protege por defecto a un
+vendedor que opera desde su casa (ej. desayunos sorpresa a domicilio,
+`tipo_ubicacion = 'desde_casa'`) sin que tenga que saber que la opción
+existe. El vendedor lo cambia cuando quiera desde el perfil de su
+negocio (`business-profile-screen.tsx`, solo visible para el dueño), sin
+tener que volver a mandar type/latitude/longitude.
+
+### Cómo se aproxima
+
+`business.mapper.js#aproximarCoordenada` — redondeo determinístico a 3
+decimales (~111m en el ecuador, del orden de una manzana/conjunto): el
+mismo negocio siempre aproxima al mismo punto (el pin no "salta" entre
+pedidos), sin necesidad de guardar un punto aproximado aparte. Aplica a
+`latitude`/`longitude` en tres lugares:
+- `GET /businesses` y `GET /businesses/nearby` (`negocios.repository.js#listar/cercanos`,
+  que ahora también seleccionan `mostrar_ubicacion_exacta` en el join con
+  `ubicaciones`) — públicos, sin ningún concepto de "quien pregunta": la
+  columna es la única señal.
+- `GET /businesses/{businessId}` (`BusinessProfile.location`) y
+  `GET /businesses/{businessId}/location` — ambos exponen la coordenada
+  real cuando quien pregunta está autenticado **y** es el dueño
+  (`toApiLocation({ requesterIsOwner })`), sin importar el interruptor;
+  para cualquier otro caso, el interruptor decide. `GET .../location` no
+  tenía ningún concepto de "dueño" antes de esta funcionalidad (era
+  100% pública, sin `optionalAuthenticate`) — se agregó exactamente el
+  mismo patrón que ya usa `GET /businesses/{businessId}` con
+  `rejectionReason`.
+
+**Importante**: `distanceMeters` (en `/businesses/nearby`) **nunca** se
+aproxima — sigue siendo la distancia real, calculada contra el punto
+exacto; solo se aproxima la coordenada que se muestra en el mapa. Es la
+misma decisión de producto que toman apps de reparto que aproximan el
+pin pero no la distancia/ETA — sin esa exactitud, la búsqueda por
+cercanía pierde su utilidad real.
+
+### Límites reconocidos, no ocultos
+
+- El redondeo de coordenada no protege `referenceAddress` (texto libre):
+  si el vendedor escribe "Torre 5, Apto 301" ahí, ese texto se muestra
+  tal cual sin importar el interruptor — el backend no puede detectar ni
+  redactar de forma confiable una dirección exacta dentro de texto
+  libre arbitrario. Mitigado solo con una advertencia en el formulario
+  del cliente (`location-step.tsx`), no con lógica de servidor.
+- Alguien que consulte `distanceMeters` desde varios puntos de
+  referencia distintos podría, en teoría, triangular una posición más
+  precisa que la coordenada aproximada que se muestra — no se intenta
+  resolver ese caso acá (aproximar también la distancia rompería la
+  utilidad real de la búsqueda por cercanía, ver arriba). Mismo
+  trade-off que cualquier app que aproxima un pin pero no la
+  distancia/ETA.
+
+### Modelo de datos
+
+`ubicaciones.mostrar_ubicacion_exacta` (`BOOLEAN NOT NULL DEFAULT false`,
+migración `ubicacion-aproximada`) — vive en `ubicaciones`, no en
+`negocios`: es una propiedad de "cómo se expone este punto geográfico",
+el mismo dominio que `tipo`/`direccion_referencia` en esa misma tabla.
+
+### Endpoints
+
+- `LocationInput` (`PUT /businesses/{businessId}/location`) suma
+  `showExactLocation` (opcional, default `false`) — se puede elegir
+  desde el primer registro (Épica F5, `location-step.tsx`).
+- `PATCH /businesses/{businessId}/location/visibility` (nuevo) — solo
+  el dueño, body `{ showExactLocation: boolean }`. Aparte de PUT
+  .../location a propósito: cambiar esta preferencia "cuando quiera" no
+  debería exigir volver a mandar type/latitude/longitude.
+  `ubicaciones.repository.js#actualizarVisibilidad` actualiza solo esa
+  columna de la fila `es_actual`, sin pasar por
+  `reemplazarActual()` (que inserta una fila nueva — no es un
+  reemplazo de ubicación, es una preferencia).

@@ -267,19 +267,46 @@ components:
         businessId: { type: string, format: uuid }
         type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
         referenceAddress: { type: string, nullable: true }
-        latitude: { type: number, format: double }
-        longitude: { type: number, format: double }
+        latitude:
+          type: number
+          format: double
+          description: >-
+            Aproximada (redondeada a ~111m, "la manzana o el conjunto")
+            cuando showExactLocation es false y quien pregunta no es el
+            dueño del negocio — la coordenada exacta se sigue guardando
+            siempre para logística interna, esto solo afecta lo que se
+            expone. El dueño (autenticado) siempre ve la coordenada real.
+        longitude: { type: number, format: double, description: Mismo criterio que latitude. }
         isCurrent: { type: boolean }
         createdAt: { type: string, format: date-time }
+        showExactLocation:
+          type: boolean
+          description: >-
+            "Mostrar mi dirección exacta" (true) vs. "Mostrar solo la
+            zona aproximada" (false, default) — el propio interruptor,
+            no un dato sensible en sí mismo, visible para cualquiera.
+            Cambiarlo: PATCH /businesses/{businessId}/location/visibility.
 
     LocationInput:
       type: object
       required: [type, latitude, longitude]
       properties:
         type: { type: string, enum: [fixed, mobile, stall, storefront, home, temporary] }
-        referenceAddress: { type: string }
+        referenceAddress:
+          type: string
+          description: >-
+            Si showExactLocation es false, evitar escribir acá el número
+            exacto de apartamento/casa — el backend no puede detectar ni
+            redactar eso de un texto libre, solo aproxima
+            latitude/longitude.
         latitude: { type: number, format: double }
         longitude: { type: number, format: double }
+        showExactLocation:
+          type: boolean
+          default: false
+          description: >-
+            Default false ("zona aproximada") a propósito — protege por
+            defecto a un vendedor que opera desde su casa.
 
     ScheduleDay:
       type: object
@@ -1009,6 +1036,13 @@ paths:
     get:
       tags: [Negocios]
       summary: Obtener la ubicación vigente
+      description: >-
+        Pública — pero si el cliente manda un Bearer token válido y ese
+        usuario es el dueño del negocio, latitude/longitude viajan
+        exactas sin importar showExactLocation (ver CLAUDE.md, "Mostrar
+        dirección exacta / zona aproximada"). Mismo criterio que
+        GET /businesses/{businessId} con rejectionReason — un token
+        presente pero inválido/expirado se rechaza con 401.
       security: []
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
@@ -1017,6 +1051,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Location' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     put:
       tags: [Negocios]
       summary: Actualizar la ubicación vigente
@@ -1032,6 +1067,37 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Location' }
+
+  /businesses/{businessId}/location/visibility:
+    patch:
+      tags: [Negocios]
+      summary: Cambiar "mostrar dirección exacta" vs. "zona aproximada"
+      description: >-
+        Solo el dueño del negocio. Aparte de PUT .../location a
+        propósito — cambiar esta preferencia "cuando quiera" no debería
+        exigir volver a mandar type/latitude/longitude.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [showExactLocation]
+              properties:
+                showExactLocation: { type: boolean }
+      responses:
+        '200':
+          description: Ubicación actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: El negocio no existe, o todavía no tiene ninguna ubicación registrada
+          $ref: '#/components/responses/NotFound'
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/{businessId}/schedule:
     get:

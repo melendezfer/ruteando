@@ -392,6 +392,18 @@ components:
         moderationStatus: { type: string, enum: [pending, approved, rejected] }
         createdAt: { type: string, format: date-time }
 
+    UserReview:
+      description: >-
+        Solo GET /users/me/reviews (Épica F6) — a diferencia de Review
+        (usado en POST/GET por negocio), incluye businessName para que el
+        frontend no tenga que resolverlo con una llamada aparte por cada
+        fila de "mis reseñas".
+      allOf:
+        - { $ref: '#/components/schemas/Review' }
+        - type: object
+          properties:
+            businessName: { type: string }
+
     ReviewInput:
       type: object
       required: [rating]
@@ -800,6 +812,38 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # Épica F6 (frontend): "mis reseñas" no tenía ninguna ruta — solo
+  # existía GET /businesses/{businessId}/reviews (por negocio, solo
+  # aprobadas) y POST/DELETE de una reseña puntual. Se agrega acá junto
+  # con su definición OpenAPI, mismo criterio que RF-025 en la Épica 2.
+  /users/me/reviews:
+    get:
+      tags: [Usuarios]
+      summary: Listar las reseñas propias (Épica F6)
+      description: >-
+        A diferencia de GET /businesses/{businessId}/reviews, no filtra
+        por moderationStatus — el autor ve sus propias reseñas sin
+        importar si están pending/approved/rejected, igual que ya puede
+        borrar cualquiera de ellas (DELETE /reviews/{reviewId}) sin ese
+        filtro.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista de reseñas propias
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UserReview' }
                   pagination: { $ref: '#/components/schemas/Pagination' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }

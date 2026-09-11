@@ -1121,6 +1121,27 @@ de la siguiente.
   pantalla explicando que necesita una cuenta de vendedor o que un
   administrador lo registre por él). Verificado de punta a punta contra
   el backend real con los tres roles.
+- **Hallazgo (2026-09-11, Épica F6)**: no existía ninguna ruta para
+  "mis reseñas" — solo `GET /businesses/{businessId}/reviews` (por
+  negocio, público, solo `approved`) y `POST`/`DELETE` de una reseña
+  puntual. Se agregó `GET /users/me/reviews` (junto con su definición
+  OpenAPI y el schema `UserReview`, que suma `businessName` a `Review`
+  para no obligar al cliente a resolverlo aparte por cada fila), mismo
+  criterio que RF-025 en la Épica 2: a diferencia de la lista pública,
+  no filtra por `moderationStatus` — el autor ve sus propias reseñas
+  pendientes o rechazadas también, igual que ya puede borrar cualquiera
+  de ellas sin ese filtro (`DELETE /reviews/{reviewId}`).
+- Épica F6: verificado que `POST /auth/webauthn/register` y
+  `POST /auth/webauthn/login` (sección 14) siguen sin existir en
+  `openapi.yaml` — la sección de passkeys en Configuración se omitió
+  por completo, tal como pide la sección 19 más abajo, en vez de
+  simularla o dejarla a medias.
+- Épica F6: sin edición de perfil (`PATCH`/`DELETE /users/me` ya
+  existen en `openapi.yaml` pero no se usan) ni botón de revocar
+  consentimientos (no hay endpoint para eso — `consentimientos` es
+  append-only por diseño, CLAUDE.md sección 6 Épica 6/8) — ninguna de
+  las dos se pidió para esta épica, agregarlas habría sido
+  sobre-construir la pantalla.
 
 ## 20. Componente FloatingActionStack
 

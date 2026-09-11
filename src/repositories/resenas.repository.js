@@ -46,6 +46,42 @@ async function listarAprobadas({ negocioId, cursor, limit }) {
   return rows;
 }
 
+/**
+ * GET /users/me/reviews (Épica F6, agregado junto con su definición
+ * OpenAPI — no existía ninguna ruta para "mis reseñas" hasta esta
+ * épica, mismo criterio que RF-025 en la Épica 2). A diferencia de
+ * listarAprobadas(), sin filtro de estado_moderacion: son las propias
+ * reseñas del usuario, tiene sentido que vea también las que están
+ * pendientes o fueron rechazadas, igual que ya puede borrar cualquiera
+ * de ellas sin importar su estado (resenas.service.js#eliminar). Se
+ * incluye el nombre del negocio vía JOIN para que el frontend no tenga
+ * que resolverlo con una llamada aparte por cada reseña (mismo criterio
+ * que perfilNegocio.service.js evitando N+1).
+ */
+async function listarPorUsuario({ usuarioId, cursor, limit }) {
+  const clausulas = [`r.usuario_id = $1`];
+  const params = [usuarioId];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(r.fecha_creacion, r.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT r.*, r.fecha_creacion::text AS fecha_creacion_cursor, n.nombre AS negocio_nombre
+     FROM resenas r
+     JOIN negocios n ON n.id = r.negocio_id
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY r.fecha_creacion DESC, r.id DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
 async function eliminar(id) {
   await pool.query('DELETE FROM resenas WHERE id = $1', [id]);
 }
@@ -127,6 +163,7 @@ module.exports = {
   crear,
   buscarPorId,
   listarAprobadas,
+  listarPorUsuario,
   eliminar,
   marcarPendiente,
   obtenerAgregado,

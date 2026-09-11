@@ -18,6 +18,7 @@ describe('toApiBusiness', () => {
       descripcion: 'Las mejores del barrio',
       estado: 'pendiente',
       telefono_contacto: '3001112233',
+      telefono_verificado: true,
       fecha_creacion: '2026-01-01T00:00:00.000Z',
       fecha_actualizacion: '2026-01-02T00:00:00.000Z',
     };
@@ -30,6 +31,7 @@ describe('toApiBusiness', () => {
       description: 'Las mejores del barrio',
       status: 'pending',
       contactPhone: '3001112233',
+      phoneVerified: true,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
       latitude: null,

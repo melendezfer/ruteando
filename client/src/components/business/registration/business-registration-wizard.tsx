@@ -244,7 +244,13 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
   }
 
   if (step === "done" && businessId) {
-    return <DoneStep businessName={businessName} businessId={businessId} />;
+    return (
+      <DoneStep
+        businessName={businessName}
+        businessId={businessId}
+        contactPhone={detailsValues.contactPhone.trim() || null}
+      />
+    );
   }
 
   if (step === "location") {

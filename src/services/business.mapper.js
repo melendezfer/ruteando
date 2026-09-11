@@ -53,6 +53,11 @@ function toApiBusiness(row) {
     description: row.descripcion,
     status: STATUS_DB_TO_API[row.estado],
     contactPhone: row.telefono_contacto,
+    // Verificación de teléfono de vendedores (ver CLAUDE.md) — no es un
+    // dato sensible que haya que ocultar del dueño (a diferencia de
+    // rejectionReason): cualquiera puede ver si un negocio ya verificó
+    // su teléfono o no.
+    phoneVerified: Boolean(row.telefono_verificado),
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
     // Presentes solo cuando la consulta que produjo esta fila hizo el

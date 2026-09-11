@@ -41,9 +41,13 @@ beforeAll(async () => {
   ]);
   categoriaId = categoria.rows[0].id;
 
+  // telefono_verificado = true: sin esto, el filtro nuevo de
+  // negocios.repository.js (verificación de teléfono de vendedores, ver
+  // CLAUDE.md) dejaría fuera las 4000 filas sembradas y esta prueba
+  // dejaría de medir un plan representativo.
   await pool.query(
-    `INSERT INTO negocios (usuario_id, categoria_id, nombre, estado)
-     SELECT $1, $2, 'Negocio Seed ' || g, 'activo'
+    `INSERT INTO negocios (usuario_id, categoria_id, nombre, estado, telefono_verificado)
+     SELECT $1, $2, 'Negocio Seed ' || g, 'activo', true
      FROM generate_series(1, $3) g`,
     [usuarioId, categoriaId, VOLUMEN_SEED],
   );

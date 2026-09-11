@@ -6,12 +6,21 @@ const pool = require('../config/db');
 // columna en NULL a propósito, para que reemitirTokenReclamo() pueda
 // distinguir "todavía no reclamó su cuenta" de "ya tiene su propia
 // contraseña" (ver migración usuarios-registro-asistido).
-async function crear({ nombreCompleto, correo, contrasenaHash, rol }) {
+//
+// ipOrigen: respaldo interno, nunca expuesto en la API (ver
+// user.mapper.js, que no lo mapea) ni visible para el propio usuario —
+// por si alguna vez hace falta colaborar con una autoridad ante un
+// reporte de actividad ilegal (ver CLAUDE.md). Solo se registra acá, en
+// register() — el registro asistido (registroAsistido.repository.js) no
+// pasa por esta función: la IP de quien hace esa petición es la del
+// administrador, no la del vendedor, así que no tendría sentido
+// guardarla como "origen" de esa cuenta.
+async function crear({ nombreCompleto, correo, contrasenaHash, rol, ipOrigen }) {
   const { rows } = await pool.query(
-    `INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, rol, contrasena_establecida_en)
-     VALUES ($1, $2, $3, $4, now())
+    `INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, rol, contrasena_establecida_en, ip_origen)
+     VALUES ($1, $2, $3, $4, now(), $5)
      RETURNING *`,
-    [nombreCompleto, correo, contrasenaHash, rol],
+    [nombreCompleto, correo, contrasenaHash, rol, ipOrigen ?? null],
   );
   return rows[0];
 }

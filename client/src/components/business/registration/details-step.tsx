@@ -29,6 +29,14 @@ interface DetailsStepProps {
  * descripción y teléfono de contacto — los campos exactos de
  * BusinessInput, sin agregar ninguno que el contrato no pida (RNF-013,
  * flujo corto).
+ *
+ * contactPhone es `required` acá aunque BusinessInput lo declara
+ * opcional en el backend (y sigue siéndolo para otros llamadores, ej.
+ * registro asistido) — sin él no hay forma de completar la verificación
+ * de teléfono (ver CLAUDE.md), y este asistente es hoy el único camino
+ * que tiene un vendedor para registrar su propio negocio, así que
+ * exigirlo acá evita dejarlo sin ninguna forma de agregarlo después (no
+ * existe todavía una pantalla de "editar negocio" fuera de este flujo).
  */
 export function DetailsStep({
   categories,
@@ -102,14 +110,19 @@ export function DetailsStep({
       </div>
 
       <TextField
-        label="Teléfono de contacto (WhatsApp, opcional)"
+        label="Teléfono de contacto (WhatsApp)"
         type="tel"
         placeholder="Ej: 3001234567"
         maxLength={20}
+        required
         value={contactPhone}
         onChange={(event) => setContactPhone(event.target.value)}
         error={fieldErrors.contactPhone}
       />
+      <p className="-mt-2 font-sans text-caption text-text-muted">
+        Es el mismo número que verán tus clientes en WhatsApp — también lo vamos a verificar por SMS
+        antes de que tu negocio aparezca en el mapa.
+      </p>
 
       {error && <p className="font-sans text-body-sm text-rojo">{error}</p>}
 

@@ -166,6 +166,14 @@ components:
         description: { type: string, nullable: true }
         status: { type: string, enum: [pending, active, suspended, closed, rejected] }
         contactPhone: { type: string, nullable: true }
+        phoneVerified:
+          type: boolean
+          description: >-
+            Verificación de teléfono de vendedores por SMS (ver
+            CLAUDE.md) — mientras sea false, el negocio no aparece en
+            GET /businesses ni GET /businesses/nearby, sin importar su
+            `status`. No es un dato sensible: visible para cualquiera,
+            igual que `status`.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         latitude:
@@ -1355,6 +1363,67 @@ paths:
         '204': { description: Favorito eliminado }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # Verificación de teléfono de vendedores (ver CLAUDE.md, sección
+  # "Verificación de teléfono de vendedores por SMS"): un negocio no
+  # aparece en GET /businesses ni GET /businesses/nearby hasta que su
+  # dueño confirme, por SMS, el mismo número que ya publica como contacto
+  # de WhatsApp. Piloto sin proveedor de SMS pagado todavía — el código
+  # se registra en el log del backend (src/services/smsSender.service.js).
+  /businesses/{businessId}/phone-verification:
+    post:
+      tags: [Negocios]
+      summary: Enviar (o reenviar) el código de verificación de teléfono
+      description: >-
+        Solo el dueño del negocio. Genera un código de 6 dígitos con
+        expiración de ~10 minutos e invalida cualquier código anterior
+        todavía activo. Si el negocio ya tiene el teléfono verificado, es
+        un no-op idempotente (204/202 igual, sin volver a enviar nada).
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '202': { description: Código generado y enviado (o no-op si ya estaba verificado) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: El negocio todavía no tiene un teléfono de contacto registrado
+          $ref: '#/components/responses/ValidationError'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /businesses/{businessId}/phone-verification/confirm:
+    post:
+      tags: [Negocios]
+      summary: Confirmar el código de verificación de teléfono
+      description: >-
+        Solo el dueño del negocio. Un código incorrecto cuenta como
+        intento fallido (máximo 5 antes de invalidar el código activo);
+        un código vencido o ya usado también se rechaza con 401 — en
+        ambos casos, solicitar uno nuevo con
+        POST /businesses/{businessId}/phone-verification.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^\d{6}$' }
+      responses:
+        '200':
+          description: Teléfono verificado — negocio actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Business' }
+        '401':
+          description: Código incorrecto, vencido, ya usado, o sin ningún código vigente
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429':
+          description: Demasiados intentos fallidos con el código activo
+          $ref: '#/components/responses/TooManyRequests'
 
   # Confirmación de disponibilidad en tiempo real (CLAUDE.md, sección 11
   # — mejora futura, ahora asignada). Sin exclusividad a propósito: un

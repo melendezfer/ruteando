@@ -97,6 +97,20 @@ describe('POST /auth/register', () => {
     expect(rows[0].contrasena_hash).not.toBe('password123');
     expect(rows[0].contrasena_hash).toMatch(/^\$argon2id\$/);
   });
+
+  // Respaldo interno (ver CLAUDE.md) — nunca visible para el usuario ni
+  // en la API pública, solo un registro por si alguna vez hace falta
+  // colaborar con una autoridad ante un reporte de actividad ilegal.
+  it('registra la IP de origen en la base de datos, pero nunca en la respuesta de la API', async () => {
+    const email = correoDePrueba();
+    const res = await registrar({ email });
+
+    expect(JSON.stringify(res.body)).not.toContain('ip_origen');
+    expect(JSON.stringify(res.body).toLowerCase()).not.toContain('ipOrigen'.toLowerCase());
+
+    const { rows } = await pool.query('SELECT ip_origen FROM usuarios WHERE correo = $1', [email]);
+    expect(rows[0].ip_origen).not.toBeNull();
+  });
 });
 
 describe('POST /auth/login', () => {

@@ -8,6 +8,7 @@ import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewList } from "@/components/business/review-list";
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
+import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -93,6 +94,15 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
             businessId={profile.id}
             contactPhone={profile.contactPhone ?? null}
             onVerified={() => setPhoneVerified(true)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && profile.location && (
+        <div className="px-5 pb-4">
+          <LocationVisibilityToggle
+            businessId={profile.id}
+            initialShowExactLocation={Boolean(profile.location.showExactLocation)}
           />
         </div>
       )}

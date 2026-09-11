@@ -243,10 +243,10 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
     // en el mismo milisegundo (carga masiva, sembrado, ráfaga de
     // registros concurrentes) podían quedar fuera de cualquier página al
     // paginar, porque el cursor comparaba contra un valor ya truncado.
-    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud
+    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta
      FROM negocios n
      LEFT JOIN LATERAL (
-       SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud
+       SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud, u.mostrar_ubicacion_exacta
        FROM ubicaciones u WHERE u.negocio_id = n.id AND u.es_actual = true
        LIMIT 1
      ) ub ON true
@@ -307,6 +307,7 @@ function construirConsultaCercanos({
      SELECT n.*,
             ST_Y(u.punto::geometry) AS latitud,
             ST_X(u.punto::geometry) AS longitud,
+            u.mostrar_ubicacion_exacta,
             ST_Distance(u.punto, objetivo.punto) AS distancia_m
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true

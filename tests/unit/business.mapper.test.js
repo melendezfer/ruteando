@@ -4,6 +4,7 @@ const {
   toApiScheduleDay,
   toApiBusinessProfile,
   toApiReview,
+  aproximarCoordenada,
   LOCATION_TYPE_API_TO_DB,
   DAY_API_TO_DB,
 } = require('../../src/services/business.mapper');
@@ -41,7 +42,7 @@ describe('toApiBusiness', () => {
     });
   });
 
-  it('embebe latitude/longitude/distanceMeters cuando la fila viene de una consulta con join de ubicación (listar/cercanos)', () => {
+  it('embebe latitude/longitude/distanceMeters exactos cuando la fila viene de un join con mostrar_ubicacion_exacta=true (listar/cercanos)', () => {
     const row = {
       id: 'b-1',
       usuario_id: 'u-1',
@@ -55,6 +56,7 @@ describe('toApiBusiness', () => {
       latitud: '4.5789',
       longitud: '-74.217',
       distancia_m: '532.108',
+      mostrar_ubicacion_exacta: true,
     };
 
     const resultado = toApiBusiness(row);
@@ -63,31 +65,92 @@ describe('toApiBusiness', () => {
     expect(resultado.longitude).toBe(-74.217);
     expect(resultado.distanceMeters).toBe(532.108);
   });
+
+  it('"zona aproximada" (default, mostrar_ubicacion_exacta false/ausente): redondea latitude/longitude, nunca distanceMeters', () => {
+    const row = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Salchipapas Doña Ana',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+      latitud: '4.578912',
+      longitud: '-74.216543',
+      distancia_m: '532.108',
+      // mostrar_ubicacion_exacta ausente a propósito — así queda
+      // undefined, igual que una fila que nunca hizo join con
+      // ubicaciones (crear/obtener/actualizar/cerrar).
+    };
+
+    const resultado = toApiBusiness(row);
+
+    expect(resultado.latitude).toBe(4.579);
+    expect(resultado.longitude).toBe(-74.217);
+    // La distancia real de la búsqueda nunca se aproxima — solo el pin.
+    expect(resultado.distanceMeters).toBe(532.108);
+  });
 });
 
 describe('toApiLocation', () => {
-  it('mapea tipo, coordenadas y es_actual -> isCurrent', () => {
-    const row = {
-      id: 'l-1',
-      negocio_id: 'b-1',
-      tipo: 'puesto',
-      direccion_referencia: 'Frente al parque',
-      latitud: 4.5789,
-      longitud: -74.217,
-      es_actual: true,
-      fecha_creacion: '2026-01-01T00:00:00.000Z',
-    };
+  const row = {
+    id: 'l-1',
+    negocio_id: 'b-1',
+    tipo: 'puesto',
+    direccion_referencia: 'Frente al parque',
+    latitud: 4.578912,
+    longitud: -74.216543,
+    es_actual: true,
+    fecha_creacion: '2026-01-01T00:00:00.000Z',
+    mostrar_ubicacion_exacta: false,
+  };
 
+  it('"zona aproximada" (mostrar_ubicacion_exacta=false) redondea la coordenada para un pedido sin dueño', () => {
     expect(toApiLocation(row)).toEqual({
       id: 'l-1',
       businessId: 'b-1',
       type: 'stall',
       referenceAddress: 'Frente al parque',
-      latitude: 4.5789,
+      latitude: 4.579,
       longitude: -74.217,
       isCurrent: true,
       createdAt: '2026-01-01T00:00:00.000Z',
+      showExactLocation: false,
     });
+  });
+
+  it('requesterIsOwner: true muestra la coordenada real sin importar mostrar_ubicacion_exacta', () => {
+    const resultado = toApiLocation(row, { requesterIsOwner: true });
+    expect(resultado.latitude).toBe(4.578912);
+    expect(resultado.longitude).toBe(-74.216543);
+    // El interruptor en sí se sigue informando tal cual está guardado —
+    // "el dueño ve exacto" no es lo mismo que "el negocio eligió exacto".
+    expect(resultado.showExactLocation).toBe(false);
+  });
+
+  it('mostrar_ubicacion_exacta=true expone la coordenada real incluso sin dueño', () => {
+    const filaExacta = { ...row, mostrar_ubicacion_exacta: true };
+    const resultado = toApiLocation(filaExacta);
+    expect(resultado.latitude).toBe(4.578912);
+    expect(resultado.longitude).toBe(-74.216543);
+    expect(resultado.showExactLocation).toBe(true);
+  });
+});
+
+describe('aproximarCoordenada', () => {
+  it('redondea a 3 decimales (~111m)', () => {
+    expect(aproximarCoordenada(4.578912)).toBe(4.579);
+    expect(aproximarCoordenada(-74.216543)).toBe(-74.217);
+  });
+
+  it('es estable (idempotente) y no cambia un valor ya redondeado', () => {
+    expect(aproximarCoordenada(4.579)).toBe(4.579);
+  });
+
+  it('deja pasar null tal cual (sin ubicación registrada)', () => {
+    expect(aproximarCoordenada(null)).toBeNull();
   });
 });
 

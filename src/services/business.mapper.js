@@ -44,6 +44,33 @@ const DAY_API_TO_DB = Object.fromEntries(
 // Orden canónico lunes->domingo para que GET /schedule sea determinístico.
 const ORDEN_DIAS_DB = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 
+// "Mostrar mi dirección exacta" vs. "Mostrar solo la zona aproximada"
+// (petición del usuario, sin RF asociado — ver CLAUDE.md): 3 decimales
+// ≈ 111m en el ecuador (y similar en la latitud de Cundinamarca), del
+// orden de una manzana/conjunto — ni el punto exacto (protege el
+// objetivo: no exponer "el apartamento") ni tan burdo que dificulte de
+// verdad encontrar la zona. Redondeo determinístico (no un offset
+// aleatorio): el mismo negocio siempre aproxima al mismo punto, así el
+// pin no "salta" entre pedidos distintos del mismo perfil.
+//
+// Límite reconocido, no oculto: esto redondea la COORDENADA mostrada,
+// no la distancia calculada en /businesses/nearby (que sigue siendo
+// exacta, es la utilidad real de la búsqueda) ni el texto libre de
+// referenceAddress — si el vendedor escribe el número de apartamento
+// ahí, esta función no puede detectarlo ni redactarlo (ver el aviso en
+// el formulario del cliente). Alguien que consulte la distancia exacta
+// desde varios puntos de referencia distintos podría, en teoría,
+// triangular una posición más precisa que la mostrada — igual que
+// cualquier app que aproxima un pin pero no la distancia; no se intenta
+// resolver ese caso acá.
+const APROXIMACION_COORDENADA_DECIMALES = 3;
+
+function aproximarCoordenada(valor) {
+  if (valor == null) return valor;
+  const factor = 10 ** APROXIMACION_COORDENADA_DECIMALES;
+  return Math.round(Number(valor) * factor) / factor;
+}
+
 function toApiBusiness(row) {
   return {
     id: row.id,
@@ -64,8 +91,24 @@ function toApiBusiness(row) {
     // join con ubicaciones (listar/cercanos en negocios.repository.js) —
     // en el resto de los callers (crear/obtener/actualizar/cerrar) quedan
     // en null, no es un dato que esos endpoints hayan consultado.
-    latitude: row.latitud != null ? Number(row.latitud) : null,
-    longitude: row.longitud != null ? Number(row.longitud) : null,
+    //
+    // GET /businesses y /businesses/nearby son públicos, sin ningún
+    // concepto de "quien pregunta" (a diferencia de
+    // GET /businesses/{id}) — acá `mostrar_ubicacion_exacta` es la única
+    // señal que importa, siempre: nunca la coordenada real si el negocio
+    // eligió "zona aproximada".
+    latitude:
+      row.latitud != null
+        ? row.mostrar_ubicacion_exacta
+          ? Number(row.latitud)
+          : aproximarCoordenada(Number(row.latitud))
+        : null,
+    longitude:
+      row.longitud != null
+        ? row.mostrar_ubicacion_exacta
+          ? Number(row.longitud)
+          : aproximarCoordenada(Number(row.longitud))
+        : null,
     // Solo lo llena la consulta de /businesses/nearby.
     distanceMeters: row.distancia_m != null ? Number(row.distancia_m) : null,
     // RF-020 (Épica 9): motivo que un administrador escribió al rechazar
@@ -79,16 +122,29 @@ function toApiBusiness(row) {
   };
 }
 
-function toApiLocation(row) {
+/**
+ * requesterIsOwner: el dueño del negocio (o cualquier caller ya
+ * autorizado como tal, ej. justo después de PUT/PATCH) siempre ve la
+ * coordenada real, sin importar `mostrar_ubicacion_exacta` — esa
+ * preferencia es sobre qué ve el público, nunca sobre qué ve el propio
+ * dueño de su propia ubicación (ver CLAUDE.md).
+ */
+function toApiLocation(row, { requesterIsOwner = false } = {}) {
+  const mostrarExacta = requesterIsOwner || Boolean(row.mostrar_ubicacion_exacta);
   return {
     id: row.id,
     businessId: row.negocio_id,
     type: LOCATION_TYPE_DB_TO_API[row.tipo],
     referenceAddress: row.direccion_referencia,
-    latitude: row.latitud,
-    longitude: row.longitud,
+    latitude: mostrarExacta ? row.latitud : aproximarCoordenada(row.latitud),
+    longitude: mostrarExacta ? row.longitud : aproximarCoordenada(row.longitud),
     isCurrent: row.es_actual,
     createdAt: row.fecha_creacion,
+    // El interruptor en sí (no es un dato sensible — a diferencia de la
+    // coordenada, "este vendedor eligió ocultar su dirección exacta" no
+    // expone nada de él) — así el frontend puede dibujar el estado
+    // correcto del interruptor sin necesitar ser el dueño para saberlo.
+    showExactLocation: Boolean(row.mostrar_ubicacion_exacta),
   };
 }
 
@@ -193,7 +249,7 @@ function toApiBusinessProfile({
   return {
     ...toApiBusiness(negocio),
     rejectionReason: esPropietario ? (negocio.motivo_rechazo ?? null) : null,
-    location: ubicacion ? toApiLocation(ubicacion) : null,
+    location: ubicacion ? toApiLocation(ubicacion, { requesterIsOwner: esPropietario }) : null,
     schedule: horario.map(toApiScheduleDay),
     products: productos.map(toApiProduct),
     photos: fotos.map(toApiPhoto),
@@ -219,6 +275,7 @@ module.exports = {
   ORDEN_DIAS_DB,
   PHOTO_TYPE_DB_TO_API,
   MODERATION_STATUS_DB_TO_API,
+  aproximarCoordenada,
   toApiBusiness,
   toApiLocation,
   toApiScheduleDay,

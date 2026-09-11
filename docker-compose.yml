@@ -15,8 +15,13 @@ services:
   # Backblaze B2 (ver CLAUDE.md sección 2) — MinIO es solo el equivalente
   # local, con la misma API S3, para no depender de una cuenta en la nube
   # ni mockear la subida/borrado de archivos en desarrollo.
+  #
+  # quay.io, no Docker Hub (2026-09-11): `minio/minio` y `minio/mc`
+  # dejaron de poder descargarse anónimos desde Docker Hub ("pull access
+  # denied") — MinIO movió su distribución oficial a quay.io. Mismo
+  # binario, mismo tag `latest`, solo cambia el registro (ver ci.yml).
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     environment:
       MINIO_ROOT_USER: dev-placeholder
       MINIO_ROOT_PASSWORD: dev-placeholder
@@ -30,7 +35,7 @@ services:
   # Crea el bucket (ruteando-media-dev) al levantar el stack, ya que MinIO
   # no lo hace por sí solo — se sale apenas termina, no queda corriendo.
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       - minio
     entrypoint: >

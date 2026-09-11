@@ -60,13 +60,18 @@ jobs:
       # defecto (su CMD es solo ["minio"], sin "server /data") — se
       # levanta a mano con el comando completo, igual que en
       # docker-compose.yml.
+      #
+      # quay.io, no Docker Hub (2026-09-11): `minio/minio` y `minio/mc`
+      # dejaron de poder descargarse anónimos desde Docker Hub ("pull
+      # access denied") — MinIO movió su distribución oficial a quay.io.
+      # Mismo binario, mismo tag `latest`, solo cambia el registro.
       - name: Iniciar MinIO
         run: |
           docker run -d --name minio \
             -e MINIO_ROOT_USER=ci-placeholder \
             -e MINIO_ROOT_PASSWORD=ci-placeholder \
             -p 9000:9000 \
-            minio/minio:latest server /data
+            quay.io/minio/minio:latest server /data
 
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
@@ -84,6 +89,6 @@ jobs:
         run: |
           docker run --rm --network host \
             -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
-            minio/mc:latest mb --ignore-existing local/ruteando-media-ci
+            quay.io/minio/mc:latest mb --ignore-existing local/ruteando-media-ci
 
       - run: npm test

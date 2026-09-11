@@ -48,3 +48,8 @@ export function logProductViewEvent(businessId: string, productId: string): void
 export function logContactClickEvent(businessId: string): void {
   logEvent("contact_click", businessId);
 }
+
+/** Al completar el registro de un negocio (Épica F5) — flujo propio o asistido. */
+export function logBusinessRegisteredEvent(businessId: string): void {
+  logEvent("business_registered", businessId);
+}

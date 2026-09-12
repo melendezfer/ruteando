@@ -6,6 +6,7 @@ import { CookingPot, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
+import { BackButton } from "@/components/ui/back-button";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
@@ -60,6 +61,8 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
 
   return (
     <div className="flex flex-1 flex-col pb-24">
+      <BackButton className="fixed left-3 top-3 z-40" />
+
       <div className="relative h-64 w-full bg-border">
         {heroPhoto ? (
           // eslint-disable-next-line @next/next/no-img-element -- foto remota del negocio, sin dominio de next/image configurado todavía

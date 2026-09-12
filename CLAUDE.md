@@ -1911,3 +1911,86 @@ reales sembrados vía la API.
   todavía pendiente de uno ya aprobado. No se pidió esa distinción, y
   agregarla filtraría información sobre el proceso de moderación que hoy
   no tiene ningún uso conocido del lado del vendedor.
+
+## 27. Botón "Volver" en el perfil de negocio (bug real, sin RF asociado)
+
+Reportado por el usuario, propia rama (`fix/navegacion-detalle-negocio`):
+`GET /negocios/{businessId}` era un callejón sin salida — sin ningún
+elemento en el HTML renderizado para volver a Inicio/Mapa, más notorio
+todavía justo después de calificar (Épica F7 adelantada, sección 26),
+donde el mensaje de agradecimiento queda más abajo en la página sin
+ninguna acción para seguir.
+
+### Causa raíz encontrada al revisar, no solo el síntoma reportado
+
+`client/src/app/negocios/[businessId]/page.tsx` es el **único** `page.tsx`
+de toda la app que no monta `AppHeader` (el encabezado con
+Inicio/Mapa/Perfil que sí tienen `/`, `/mapa` y `/perfil`) — verificado
+revisando los 9 `page.tsx` existentes, no solo esta pantalla. No es un
+descuido aislado: `AppHeader` asume una sesión activa (enlaces a rutas
+detrás de `RequireAuth`, botón "Cerrar sesión"), y el perfil de negocio es
+alcanzable **sin sesión** — un link compartido por WhatsApp necesita
+funcionar para cualquiera (CLAUDE.md sección 12, por eso esta página es un
+Server Component con `generateMetadata`/Open Graph). Montarle `AppHeader`
+de todas formas habría sido incorrecto para un visitante anónimo. La
+solución fue un botón "Volver" liviano y sin esa suposición
+(`client/src/components/ui/back-button.tsx`), no reutilizar `AppHeader`.
+
+**Hallazgo más grande, encontrado en el camino, documentado pero no
+resuelto acá**: `app-header.tsx` ya trae un comentario propio admitiendo
+que "la navegación de cuatro destinos que fija el Documento 08 (sección
+5.3.1) todavía no está construida como tal" — la barra de navegación
+inferior persistente que CLAUDE.md sección 17 y 18 dan por hecho que
+existe ("Este patrón no reemplaza la navegación de primer nivel ya fijada
+en la sección 5.3.1 del Documento 08... aplica dentro de cada pantalla, no
+entre ellas") **nunca se construyó**; `AppHeader` es un header superior
+provisional con enlaces de texto, no la barra de 4 destinos del
+documento. No se aborda en esta rama — no fue lo que se pidió, y
+construir la barra real es una épica de frontend en sí misma (afecta el
+layout de toda la app, no solo esta pantalla), no un fix puntual de
+navegación.
+
+### Otras pantallas de "hoja de detalle" revisadas — sin el mismo problema
+
+- Favoritos, Reseñas y Configuración (`favorites-tab.tsx`,
+  `reviews-tab.tsx`, `settings-tab.tsx`) **no son rutas separadas** — son
+  pestañas dentro de `/perfil` (CLAUDE.md sección 17, "mínimo scroll,
+  expandir en el mismo lugar"), que sí tiene `AppHeader`. Ningún callejón
+  sin salida ahí.
+- `/negocios/nuevo` (asistente de registro) ya tenía su propia salida
+  (`WizardShell`, botón `✕` que llama a `onClose`) — documentado desde la
+  Épica F5, no un hallazgo nuevo.
+- `/legal/terminos-condiciones` y `/legal/tratamiento-datos` ya tenían un
+  enlace "Volver" (`legal/layout.tsx`) — a `/` siempre, no history-based,
+  porque son alcanzables sin sesión desde el checkbox de registro. Mismo
+  espíritu que el fix de esta sección, ya resuelto de antes.
+- `(auth)/login` y `(auth)/register` no necesitan salida — son puntos de
+  entrada, no pantallas a las que se llega navegando desde dentro de la
+  app.
+
+### Diseño del botón
+
+`BackButton` (`client/src/components/ui/back-button.tsx`) —
+`position: fixed` (no solo dentro del banner de foto, que desaparece al
+hacer scroll — el caso real que motivó el reporte, calificar y quedar sin
+acción visible más abajo en la página) en la esquina superior izquierda,
+mismo lenguaje visual que `FloatingActionStack` (círculo, sombra, fondo
+`bg-surface/90` con blur) pero en la esquina opuesta, sin invadir su
+espacio. `router.back()` navega por historial (Inicio o Mapa, según de
+dónde vino el usuario, tal como se pidió) — con `window.history.length >
+1` como heurística para distinguir "navegó dentro de la app" de "abrió un
+link compartido directo" (donde `router.back()` saldría de la app en vez
+de navegar dentro de ella); en ese segundo caso cae a `/` por defecto. Es
+una heurística, no una garantía — Next.js App Router no expone su propio
+índice de historial — pero cubre el caso real reportado.
+
+### Verificado con Playwright, flujo completo pedido por el usuario
+
+Login → Inicio (con geolocalización simulada sobre Ciudad Verde para que
+"Cerca de ti" muestre los negocios de demo reales) → abrir un negocio →
+calificar (5 estrellas) → confirmar que el botón "Volver" sigue visible
+tras hacer scroll hasta el final de la página → tocarlo (nunca el botón
+atrás del navegador) → confirmar que la URL vuelve a `/`. Las 3 capturas
+del recorrido (antes de calificar, tras calificar con scroll hasta abajo,
+y de vuelta en Inicio) confirman visualmente el arreglo, no solo las
+aserciones del script.

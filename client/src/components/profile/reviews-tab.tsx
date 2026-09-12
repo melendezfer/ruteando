@@ -6,6 +6,7 @@ import { Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
+import { REVIEW_TAG_LABELS } from "@/lib/reviews/review-tags";
 
 type UserReview = components["schemas"]["UserReview"];
 type ModerationStatus = NonNullable<UserReview["moderationStatus"]>;
@@ -97,7 +98,22 @@ export function ReviewsTab() {
               ))}
             </div>
 
-            {review.comment && <p className="mt-1 font-sans text-body-sm text-text">{review.comment}</p>}
+            {review.tags && review.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {review.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-terracota/10 px-2.5 py-1 font-sans text-caption font-medium text-terracota"
+                  >
+                    {REVIEW_TAG_LABELS[tag]}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {review.privateComment && (
+              <p className="mt-1 font-sans text-body-sm text-text">{review.privateComment}</p>
+            )}
             {review.createdAt && (
               <p className="mt-1 font-sans text-caption text-text-muted">
                 {DATE_FORMATTER.format(new Date(review.createdAt))}

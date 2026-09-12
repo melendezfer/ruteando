@@ -241,8 +241,11 @@ describe('GET /admin/reviews/reported + moderate (RF-021)', () => {
     expect(res.body.data.map((r) => r.id)).toContain(review.id);
   });
 
-  it('aprobar hace que la reseña pase a estar visible públicamente (200)', async () => {
+  it('aprobar hace que la reseña cuente en el agregado público (rediseño de reseñas: promedio/conteo, no texto)', async () => {
     const { negocio, review } = await crearResenaPendiente();
+
+    const antes = await request(app).get(`/businesses/${negocio.id}`);
+    expect(antes.body.reviewCount).toBe(0);
 
     const res = await request(app)
       .patch(`/admin/reviews/${review.id}/moderate`)
@@ -252,8 +255,8 @@ describe('GET /admin/reviews/reported + moderate (RF-021)', () => {
     expect(res.status).toBe(200);
     expect(res.body.moderationStatus).toBe('approved');
 
-    const publica = await request(app).get(`/businesses/${negocio.id}/reviews`);
-    expect(publica.body.data.map((r) => r.id)).toContain(review.id);
+    const despues = await request(app).get(`/businesses/${negocio.id}`);
+    expect(despues.body.reviewCount).toBe(1);
   });
 
   it('rechazar dos veces la misma reseña responde 409 la segunda vez', async () => {

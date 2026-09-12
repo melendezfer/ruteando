@@ -53,3 +53,8 @@ export function logContactClickEvent(businessId: string): void {
 export function logBusinessRegisteredEvent(businessId: string): void {
   logEvent("business_registered", businessId);
 }
+
+/** Al publicar una reseña (Épica F7). */
+export function logReviewCreatedEvent(businessId: string): void {
+  logEvent("review_created", businessId);
+}

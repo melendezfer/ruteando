@@ -64,16 +64,31 @@ describe('POST /businesses/{businessId}/reviews', () => {
     const res = await request(app)
       .post(`/businesses/${negocio.id}/reviews`)
       .set('Authorization', `Bearer ${consumer.accessToken}`)
-      .send({ rating: 4, comment: 'Muy bueno' });
+      .send({ rating: 4, tags: ['good_price', 'long_wait'], privateComment: 'Muy bueno' });
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
       businessId: negocio.id,
       userId: consumer.user.id,
       rating: 4,
-      comment: 'Muy bueno',
+      tags: ['good_price', 'long_wait'],
+      privateComment: 'Muy bueno',
       moderationStatus: 'pending',
     });
+  });
+
+  it('rechaza una etiqueta que no existe en el catálogo (422)', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    const res = await request(app)
+      .post(`/businesses/${negocio.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 4, tags: ['inventada'] });
+
+    expect(res.status).toBe(422);
   });
 
   it('rechaza con 403 si el dueño del negocio intenta reseñar su propio negocio', async () => {
@@ -142,8 +157,29 @@ describe('POST /businesses/{businessId}/reviews', () => {
   });
 });
 
-describe('GET /businesses/{businessId}/reviews', () => {
-  it('es público y solo lista reseñas aprobadas', async () => {
+describe('GET /businesses/{businessId}/feedback (retroalimentación privada)', () => {
+  it('rechaza sin access token (401)', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    const res = await request(app).get(`/businesses/${negocio.id}/feedback`);
+    expect(res.status).toBe(401);
+  });
+
+  it('rechaza con 403 a quien no es el dueño del negocio', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const otroVendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/feedback`)
+      .set('Authorization', `Bearer ${otroVendor.accessToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('el dueño ve etiquetas y comentario privado, sin userId (anonimizado), sin esperar aprobación', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const consumer = await registrar('consumer');
@@ -152,19 +188,49 @@ describe('GET /businesses/{businessId}/reviews', () => {
     const review = await request(app)
       .post(`/businesses/${negocio.id}/reviews`)
       .set('Authorization', `Bearer ${consumer.accessToken}`)
-      .send({ rating: 5 });
+      .send({ rating: 3, tags: ['cold_food'], privateComment: 'Llegó tibia' });
 
-    const antesDeAprobar = await request(app).get(`/businesses/${negocio.id}/reviews`);
-    expect(antesDeAprobar.body.data).toEqual([]);
+    // Sin aprobar todavía (nace 'pendiente') — la retroalimentación
+    // privada llega igual, a diferencia del agregado público.
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/feedback`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
 
-    await aprobar(review.body.id);
-
-    const despues = await request(app).get(`/businesses/${negocio.id}/reviews`);
-    expect(despues.body.data.map((r) => r.id)).toEqual([review.body.id]);
-    expect(despues.body.data[0].moderationStatus).toBe('approved');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([
+      {
+        id: review.body.id,
+        rating: 3,
+        tags: ['cold_food'],
+        privateComment: 'Llegó tibia',
+        createdAt: expect.any(String),
+      },
+    ]);
+    expect(res.body.data[0].userId).toBeUndefined();
+    expect(res.body.data[0].businessId).toBeUndefined();
   });
 
-  it('pagina con cursor (limit=1) sin saltar ni repetir reseñas', async () => {
+  it('no incluye reseñas rechazadas por un administrador', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+
+    const review = await request(app)
+      .post(`/businesses/${negocio.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 1, privateComment: 'contenido abusivo' });
+    await pool.query("UPDATE resenas SET estado_moderacion = 'rechazada' WHERE id = $1", [
+      review.body.id,
+    ]);
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/feedback`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('pagina con cursor (limit=1) sin saltar ni repetir', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const negocio = await crearNegocio(vendor.accessToken, categoryId);
@@ -176,7 +242,6 @@ describe('GET /businesses/{businessId}/reviews', () => {
         .post(`/businesses/${negocio.id}/reviews`)
         .set('Authorization', `Bearer ${consumer.accessToken}`)
         .send({ rating: 5 });
-      await aprobar(review.body.id);
       ids.push(review.body.id);
     }
 
@@ -184,9 +249,11 @@ describe('GET /businesses/{businessId}/reviews', () => {
     let cursor;
     for (let i = 0; i < 3; i++) {
       const url = cursor
-        ? `/businesses/${negocio.id}/reviews?limit=1&cursor=${encodeURIComponent(cursor)}`
-        : `/businesses/${negocio.id}/reviews?limit=1`;
-      const res = await request(app).get(url);
+        ? `/businesses/${negocio.id}/feedback?limit=1&cursor=${encodeURIComponent(cursor)}`
+        : `/businesses/${negocio.id}/feedback?limit=1`;
+      const res = await request(app)
+        .get(url)
+        .set('Authorization', `Bearer ${vendor.accessToken}`);
       expect(res.body.data).toHaveLength(1);
       vistos.push(res.body.data[0].id);
       cursor = res.body.pagination.nextCursor;
@@ -199,14 +266,17 @@ describe('GET /businesses/{businessId}/reviews', () => {
     const vendor = await registrar('vendor');
     const negocio = await crearNegocio(vendor.accessToken, categoryId);
 
-    const res = await request(app).get(
-      `/businesses/${negocio.id}/reviews?cursor=esto-no-es-un-cursor`,
-    );
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/feedback?cursor=esto-no-es-un-cursor`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
     expect(res.status).toBe(422);
   });
 
   it('responde 404 con un negocio inexistente', async () => {
-    const res = await request(app).get('/businesses/00000000-0000-0000-0000-000000000000/reviews');
+    const vendor = await registrar('vendor');
+    const res = await request(app)
+      .get('/businesses/00000000-0000-0000-0000-000000000000/feedback')
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
     expect(res.status).toBe(404);
   });
 });
@@ -322,7 +392,7 @@ describe('DELETE /reviews/{reviewId}', () => {
 });
 
 describe('POST /reviews/{reviewId}/report', () => {
-  it('un reporte exitoso mueve la reseña de aprobada a pending de inmediato (RF-016)', async () => {
+  it('un reporte exitoso mueve la reseña de aprobada a pending de inmediato (RF-016), sacándola del agregado público pero SIN ocultarla del dueño', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const consumer = await registrar('consumer');
@@ -334,8 +404,8 @@ describe('POST /reviews/{reviewId}/report', () => {
       .send({ rating: 5 });
     await aprobar(review.body.id);
 
-    const listaAntes = await request(app).get(`/businesses/${negocio.id}/reviews`);
-    expect(listaAntes.body.data).toHaveLength(1);
+    const perfilAntes = await request(app).get(`/businesses/${negocio.id}`);
+    expect(perfilAntes.body.reviewCount).toBe(1);
 
     const res = await request(app)
       .post(`/reviews/${review.body.id}/report`)
@@ -347,8 +417,17 @@ describe('POST /reviews/{reviewId}/report', () => {
     ]);
     expect(rows[0].estado_moderacion).toBe('pendiente');
 
-    const listaDespues = await request(app).get(`/businesses/${negocio.id}/reviews`);
-    expect(listaDespues.body.data).toEqual([]);
+    // El agregado público (lo único que ve el ruteador) ya no la cuenta...
+    const perfilDespues = await request(app).get(`/businesses/${negocio.id}`);
+    expect(perfilDespues.body.reviewCount).toBe(0);
+
+    // ...pero el dueño sigue viendo el aporte en su retroalimentación
+    // privada (solo 'rechazada' se oculta ahí, no 'pendiente') hasta que
+    // un administrador la revise (Épica 9).
+    const feedback = await request(app)
+      .get(`/businesses/${negocio.id}/feedback`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(feedback.body.data.map((f) => f.id)).toEqual([review.body.id]);
   });
 
   it('rechaza un segundo reporte del mismo usuario sobre la misma reseña (409, no vuelve a tumbarla)', async () => {

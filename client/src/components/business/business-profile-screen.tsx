@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CookingPot, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { ProductRow } from "@/components/business/product-row";
-import { ReviewList } from "@/components/business/review-list";
+import { ReviewForm } from "@/components/business/review-form";
+import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
 import type { components } from "@/lib/api/schema";
@@ -127,10 +129,28 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
         ))}
       </section>
 
-      <section className="flex flex-col gap-3 px-5 py-4">
-        <h2 className="font-heading text-title-2 font-semibold text-text">Reseñas</h2>
-        {profile.id && <ReviewList businessId={profile.id} />}
-      </section>
+      {profile.id && isOwner && (
+        <div className="px-5 pb-4">
+          <BusinessFeedbackPanel businessId={profile.id} />
+        </div>
+      )}
+
+      {profile.id && !isOwner && user && (
+        <div className="px-5 pb-4">
+          <ReviewForm businessId={profile.id} />
+        </div>
+      )}
+
+      {profile.id && !isOwner && !user && (
+        <div className="mx-5 mb-4 rounded-card border border-border bg-surface px-4 py-3 text-center">
+          <p className="font-sans text-body-sm text-text-muted">
+            <Link href="/login" className="font-medium text-terracota underline">
+              Inicia sesión
+            </Link>{" "}
+            para calificar este negocio.
+          </p>
+        </div>
+      )}
 
       <FloatingActionStack
         primary={

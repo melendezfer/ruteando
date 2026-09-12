@@ -189,6 +189,25 @@ const MODERATION_STATUS_DB_TO_API = {
   rechazada: 'rejected',
 };
 
+// Catálogo fijo de etiquetas rápidas de reseñas (petición directa del
+// usuario, sin RF asociado — ver CLAUDE.md, "retroalimentación privada").
+// Corto a propósito y sin pretender ser exhaustivo: cubre lo más común en
+// comida callejera, no cada posible matiz.
+const REVIEW_TAG_DB_TO_API = {
+  comida_caliente: 'hot_food',
+  comida_fria: 'cold_food',
+  buen_trato: 'good_service',
+  espera_larga: 'long_wait',
+  buen_precio: 'good_price',
+  precio_alto: 'high_price',
+  buena_presentacion: 'good_presentation',
+  poca_cantidad: 'small_portion',
+};
+
+const REVIEW_TAG_API_TO_DB = Object.fromEntries(
+  Object.entries(REVIEW_TAG_DB_TO_API).map(([db, api]) => [api, db]),
+);
+
 function toApiPhoto(row) {
   return {
     id: row.id,
@@ -213,8 +232,27 @@ function toApiReview(row) {
     businessId: row.negocio_id,
     userId: row.usuario_id,
     rating: row.calificacion,
-    comment: row.comentario,
+    tags: (row.etiquetas ?? []).map((etiqueta) => REVIEW_TAG_DB_TO_API[etiqueta]),
+    privateComment: row.comentario_privado,
     moderationStatus: MODERATION_STATUS_DB_TO_API[row.estado_moderacion],
+    createdAt: row.fecha_creacion,
+  };
+}
+
+/**
+ * GET /businesses/{businessId}/feedback — retroalimentación privada que
+ * ve el dueño del negocio (ver resenas.service.js#listarFeedbackPrivado).
+ * A propósito una forma DISTINTA de toApiReview, no la misma función con
+ * un flag: sin businessId/userId en la forma misma, es estructuralmente
+ * imposible filtrar de vuelta a quién escribió cada aporte, en vez de
+ * confiar en que cada llamador recuerde omitir esos campos.
+ */
+function toApiReviewFeedback(row) {
+  return {
+    id: row.id,
+    rating: row.calificacion,
+    tags: (row.etiquetas ?? []).map((etiqueta) => REVIEW_TAG_DB_TO_API[etiqueta]),
+    privateComment: row.comentario_privado,
     createdAt: row.fecha_creacion,
   };
 }
@@ -275,6 +313,8 @@ module.exports = {
   ORDEN_DIAS_DB,
   PHOTO_TYPE_DB_TO_API,
   MODERATION_STATUS_DB_TO_API,
+  REVIEW_TAG_DB_TO_API,
+  REVIEW_TAG_API_TO_DB,
   aproximarCoordenada,
   toApiBusiness,
   toApiLocation,
@@ -282,5 +322,6 @@ module.exports = {
   toApiProduct,
   toApiPhoto,
   toApiReview,
+  toApiReviewFeedback,
   toApiBusinessProfile,
 };

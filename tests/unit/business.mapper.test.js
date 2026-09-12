@@ -4,6 +4,7 @@ const {
   toApiScheduleDay,
   toApiBusinessProfile,
   toApiReview,
+  toApiReviewFeedback,
   aproximarCoordenada,
   LOCATION_TYPE_API_TO_DB,
   DAY_API_TO_DB,
@@ -291,13 +292,14 @@ describe('toApiBusinessProfile', () => {
 });
 
 describe('toApiReview', () => {
-  it('mapea una fila de resenas (español) al contrato Review (inglés)', () => {
+  it('mapea una fila de resenas (español) al contrato Review (inglés), incluida la retroalimentación privada', () => {
     const row = {
       id: 'r-1',
       negocio_id: 'b-1',
       usuario_id: 'u-1',
       calificacion: 4,
-      comentario: 'Muy bueno',
+      etiquetas: ['buen_precio', 'espera_larga'],
+      comentario_privado: 'Muy bueno, pero esperé un rato',
       estado_moderacion: 'pendiente',
       fecha_creacion: '2026-01-01T00:00:00.000Z',
     };
@@ -307,10 +309,24 @@ describe('toApiReview', () => {
       businessId: 'b-1',
       userId: 'u-1',
       rating: 4,
-      comment: 'Muy bueno',
+      tags: ['good_price', 'long_wait'],
+      privateComment: 'Muy bueno, pero esperé un rato',
       moderationStatus: 'pending',
       createdAt: '2026-01-01T00:00:00.000Z',
     });
+  });
+
+  it('mapea etiquetas vacías/ausentes como []', () => {
+    const row = {
+      id: 'r-1',
+      negocio_id: 'b-1',
+      usuario_id: 'u-1',
+      calificacion: 5,
+      comentario_privado: null,
+      estado_moderacion: 'pendiente',
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+    };
+    expect(toApiReview(row).tags).toEqual([]);
   });
 
   it('mapea los 3 estados de moderación', () => {
@@ -319,7 +335,7 @@ describe('toApiReview', () => {
       negocio_id: 'b-1',
       usuario_id: 'u-1',
       calificacion: 5,
-      comentario: null,
+      comentario_privado: null,
       fecha_creacion: '2026-01-01T00:00:00.000Z',
     };
     expect(toApiReview({ ...base, estado_moderacion: 'pendiente' }).moderationStatus).toBe(
@@ -331,5 +347,28 @@ describe('toApiReview', () => {
     expect(toApiReview({ ...base, estado_moderacion: 'rechazada' }).moderationStatus).toBe(
       'rejected',
     );
+  });
+});
+
+describe('toApiReviewFeedback', () => {
+  it('mapea sin userId ni businessId — anonimizado a propósito', () => {
+    const row = {
+      id: 'r-1',
+      negocio_id: 'b-1',
+      usuario_id: 'u-1',
+      calificacion: 3,
+      etiquetas: ['comida_fria'],
+      comentario_privado: 'Llegó tibia',
+      estado_moderacion: 'aprobada',
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+    };
+
+    expect(toApiReviewFeedback(row)).toEqual({
+      id: 'r-1',
+      rating: 3,
+      tags: ['cold_food'],
+      privateComment: 'Llegó tibia',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
   });
 });

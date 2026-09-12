@@ -1687,3 +1687,175 @@ Si se corre el script otro día de la semana, cuáles negocios aparecen
   quedarían filas huérfanas con `usuario_id = NULL`, imposibles de
   volver a limpiar selectivamente. `negocios` sí cascadea
   (ubicaciones/horarios/fotos), así que no necesita el mismo cuidado.
+
+## 26. Rediseño de reseñas: señal pública vs. retroalimentación privada
+
+Fuera del alcance original de los Documentos 05-15 (RF-015/016 no
+mencionan nada de esto) — petición directa del usuario, decidida **antes**
+de construir la Épica F7 (formulario de reseña, todavía no existía en el
+frontend), propia rama (`feature/resenas-feedback-privado`). Reemplaza el
+diseño original de RF-015 (reseña = calificación + comentario público) sin
+tocar RF-016 (reportar contenido, sin cambios).
+
+**Motivación del usuario, explícita**: separar la señal pública de calidad
+(cuántas estrellas, en promedio) de la retroalimentación de mejora, para
+que calificar se sienta como un aporte constructivo al vendedor y no como
+un castigo público. Un comentario negativo de texto, visible para
+cualquiera que mire el perfil, es fácil de leer como una queja pública
+permanente; la misma información, entregada solo al vendedor y enmarcada
+como "ideas para mejorar", cumple el mismo propósito (RF-015: que la
+calificación refleje experiencias reales) sin ese efecto.
+
+**Modelo**:
+
+1. **Lo único público** sobre reseñas es `BusinessProfile.averageRating` +
+   `reviewCount` (agregado, sin cambios de código — ya eran el único
+   agregado desde la Épica 5/6). **No existe ningún endpoint que devuelva
+   texto de una reseña a un tercero** — se eliminó por completo
+   `GET /businesses/{businessId}/reviews` (pública, listaba reseñas
+   individuales con `comment`).
+2. Al calificar (1-5 estrellas, obligatorio), el consumidor puede agregar
+   opcionalmente: **etiquetas rápidas** (catálogo fijo y corto, multi-
+   selección) y un **comentario privado** de texto libre. Ninguno de los
+   dos es obligatorio.
+3. Etiquetas y comentario son **privados**: solo los ve el dueño del
+   negocio (`GET /businesses/{businessId}/feedback`, nuevo — reemplaza a
+   la ruta pública eliminada) y el equipo administrador (cola de
+   moderación existente, sin cambios de ruta). Nunca un tercero, nunca
+   otro consumidor.
+4. El dueño los ve **anonimizados** — el contrato de la respuesta
+   (`ReviewFeedback`) no incluye `userId` ni `businessId`, así que es
+   estructuralmente imposible, no solo una promesa de la UI, identificar
+   quién escribió cada aporte.
+5. Encuadre deliberadamente positivo, pedido explícitamente por el
+   usuario: la pantalla del dueño se llama "Ideas de tus clientes para
+   mejorar", nunca "quejas" ni "reportes" (esas palabras ya están
+   ocupadas por RF-016, que es un mecanismo distinto). Tras calificar, el
+   consumidor ve "Gracias por tu aporte — ayudas a que los vendedores de
+   tu barrio mejoren", sin lenguaje transaccional ("calificación
+   enviada", "gracias por tu feedback").
+
+### Catálogo de etiquetas (`etiqueta_resena`, 8 valores, DB en español / API en inglés — mismo patrón que el resto del proyecto)
+
+| DB (Postgres enum) | API (`ReviewTag`) | Español (frontend) |
+|---|---|---|
+| `comida_caliente` | `hot_food` | Comida caliente |
+| `comida_fria` | `cold_food` | Comida fría |
+| `buen_trato` | `good_service` | Buen trato |
+| `espera_larga` | `long_wait` | Esperé mucho |
+| `buen_precio` | `good_price` | Buen precio |
+| `precio_alto` | `high_price` | Precio alto |
+| `buena_presentacion` | `good_presentation` | Buena presentación |
+| `poca_cantidad` | `small_portion` | Poca cantidad |
+
+Catálogo corto a propósito (petición explícita: "que cubra lo más común",
+no exhaustivo) — cubre temperatura de la comida, trato, tiempo de espera,
+precio y presentación/cantidad, los ejes más comunes de retroalimentación
+en comida callejera. `business.mapper.js#REVIEW_TAG_DB_TO_API`/
+`REVIEW_TAG_API_TO_DB` son el único lugar que traduce entre los dos
+vocabularios (mismo patrón que `STATUS_DB_TO_API`, `DAY_DB_TO_API`, etc.);
+`client/src/lib/reviews/review-tags.ts` es el único lugar del frontend con
+las etiquetas en español.
+
+### Modelo de datos
+
+- `resenas.comentario` se **renombra** a `comentario_privado` (migración
+  `resenas-feedback-privada`) — no se pierde el dato, cambia quién puede
+  verlo. Sin backfill necesario: el valor ya existente sigue siendo el
+  comentario de esa reseña, solo que ahora nadie más que el dueño/admin lo
+  ve.
+- `resenas.etiquetas etiqueta_resena[] NOT NULL DEFAULT '{}'` — un array
+  de un enum nuevo, no una tabla de relación aparte: el catálogo es fijo y
+  pequeño, y una reseña puede llevar varias etiquetas a la vez. **Gap real
+  encontrado al implementar, no obvio de antemano**: el driver `pg` no
+  conoce el OID dinámico que Postgres asigna a un array de un tipo
+  definido por el usuario — sin un cast explícito (`$N::etiqueta_resena[]`
+  al escribir, `etiquetas::text[]` al leer), el valor de vuelta es el
+  literal crudo de Postgres como string (`"{comida_fria}"`) en vez de un
+  array de JS, y el mapper truena al llamar `.map()` sobre él. Ver
+  `resenas.repository.js#SELECT_RESENA` (la constante que aplica el cast
+  de lectura en cada `SELECT`/`RETURNING` de esa tabla) y su comentario —
+  encontrado por la suite de pruebas completa (500 en creación de reseña),
+  no en revisión de código.
+
+### Endpoints
+
+- `GET /businesses/{businessId}/feedback` (nuevo) — reemplaza a
+  `GET /businesses/{businessId}/reviews` (pública, eliminada). Requiere
+  autenticación y ser el dueño del negocio (403 para cualquier otro,
+  autorización a nivel de objeto). Devuelve `ReviewFeedback[]`
+  (anonimizado) paginado (mismo patrón keyset del resto del proyecto).
+  Incluye reseñas `pending` y `approved`, **no** `rejected` — el aporte
+  llega al vendedor de inmediato, sin esperar a que un administrador
+  apruebe la calificación para el promedio público (esa aprobación sigue
+  gatekeeping solo `averageRating`/`reviewCount`, sin cambios); solo se
+  excluye lo que un administrador ya determinó abusivo o inapropiado
+  (RF-016), consistente con que el equipo administrador sigue viendo la
+  retroalimentación completa para poder moderarla.
+- `POST /businesses/{businessId}/reviews` — sin cambios de ruta;
+  `ReviewInput.comment` se renombra a `privateComment` (más honesto que
+  seguir llamándolo "comment" ahora que ya no es público) y se agrega
+  `tags` (opcional, sin duplicados — validado en
+  `resenas.validators.js`, no a nivel de columna).
+- `GET /users/me/reviews` — sin cambios de ruta ni de semántica (el autor
+  siempre ve su propia reseña completa, tags/privateComment incluidos:
+  es su propio dato).
+- `DELETE /reviews/{reviewId}`, `POST /reviews/{reviewId}/report`,
+  `GET /admin/reviews/reported`, `PATCH /admin/reviews/{reviewId}/moderate`
+  — sin cambios (RF-016 no cambia, tal como pidió el usuario).
+
+### Frontend
+
+- `client/src/components/business/review-form.tsx` (nuevo, adelanta parte
+  de la Épica F7): selector de estrellas, chips de etiquetas (visibles
+  recién después de elegir una calificación, para no abrumar antes de que
+  el usuario haya decidido cuántas estrellas dar) y comentario opcional.
+  Maneja 409 (ya calificó este negocio) como un estado final distinto del
+  error genérico, con el mismo tono positivo ("Ya calificaste este
+  negocio antes. ¡Gracias por tu aporte!") en vez de un mensaje de error.
+  Dispara `resena_creada` (`logReviewCreatedEvent`, CLAUDE.md sección 16)
+  solo en el 201 real, no en el 409.
+- `client/src/components/business/business-feedback-panel.tsx` (nuevo) —
+  "Ideas de tus clientes para mejorar", solo se monta cuando
+  `business-profile-screen.tsx` determina `isOwner` (mismo campo
+  `ownerId === user?.id` que ya usaba el resto del perfil). Sin
+  paginación con "cargar más" — un solo `GET` con límite alto (50), mismo
+  criterio que `reviews-tab.tsx` para "mis reseñas".
+- `business-profile-screen.tsx`: la antigua sección "Reseñas" (que
+  montaba `ReviewList`, pública) se reemplaza por una rama de tres
+  casos — dueño ve `BusinessFeedbackPanel`; consumidor autenticado
+  (no dueño) ve `ReviewForm`; anónimo ve un aviso con link a
+  `/login`. `review-list.tsx` se **eliminó** (consumía el endpoint
+  público que ya no existe).
+- `reviews-tab.tsx` ("mis reseñas", Épica F6): actualizado para leer
+  `tags`/`privateComment` en vez de `comment` — sigue siendo de solo
+  lectura, sin cambios de alcance.
+
+### Verificado en vivo, no solo con pruebas automatizadas
+
+Backend probado con la suite completa (472 pruebas, incluidas las nuevas
+de `GET .../feedback` y del catálogo de etiquetas) y a mano contra la API
+real (creación de reseña con etiquetas, lectura del feedback anonimizado,
+verificación de que un reporte saca la reseña del agregado público sin
+ocultarla del dueño). Frontend verificado con Playwright headless contra
+el servidor de desarrollo real (`negocios/{id}` con sesión de consumidor y
+de vendedor dueño) — no solo `tsc`/lint — confirmando en pantalla: el
+selector de estrellas, los chips de etiquetas, el mensaje de
+agradecimiento post-envío, y el panel anonimizado del dueño con datos
+reales sembrados vía la API.
+
+### Gaps conocidos
+
+- El catálogo de etiquetas es fijo en código (`business.mapper.js` +
+  `review-tags.ts`) — cambiarlo hoy requiere una migración (nuevo valor
+  de enum) y un despliegue de frontend, no hay panel de administración
+  para editarlo. No se pidió, y ocho valores fijos no lo justifican
+  todavía.
+- Sin límite de longitud "razonable" adicional sobre `privateComment` más
+  allá del `maxLength: 1000` ya heredado del campo anterior — no se pidió
+  ninguno distinto.
+- `business-feedback-panel.tsx` no expone `moderationStatus` al dueño
+  (ReviewFeedback no lo trae) — el dueño no puede distinguir un aporte
+  todavía pendiente de uno ya aprobado. No se pidió esa distinción, y
+  agregarla filtraría información sobre el proceso de moderación que hoy
+  no tiene ningún uso conocido del lado del vendedor.

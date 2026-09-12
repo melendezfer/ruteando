@@ -104,8 +104,12 @@ async function createReview(req, res) {
   res.status(201).json(review);
 }
 
-async function listReviews(req, res) {
-  const resultado = await resenasService.listar(req.params.businessId, req.validatedQuery);
+async function listFeedback(req, res) {
+  const resultado = await resenasService.listarFeedbackPrivado(
+    req.user.id,
+    req.params.businessId,
+    req.validatedQuery,
+  );
   res.status(200).json(resultado);
 }
 
@@ -158,7 +162,7 @@ module.exports = {
   listProducts,
   uploadPhoto,
   createReview,
-  listReviews,
+  listFeedback,
   markFavorite,
   unmarkFavorite,
   sendPhoneVerification,

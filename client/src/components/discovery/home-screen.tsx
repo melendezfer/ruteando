@@ -152,7 +152,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   const showLocationHint = geolocation.status !== "granted" && businesses === null && !listLoading;
 
   return (
-    <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6">
+    <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
       <h1 className="font-heading text-title-1 font-bold text-text">
         Hola, {userFirstName} — ¿qué se te antoja hoy?
       </h1>

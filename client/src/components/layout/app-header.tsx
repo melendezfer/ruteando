@@ -5,18 +5,17 @@ import { CookingPot } from "@phosphor-icons/react/dist/ssr";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@/components/ui/button";
 
-interface AppHeaderProps {
-  activeTab: "inicio" | "mapa" | "perfil";
-}
-
 /**
- * Encabezado compartido entre pantallas autenticadas. La navegación de
- * cuatro destinos que fija el Documento 08 (sección 5.3.1) todavía no
- * está construida como tal (no la pidió ninguna épica hasta ahora) — este
- * header es el mínimo necesario para que Inicio (F2) y Mapa (F3) sean
- * alcanzables entre sí sin duplicar el logout en cada pantalla.
+ * Encabezado compartido entre pantallas autenticadas — solo branding y
+ * acciones secundarias (registrar negocio, cerrar sesión). Ya NO lleva
+ * navegación Inicio/Mapa/Perfil: eso es responsabilidad exclusiva de
+ * `BottomNavBar` (CLAUDE.md sección 27) desde que esa barra se construyó
+ * — mantener los dos con enlaces de navegación habría sido dos patrones
+ * compitiendo por la misma pregunta ("dónde estoy/a dónde voy"). Por eso
+ * ya no recibe `activeTab`: no hay nada acá que dependa de la ruta
+ * actual.
  */
-export function AppHeader({ activeTab }: AppHeaderProps) {
+export function AppHeader() {
   const { logout, user } = useAuth();
 
   // Único punto de entrada al asistente de registro de negocio (Épica
@@ -32,23 +31,7 @@ export function AppHeader({ activeTab }: AppHeaderProps) {
         <CookingPot size={24} weight="duotone" className="text-terracota" />
         Ruteando
       </span>
-      <nav className="flex items-center gap-4">
-        <Link
-          href="/"
-          className={`font-sans text-body-sm font-medium ${
-            activeTab === "inicio" ? "text-terracota" : "text-text-muted hover:text-text"
-          }`}
-        >
-          Inicio
-        </Link>
-        <Link
-          href="/mapa"
-          className={`font-sans text-body-sm font-medium ${
-            activeTab === "mapa" ? "text-terracota" : "text-text-muted hover:text-text"
-          }`}
-        >
-          Mapa
-        </Link>
+      <div className="flex items-center gap-4">
         {canRegisterBusiness && (
           <Link
             href="/negocios/nuevo"
@@ -57,18 +40,10 @@ export function AppHeader({ activeTab }: AppHeaderProps) {
             {user?.role === "administrator" ? "Registro asistido" : "Registrar negocio"}
           </Link>
         )}
-        <Link
-          href="/perfil"
-          className={`font-sans text-body-sm font-medium ${
-            activeTab === "perfil" ? "text-terracota" : "text-text-muted hover:text-text"
-          }`}
-        >
-          Perfil
-        </Link>
-      </nav>
-      <Button type="button" variant="secondary" onClick={() => logout()}>
-        Cerrar sesión
-      </Button>
+        <Button type="button" variant="secondary" onClick={() => logout()}>
+          Cerrar sesión
+        </Button>
+      </div>
     </header>
   );
 }

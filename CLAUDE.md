@@ -1936,27 +1936,25 @@ de todas formas habría sido incorrecto para un visitante anónimo. La
 solución fue un botón "Volver" liviano y sin esa suposición
 (`client/src/components/ui/back-button.tsx`), no reutilizar `AppHeader`.
 
-**Hallazgo más grande, encontrado en el camino, documentado pero no
-resuelto acá**: `app-header.tsx` ya trae un comentario propio admitiendo
-que "la navegación de cuatro destinos que fija el Documento 08 (sección
-5.3.1) todavía no está construida como tal" — la barra de navegación
-inferior persistente que CLAUDE.md sección 17 y 18 dan por hecho que
-existe ("Este patrón no reemplaza la navegación de primer nivel ya fijada
-en la sección 5.3.1 del Documento 08... aplica dentro de cada pantalla, no
-entre ellas") **nunca se construyó**; `AppHeader` es un header superior
-provisional con enlaces de texto, no la barra de 4 destinos del
-documento. No se aborda en esta rama — no fue lo que se pidió, y
-construir la barra real es una épica de frontend en sí misma (afecta el
-layout de toda la app, no solo esta pantalla), no un fix puntual de
-navegación.
+**Hallazgo más grande, encontrado en el camino** (documentado en esta
+sección, no resuelto en esta rama): `app-header.tsx` ya traía un
+comentario propio admitiendo que "la navegación de cuatro destinos que
+fija el Documento 08 (sección 5.3.1) todavía no está construida como
+tal" — la barra de navegación inferior persistente que CLAUDE.md sección
+17 y 18 dan por hecho que existe **nunca se había construido**;
+`AppHeader` era un header superior provisional con enlaces de texto, no
+la barra de 4 destinos del documento. **Resuelto después, ver sección
+28** — `AppHeader` ya no lleva esos enlaces.
 
 ### Otras pantallas de "hoja de detalle" revisadas — sin el mismo problema
 
-- Favoritos, Reseñas y Configuración (`favorites-tab.tsx`,
-  `reviews-tab.tsx`, `settings-tab.tsx`) **no son rutas separadas** — son
-  pestañas dentro de `/perfil` (CLAUDE.md sección 17, "mínimo scroll,
-  expandir en el mismo lugar"), que sí tiene `AppHeader`. Ningún callejón
-  sin salida ahí.
+- Favoritos, Reseñas y Configuración (entonces `favorites-tab.tsx`,
+  `reviews-tab.tsx`, `settings-tab.tsx`) **no eran rutas separadas** —
+  eran pestañas dentro de `/perfil` (CLAUDE.md sección 17, "mínimo
+  scroll, expandir en el mismo lugar"), que sí tenía `AppHeader`. Ningún
+  callejón sin salida ahí. (Favoritos se promovió después a su propia
+  ruta — `favorites-tab.tsx` ya no existe, ver sección 28 — pero eso no
+  cambia la conclusión de este punto: nunca fue un callejón sin salida.)
 - `/negocios/nuevo` (asistente de registro) ya tenía su propia salida
   (`WizardShell`, botón `✕` que llama a `onClose`) — documentado desde la
   Épica F5, no un hallazgo nuevo.
@@ -1994,3 +1992,135 @@ atrás del navegador) → confirmar que la URL vuelve a `/`. Las 3 capturas
 del recorrido (antes de calificar, tras calificar con scroll hasta abajo,
 y de vuelta en Inicio) confirman visualmente el arreglo, no solo las
 aserciones del script.
+
+## 28. Barra de navegación inferior de 4 destinos (implementado)
+
+Cierra el gap que había quedado documentado en la sección 27 ("la barra
+de navegación inferior... nunca se construyó") — propia rama
+(`feature/barra-navegacion-inferior`).
+
+### Los 4 destinos — de dónde salieron, honestamente
+
+El Documento 08 (sección 5.3.1) **no está en este repositorio ni en el
+contexto de Claude Code** — no fue posible leer literalmente esa sección
+para confirmar los 4 destinos exactos que el documento original define.
+En vez de adivinar en silencio, se le preguntó directamente al usuario,
+presentando la reconstrucción más razonable a partir de lo que sí está
+documentado en este archivo y en el código (Inicio=F2, Mapa=F3, Perfil=F6,
+y Favoritos como su propia épica F8 "la más simple", separada de F6) —
+confirmada por el usuario: **Inicio, Mapa, Favoritos, Perfil**.
+
+### Favoritos deja de ser una pestaña de `/perfil`
+
+Antes (Épica F6) "Favoritos" vivía como una de las tres pestañas dentro
+de `/perfil`, junto a Reseñas y Configuración. Al promoverla a destino de
+primer nivel:
+
+- Se creó `client/src/app/favoritos/page.tsx` (ruta nueva) y
+  `client/src/components/favorites/favorites-screen.tsx` — el mismo
+  componente que antes era `profile/favorites-tab.tsx` (borrado), con su
+  propio `<h1>` de página en vez de ser contenido de una pestaña. **Sin
+  cambio de funcionalidad**: sigue siendo de solo lectura —
+  marcar/desmarcar favoritos (RF-017, "Épica F8" en el sentido de la
+  interacción del corazón) sigue sin construirse; lo único que cambió es
+  dónde vive la lista.
+- `ProfileScreen` quedó con solo 2 pestañas (Reseñas, Configuración) —
+  `favorites-tab.tsx` y su import se eliminaron de ahí, no se dejó un
+  código muerto ni una pestaña duplicada compitiendo con la ruta nueva.
+
+### `AppHeader` vs `BottomNavBar` — se decidió cuál patrón queda, no los dos
+
+`AppHeader` tenía enlaces de texto a Inicio/Mapa/Perfil (`activeTab`
+prop) — exactamente la navegación que ahora vive en `BottomNavBar`. Se
+quitaron esos enlaces (y el prop `activeTab`, que ya no tiene para qué
+existir) de `AppHeader`: hoy solo lleva branding (logo/nombre), el enlace
+condicional "Registrar negocio"/"Registro asistido" (por rol, sin
+relación con los 4 destinos) y "Cerrar sesión". `BottomNavBar` es ahora
+la única fuente de verdad de "en qué pantalla principal estoy" — nunca
+compiten por la misma pregunta.
+
+**Efecto secundario encontrado y corregido de paso**: `/perfil` tenía
+**dos** botones de cerrar sesión al mismo tiempo — el de `AppHeader`
+(`onClick={() => logout()}`, sin redirección explícita) y uno propio de
+`ProfileScreen` vía `FloatingActionStack` (`await logout(); router.push
+("/login")`). Se eliminó el de `ProfileScreen` — `AppHeader` ya está
+montado en las 4 pantallas principales, no hacía falta un segundo. Se
+mantuvo el comportamiento de `AppHeader` (sin `router.push`) porque es el
+que ya usan Inicio y Mapa: cerrar sesión limpia el estado de
+autenticación y `RequireAuth` (que envuelve las 4 pantallas) renderiza su
+propia pantalla de "inicia sesión" en el lugar, sin necesidad de cambiar
+la URL.
+
+### Pantallas fuera de la barra — mismo criterio que `BackButton` (sección 27)
+
+`BottomNavBar` solo se monta dentro de `RequireAuth` en las 4 pantallas
+principales (`/`, `/mapa`, `/favoritos`, `/perfil`). Quedan fuera, a
+propósito, exactamente las mismas pantallas que ya no llevaban
+`AppHeader`:
+
+- `GET /negocios/{businessId}` — sigue siendo alcanzable sin sesión
+  (link de WhatsApp, Open Graph); `BackButton` (sección 27) sigue siendo
+  su única salida, sin cambios en este PR. **Decisión explícita, no un
+  descuido**: no se le agregó `BottomNavBar` condicionada a
+  `user` (aunque esta pantalla ya usa `useAuth()` para `isOwner`) — el
+  alcance pedido fueron "las pantallas principales", no "cualquier
+  pantalla cuando hay sesión". Mostrarla ahí también para un visitante
+  con sesión activa es una mejora razonable a futuro, no construida acá.
+- `/negocios/nuevo` (asistente de registro) y `/legal/*` — sin cambios,
+  ya tenían su propia salida (sección 27).
+
+### Colisiones de layout encontradas y corregidas (no obvias de antemano)
+
+`BottomNavBar` es `fixed`, así que no reserva espacio por sí sola en el
+flujo normal del documento — sin ajustar cada pantalla, quedaba
+superpuesta sobre contenido real, no solo sobre espacio vacío:
+
+- **`HomeScreen`**: no tenía ningún padding inferior (nunca lo había
+  necesitado, sin `FloatingActionStack` en esa pantalla) — se agregó
+  `pb-24` para que la última tarjeta de "Cerca de ti" no quedara detrás
+  de la barra.
+- **`MapScreen`**: más delicado — `BusinessSummarySheet` y
+  `MapFiltersSheet` se anclan con `absolute bottom-0` al contenedor del
+  mapa (no a la barra ni al viewport), así que sin reservar espacio ahí
+  el propio mapa (y esas hojas) se extendían por debajo de la barra fija,
+  no hasta su borde. Se agregó `pb-24` al contenedor del mapa.
+  `FloatingActionStack` (el círculo de "Mi ubicación"/"Filtros") es
+  `fixed`, no `absolute` dentro de ese contenedor — a ese padding no lo
+  afecta, por eso se agregó por separado el prop `aboveBottomNav` a
+  `FloatingActionStack` (sube el stack de `bottom-6` a `bottom-24`),
+  usado en `MapScreen`. Verificado visualmente con una captura de
+  Playwright — no solo razonado, el solape real se hubiera visto recién
+  al renderizar.
+- **`ProfileScreen`**: ya tenía `pb-28` (para su propio
+  `FloatingActionStack`, ahora eliminado, ver arriba) — se ajustó a
+  `pb-24` por consistencia con el resto, sin que haga falta más ahora
+  que no comparte espacio con ningún stack flotante ahí.
+- **`FavoritesScreen`** (pantalla nueva): `pb-24` desde el principio,
+  mismo criterio que `HomeScreen`.
+
+### Verificado con Playwright
+
+Login → confirmar que `BottomNavBar` es visible → recorrer las 4
+pestañas en orden (Inicio → Mapa → Favoritos → Perfil), confirmando en
+cada una: la URL cambia a la ruta esperada, exactamente una pestaña
+queda con `aria-current="page"`, y es la correcta (nunca dos activas a
+la vez, nunca la equivocada) → confirmar que la barra sigue fija tras
+hacer scroll. Capturas adicionales confirman visualmente que
+`FloatingActionStack` en Mapa quedó por encima de la barra, sin
+solaparse, y que Perfil ya no muestra la pestaña Favoritos ni un segundo
+botón de cerrar sesión.
+
+### Gaps conocidos, no ocultos
+
+- Marcar/desmarcar favoritos (el corazón que agregaría/quitaría un
+  negocio de esta lista desde cualquier pantalla) sigue sin construirse
+  — `FavoritesScreen` sigue siendo de solo lectura, igual que la pestaña
+  que reemplazó. Promover la pantalla no fue promover la funcionalidad.
+- El perfil de negocio no muestra `BottomNavBar` ni para un visitante con
+  sesión activa (ver arriba, "Pantallas fuera de la barra") — decisión de
+  alcance, documentada, no un olvido.
+- La reconstrucción de los 4 destinos se confirmó con el usuario, pero
+  sigue sin verificarse contra el texto real del Documento 08 (no
+  disponible). Si ese documento aparece más adelante y dice algo
+  distinto, esta sección queda desactualizada hasta que se corrija a
+  mano — no hay ninguna forma automática de detectar esa discrepancia.

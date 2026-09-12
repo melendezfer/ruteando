@@ -164,7 +164,15 @@ export function MapScreen() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    // pb-24 a propósito: BottomNavBar (CLAUDE.md sección 27) es `fixed`,
+    // así que no reserva espacio por sí sola en el flujo normal — sin este
+    // padding, el borde inferior de este contenedor (de donde cuelgan
+    // BusinessSummarySheet/MapFiltersSheet con `absolute bottom-0`, y
+    // hasta el propio mapa de Leaflet) quedaría debajo de la barra fija,
+    // no encima. FloatingActionStack no depende de esto — usa su propio
+    // prop `aboveBottomNav` porque es `fixed`, no `absolute` dentro de
+    // este contenedor.
+    <div className="flex flex-1 flex-col pb-24">
       {showLocationHint && (
         <p className="bg-ambar/10 px-4 py-2 font-sans text-body-sm text-text-muted">
           No pudimos acceder a tu ubicación. Mostrando negocios de Ciudad Verde — toca el botón de ubicación para
@@ -245,6 +253,7 @@ export function MapScreen() {
 
         {!selected && !filtersOpen && (
           <FloatingActionStack
+            aboveBottomNav
             primary={{
               icon: <Crosshair size={26} weight="fill" />,
               label: "Mi ubicación",

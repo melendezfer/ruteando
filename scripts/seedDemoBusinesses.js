@@ -46,7 +46,16 @@ const pool = require('../src/config/db');
 const { momentoActualBogota } = require('../src/services/disponibilidad.service');
 const { ORDEN_DIAS_DB } = require('../src/services/business.mapper');
 
-const CENTRO = { lat: 4.578, lng: -74.217 }; // Ciudad Verde, Soacha
+// Bug real encontrado y corregido (ver CLAUDE.md, "Corrección del centro
+// de siembra de demo"): (4.578, -74.217) es el centroide genérico del
+// municipio completo de Soacha (cae en Ubaté/Comuna San Humberto, cerca
+// de Cazucá/San Mateo), NO el barrio Ciudad Verde — verificado por
+// geocodificación inversa (Nominatim/OSM) antes de corregirlo, no una
+// suposición. Coordenada real de Ciudad Verde, verificada contra
+// Wikipedia (4°36′06″N 74°12′53″O) y confirmada por geocodificación
+// inversa como "Avenida Calle 33, Ciudad Verde, Comuna La Despensa,
+// Soacha".
+const CENTRO = { lat: 4.6083, lng: -74.2188 }; // Ciudad Verde, Soacha (barrio, no el municipio)
 const CONTRASENA_DEMO = 'password123';
 const TEXTO_VERSION_CONSENTIMIENTO = '1.0';
 
@@ -123,7 +132,14 @@ const NEGOCIOS = [
     nombreDueno: 'Carlos Alberto Mesa',
     telefono: '3001110005',
     distanciaM: 3000,
-    rumbo: 45, // noreste
+    // 45° (noreste) cruzaba a Bosa (Bogotá D.C.) con el centro corregido
+    // — verificado por geocodificación inversa antes de correr el reseed,
+    // no algo que se hubiera notado a ojo en el mapa. Ciudad Verde limita
+    // al oriente/noreste con Bosa (río Tunjuelo, quebrada Tibaníca, ver
+    // CLAUDE.md), así que 3 km en esa dirección exacta ya no cae en
+    // Soacha. 160° (sursureste) sí resuelve dentro de Soacha ("Comuna San
+    // Humberto"), lejos del río/humedal que bordea el sur/suroccidente.
+    rumbo: 160, // sursureste (evita Bosa, Bogotá — ver CLAUDE.md)
     cerradoHoy: true,
   },
 ];

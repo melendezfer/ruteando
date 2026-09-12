@@ -1688,6 +1688,58 @@ Si se corre el script otro día de la semana, cuáles negocios aparecen
   volver a limpiar selectivamente. `negocios` sí cascadea
   (ubicaciones/horarios/fotos), así que no necesita el mismo cuidado.
 
+### Corrección del centro de siembra (2026-09-12, `fix/centro-ciudad-verde-seed-demo`)
+
+**Bug real, encontrado por el usuario al comparar las distancias mostradas
+en la pantalla de inicio contra lo que el script decía haber sembrado**:
+`CENTRO` estaba en `(4.578, -74.217)` — verificado por geocodificación
+inversa (Nominatim/OSM) que esa coordenada es "Carrera 3, Ubaté, Comuna
+San Humberto, Soacha ciudad", es decir, el **centroide genérico del
+municipio completo de Soacha** (cerca de Cazucá/San Mateo), no el barrio
+Ciudad Verde. Corregido a `(4.6083, -74.2188)` — verificado contra
+Wikipedia (Ciudad Verde: 4°36′06″N 74°12′53″O, dentro del mismo orden de
+magnitud) y confirmado por geocodificación inversa como "Avenida Calle
+33, Ciudad Verde, Comuna La Despensa, Soacha ciudad".
+
+**Efecto secundario real, no solo un ajuste de coordenada**: recentrar
+expuso que el rumbo de "Empanadas El Fogón" (45°, noreste, a 3000 m)
+cruzaba a **Bosa, Bogotá D.C.** — verificado por geocodificación inversa
+antes de correr el reseed, no algo que se hubiera notado a ojo en el
+mapa. Ciudad Verde limita al oriente/noreste/suroriente con la localidad
+de Bosa (río Tunjuelo, quebrada Tibaníca) y al sur/suroccidente con el
+río Soacha y el humedal Chucuita (ver
+[Wikipedia, Ciudad Verde](https://es.wikipedia.org/wiki/Ciudad_Verde)) —
+un desplazamiento de 3 km desde un punto tan cerca del borde norte del
+barrio sale del municipio o de la zona urbana en la mayoría de
+direcciones. Se cambió el rumbo de ese negocio a 160° (sursureste), que
+sí resuelve dentro de Soacha ("Calle 24A Bis, Camilo Torres II, Comuna
+San Humberto, Soacha ciudad") — la distancia (3000 m) no cambió, solo la
+dirección. Los otros 4 rumbos (0°/90°/180°/270°, a 250/350/900/1400 m) se
+verificaron uno por uno con el nuevo centro y los 3 más cercanos siguen
+resolviendo dentro de "Ciudad Verde, Comuna La Despensa"; el de 1400 m
+(oeste) cae ya en "Ciudad Verde, Bosatama, Corregimiento 2 Norte" —
+fuera del polígono estrecho del barrio pero todavía dentro de Soacha, sin
+tocar el río/humedal que bordea esa zona más al suroccidente.
+
+**Verificado, no asumido**: las 5 coordenadas resultantes se revisaron con
+`ST_Distance` contra el nuevo centro (`docker exec ruteando-db-1 psql`)
+confirmando 248/350/894/1400/2982 m — la pequeña diferencia frente a los
+250/350/900/1400/3000 m nominales es el mismo margen de aproximación
+plano que ya tenía el script antes de este fix (`desplazar()` no usa la
+fórmula esférica exacta, aceptable a esta escala, <5 km). `npm run
+seed:demo` se corrió de nuevo contra la base de desarrollo para
+reemplazar los datos sembrados con el centro viejo.
+
+**Límite reconocido**: "dentro de los límites reales de Ciudad Verde
+(carreras 24-40, calles 10a-diagonal 38)" solo se cumple literalmente
+para los 3 negocios más cercanos (250/350/900 m) — el barrio mismo mide
+del orden de 1.5×2.5 km, así que los negocios a 1.4 km y 3 km, por
+diseño, caen fuera de ese polígono estrecho en cualquier dirección; lo
+que se verificó y corrigió es que sigan dentro del municipio de Soacha y
+lejos de un río/humedal o de otro municipio (Bogotá, Mosquera — este
+último también descartado al probar rumbos hacia el noroeste antes de
+elegir 160°), no que quepan dentro del barrio.
+
 ## 26. Rediseño de reseñas: señal pública vs. retroalimentación privada
 
 Fuera del alcance original de los Documentos 05-15 (RF-015/016 no

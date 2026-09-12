@@ -118,11 +118,18 @@ router.post(
   validateBody(reviewInputSchema),
   controller.createReview,
 );
+// Rediseño de reseñas (ver CLAUDE.md): ya no existe una lista pública de
+// reseñas individuales — lo único público es el agregado
+// (BusinessProfile.averageRating/reviewCount). Esta ruta reemplaza a la
+// antigua GET /:businessId/reviews (pública): ahora requiere autenticación
+// y es solo para el dueño del negocio (autorización a nivel de objeto,
+// verificada en resenas.service.js#listarFeedbackPrivado).
 router.get(
-  '/:businessId/reviews',
+  '/:businessId/feedback',
   validarBusinessId,
+  authenticate,
   validateQuery(reviewListQuerySchema),
-  controller.listReviews,
+  controller.listFeedback,
 );
 
 router.post('/:businessId/favorite', validarBusinessId, authenticate, controller.markFavorite);

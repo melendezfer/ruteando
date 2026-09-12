@@ -397,8 +397,13 @@ components:
             reviewCount:
               type: integer
               description: >-
-                Solo cuenta reseñas aprobadas. La lista completa (paginada)
-                vive en GET /businesses/{businessId}/reviews.
+                Solo cuenta reseñas aprobadas. Estas dos son, a propósito,
+                la ÚNICA señal pública sobre reseñas (rediseño sin RF
+                asociado, ver CLAUDE.md) — no existe ninguna lista pública
+                de reseñas individuales ni de texto. La retroalimentación
+                por reseña (etiquetas + comentario) es privada, solo para
+                el dueño del negocio (GET /businesses/{businessId}/feedback)
+                y el equipo administrador.
             availabilityConfirmedAt:
               type: string
               format: date-time
@@ -421,14 +426,48 @@ components:
                 nocturnos que cruzan medianoche. El cliente nunca debe
                 recalcular esto por su cuenta.
 
+    ReviewTag:
+      description: >-
+        Catálogo fijo y corto de etiquetas rápidas de retroalimentación
+        (sin RF asociado, petición directa del usuario — ver CLAUDE.md).
+        Ninguna es obligatoria; una reseña puede llevar varias a la vez o
+        ninguna.
+      type: string
+      enum:
+        - hot_food
+        - cold_food
+        - good_service
+        - long_wait
+        - good_price
+        - high_price
+        - good_presentation
+        - small_portion
+
     Review:
+      description: >-
+        Solo visible para el propio autor (respuesta de POST y de GET
+        /users/me/reviews) o para el equipo administrador (cola de
+        moderación) — nunca para un tercero: no existe ningún endpoint que
+        devuelva un Review de otro usuario. `tags`/`privateComment` son la
+        retroalimentación privada del rediseño de reseñas (ver CLAUDE.md);
+        para lo que sí es público (agregado, sin autor ni texto), ver
+        BusinessProfile.averageRating/reviewCount y
+        GET /businesses/{businessId}/feedback (ReviewFeedback, anonimizado).
       type: object
       properties:
         id: { type: string, format: uuid }
         businessId: { type: string, format: uuid }
         userId: { type: string, format: uuid }
         rating: { type: integer, minimum: 1, maximum: 5 }
-        comment: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewTag' }
+        privateComment:
+          type: string
+          nullable: true
+          description: >-
+            Antes público ("comment"); ahora solo lo ve el dueño del
+            negocio y el equipo administrador — ver CLAUDE.md.
         moderationStatus: { type: string, enum: [pending, approved, rejected] }
         createdAt: { type: string, format: date-time }
 
@@ -444,12 +483,37 @@ components:
           properties:
             businessName: { type: string }
 
+    ReviewFeedback:
+      description: >-
+        GET /businesses/{businessId}/feedback ("Ideas de tus clientes para
+        mejorar") — a diferencia de Review, sin userId ni businessId: es
+        estructuralmente imposible identificar quién escribió cada aporte
+        desde esta forma (ver CLAUDE.md, rediseño de reseñas).
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewTag' }
+        privateComment: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
     ReviewInput:
       type: object
       required: [rating]
       properties:
         rating: { type: integer, minimum: 1, maximum: 5 }
-        comment: { type: string, maxLength: 1000 }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewTag' }
+          description: Opcional, sin duplicados.
+        privateComment:
+          type: string
+          maxLength: 1000
+          description: >-
+            Opcional y privado — solo lo ve el dueño del negocio y el
+            equipo administrador (ver CLAUDE.md).
 
     ModerationDecision:
       description: >-
@@ -908,16 +972,18 @@ paths:
 
   # Épica F6 (frontend): "mis reseñas" no tenía ninguna ruta — solo
   # existía GET /businesses/{businessId}/reviews (por negocio, solo
-  # aprobadas) y POST/DELETE de una reseña puntual. Se agrega acá junto
-  # con su definición OpenAPI, mismo criterio que RF-025 en la Épica 2.
+  # aprobadas — eliminada en el rediseño de reseñas, ver CLAUDE.md) y
+  # POST/DELETE de una reseña puntual. Se agrega acá junto con su
+  # definición OpenAPI, mismo criterio que RF-025 en la Épica 2.
   /users/me/reviews:
     get:
       tags: [Usuarios]
       summary: Listar las reseñas propias (Épica F6)
       description: >-
-        A diferencia de GET /businesses/{businessId}/reviews, no filtra
-        por moderationStatus — el autor ve sus propias reseñas sin
-        importar si están pending/approved/rejected, igual que ya puede
+        A diferencia de GET /businesses/{businessId}/feedback (privado,
+        solo el dueño del negocio), no filtra por moderationStatus — el
+        autor ve sus propias reseñas sin importar si están
+        pending/approved/rejected, igual que ya puede
         borrar cualquiera de ellas (DELETE /reviews/{reviewId}) sin ese
         filtro.
       parameters:
@@ -1407,17 +1473,32 @@ paths:
           description: Ya existe una reseña de este usuario para este negocio (RF-015)
           $ref: '#/components/responses/Conflict'
         '422': { $ref: '#/components/responses/ValidationError' }
+  /businesses/{businessId}/feedback:
     get:
       tags: [Reseñas]
-      summary: Listar reseñas aprobadas de un negocio
-      security: []
+      summary: >-
+        Retroalimentación privada de clientes ("Ideas para mejorar") — solo
+        el dueño del negocio
+      description: >-
+        Rediseño de reseñas (sin RF asociado, ver CLAUDE.md): reemplaza a la
+        antigua GET /businesses/{businessId}/reviews (pública, eliminada) —
+        lo único público sobre reseñas es el agregado
+        (BusinessProfile.averageRating/reviewCount). Esta ruta es privada,
+        solo para el dueño autenticado del negocio (403 para cualquier
+        otro usuario, autorización a nivel de objeto), y devuelve las
+        etiquetas y el comentario privado de cada reseña de forma
+        anonimizada (ReviewFeedback no incluye userId) — incluye reseñas
+        "pending" (el aporte llega de inmediato, sin esperar a que un
+        administrador la apruebe para el promedio público) y "approved",
+        pero no "rejected" (contenido que un administrador ya determinó
+        abusivo o inapropiado, RF-016).
       parameters:
         - { $ref: '#/components/parameters/BusinessId' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200':
-          description: Lista de reseñas
+          description: Retroalimentación privada del negocio
           content:
             application/json:
               schema:
@@ -1425,8 +1506,10 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/Review' }
+                    items: { $ref: '#/components/schemas/ReviewFeedback' }
                   pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
 

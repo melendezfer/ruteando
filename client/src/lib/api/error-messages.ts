@@ -110,3 +110,13 @@ export function getConfirmPhoneCodeErrorMessage(status: number | undefined): str
   if (status === 429) return "Demasiados intentos fallidos — solicita un código nuevo.";
   return GENERIC_ERROR;
 }
+
+/** POST /businesses/{businessId}/reviews (Épica F7, rediseño de reseñas). */
+export function getReviewSubmitErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No puedes calificar tu propio negocio.";
+  if (status === 404) return "No encontramos este negocio. Puede que ya no exista.";
+  if (status === 409) return "Ya calificaste este negocio antes.";
+  if (status === 422) return "Revisa la calificación e intenta de nuevo.";
+  return GENERIC_ERROR;
+}

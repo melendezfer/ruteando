@@ -3,7 +3,7 @@ const resenasRepo = require('../repositories/resenas.repository');
 const reportesResenaRepo = require('../repositories/reportesResena.repository');
 const negociosService = require('./negocios.service');
 const cursorUtil = require('../utils/cursor');
-const { toApiReview } = require('./business.mapper');
+const { toApiReview, toApiReviewFeedback, REVIEW_TAG_API_TO_DB } = require('./business.mapper');
 const {
   NotFoundError,
   ForbiddenError,
@@ -71,13 +71,16 @@ async function crear(usuarioId, negocioId, input) {
     throw new ForbiddenError('No puede reseñar su propio negocio');
   }
 
+  const etiquetas = (input.tags ?? []).map((tag) => REVIEW_TAG_API_TO_DB[tag]);
+
   let resena;
   try {
     resena = await resenasRepo.crear({
       negocioId,
       usuarioId,
       calificacion: input.rating,
-      comentario: input.comment,
+      etiquetas,
+      comentarioPrivado: input.privateComment,
     });
   } catch (err) {
     if (err.code === PG_UNIQUE_VIOLATION) {
@@ -89,17 +92,29 @@ async function crear(usuarioId, negocioId, input) {
   return toApiReview(resena);
 }
 
-async function listar(negocioId, { cursor, limit }) {
-  await negociosService.obtenerCrudoOFallar(negocioId);
+/**
+ * GET /businesses/{businessId}/feedback — solo el dueño del negocio
+ * (autorización a nivel de objeto, regla de seguridad #2): "Ideas de tus
+ * clientes para mejorar", anonimizada (toApiReviewFeedback no incluye
+ * userId ni businessId). Reemplaza a la antigua listar() pública — ver
+ * CLAUDE.md, rediseño de reseñas.
+ */
+async function listarFeedbackPrivado(usuarioId, negocioId, { cursor, limit }) {
+  const negocio = await negociosService.obtenerCrudoOFallar(negocioId);
+  negociosService.verificarPropietario(negocio, usuarioId);
   const cursorDecodificado = decodificarCursor(cursor);
 
-  const filas = await resenasRepo.listarAprobadas({ negocioId, cursor: cursorDecodificado, limit });
+  const filas = await resenasRepo.listarFeedbackPrivado({
+    negocioId,
+    cursor: cursorDecodificado,
+    limit,
+  });
   const hasMore = filas.length > limit;
   const pagina = hasMore ? filas.slice(0, limit) : filas;
   const ultima = pagina[pagina.length - 1];
 
   return {
-    data: pagina.map(toApiReview),
+    data: pagina.map(toApiReviewFeedback),
     pagination: {
       nextCursor:
         hasMore && ultima
@@ -164,7 +179,7 @@ async function reportar(usuarioId, id) {
 
 module.exports = {
   crear,
-  listar,
+  listarFeedbackPrivado,
   listarPorUsuario,
   eliminar,
   reportar,

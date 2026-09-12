@@ -15,6 +15,15 @@ interface FloatingActionStackProps {
   primary: FloatingAction | null;
   /** Acción secundaria — círculo más chico (h-12 w-12), con borde, apilada encima de la principal. */
   secondary?: FloatingAction | null;
+  /**
+   * true cuando la pantalla que llama también monta `BottomNavBar`
+   * (CLAUDE.md sección 27) — sube el stack de `bottom-6` a `bottom-24`
+   * para que la barra fija de navegación no le quede encima. Hoy solo
+   * `MapScreen` combina las dos cosas (el perfil de negocio, el otro
+   * lugar que usa este componente, nunca lleva `BottomNavBar` — ver
+   * `BackButton`/CLAUDE.md sección 27).
+   */
+  aboveBottomNav?: boolean;
 }
 
 /**
@@ -27,11 +36,13 @@ interface FloatingActionStackProps {
  * componente en ambos casos, solo cambian los `FloatingAction` que
  * recibe.
  */
-export function FloatingActionStack({ primary, secondary }: FloatingActionStackProps) {
+export function FloatingActionStack({ primary, secondary, aboveBottomNav = false }: FloatingActionStackProps) {
   if (!primary && !secondary) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-3">
+    <div
+      className={`fixed right-6 z-40 flex flex-col items-center gap-3 ${aboveBottomNav ? "bottom-24" : "bottom-6"}`}
+    >
       {secondary && (
         <FloatingActionButton
           action={secondary}

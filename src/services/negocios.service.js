@@ -92,6 +92,7 @@ async function crear(usuarioId, input) {
     nombre: input.name,
     descripcion: input.description,
     telefonoContacto: input.contactPhone,
+    entregaPropia: input.ownDelivery ?? false,
   });
 
   return toApiBusiness(negocio);
@@ -113,6 +114,7 @@ async function actualizar(usuarioId, id, input) {
     descripcion: input.description !== undefined ? input.description : negocio.descripcion,
     telefonoContacto:
       input.contactPhone !== undefined ? input.contactPhone : negocio.telefono_contacto,
+    entregaPropia: input.ownDelivery !== undefined ? input.ownDelivery : negocio.entrega_propia,
   });
 
   return toApiBusiness(actualizado);

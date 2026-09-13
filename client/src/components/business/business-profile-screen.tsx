@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CookingPot, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import { CookingPot, Moped, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
@@ -12,6 +12,7 @@ import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
+import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -91,6 +92,12 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
         {profile.location?.referenceAddress && (
           <p className="font-sans text-body-sm text-text-muted">{profile.location.referenceAddress}</p>
         )}
+        {profile.ownDelivery && (
+          <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
+            <Moped size={16} weight="bold" />
+            Hace domicilios propios
+          </span>
+        )}
       </div>
 
       {isOwner && !phoneVerified && profile.id && (
@@ -108,6 +115,19 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
           <LocationVisibilityToggle
             businessId={profile.id}
             initialShowExactLocation={Boolean(profile.location.showExactLocation)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && profile.name != null && profile.categoryId != null && (
+        <div className="px-5 pb-4">
+          <OwnDeliveryToggle
+            businessId={profile.id}
+            name={profile.name}
+            description={profile.description ?? null}
+            categoryId={profile.categoryId}
+            contactPhone={profile.contactPhone ?? null}
+            initialOwnDelivery={Boolean(profile.ownDelivery)}
           />
         </div>
       )}

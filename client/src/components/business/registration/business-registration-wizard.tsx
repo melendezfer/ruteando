@@ -36,7 +36,13 @@ const SELF_STEP_NUMBER: Record<Exclude<SelfStep, "done">, number> = {
 };
 const SELF_STEP_TOTAL = 3;
 
-const EMPTY_DETAILS: BusinessDetailsValues = { name: "", description: "", categoryId: "", contactPhone: "" };
+const EMPTY_DETAILS: BusinessDetailsValues = {
+  name: "",
+  description: "",
+  categoryId: "",
+  contactPhone: "",
+  ownDelivery: false,
+};
 const EMPTY_LOCATION: BusinessLocationValues = {
   type: "fixed",
   referenceAddress: "",
@@ -139,6 +145,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
       categoryId: values.categoryId,
       description: values.description.trim() ? values.description.trim() : undefined,
       contactPhone: values.contactPhone.trim() ? values.contactPhone.trim() : undefined,
+      ownDelivery: values.ownDelivery,
     };
 
     const { data, error: apiError, response } = businessId

@@ -179,6 +179,16 @@ components:
             GET /businesses ni GET /businesses/nearby, sin importar su
             `status`. No es un dato sensible: visible para cualquiera,
             igual que `status`.
+        ownDelivery:
+          type: boolean
+          description: >-
+            El vendedor mismo hace entregas a domicilio de su producto
+            (petición directa del usuario, sin RF asociado — ver
+            CLAUDE.md). La plataforma no intermedia esa logística ni ese
+            pago (sección 0/15 de CLAUDE.md) — es solo información
+            declarada por el negocio. No es un dato sensible: visible
+            para cualquiera, igual que `status`/`phoneVerified`. Default
+            `false` cuando no se manda en BusinessInput.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         latitude:
@@ -222,6 +232,15 @@ components:
         description: { type: string }
         categoryId: { type: integer }
         contactPhone: { type: string }
+        ownDelivery:
+          type: boolean
+          description: >-
+            El vendedor mismo hace entregas a domicilio de su producto
+            (ver CLAUDE.md). Opcional, sin `default` declarado a
+            propósito (a diferencia de LocationInput.showExactLocation):
+            en POST, omitirlo equivale a `false`; en PATCH, omitirlo
+            conserva el valor existente del negocio en vez de
+            restablecerlo — mismo criterio que `description`/`contactPhone`.
 
     AssistedRegistrationInput:
       description: >-

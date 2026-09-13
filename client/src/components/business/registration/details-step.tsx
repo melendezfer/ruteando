@@ -12,6 +12,7 @@ export interface BusinessDetailsValues {
   description: string;
   categoryId: number | "";
   contactPhone: string;
+  ownDelivery: boolean;
 }
 
 interface DetailsStepProps {
@@ -26,17 +27,23 @@ interface DetailsStepProps {
 
 /**
  * Paso 1 del asistente de registro (RF-004): nombre, categoría,
- * descripción y teléfono de contacto — los campos exactos de
- * BusinessInput, sin agregar ninguno que el contrato no pida (RNF-013,
- * flujo corto).
+ * descripción, teléfono de contacto y "hago domicilios propios" — los
+ * campos exactos de BusinessInput, sin agregar ninguno que el contrato no
+ * pida (RNF-013, flujo corto).
+ *
+ * ownDelivery (petición directa del usuario, sin RF asociado — ver
+ * CLAUDE.md) es opcional y sin default visual propio: arranca sin marcar
+ * (el mismo default `false` que aplica el backend si no se manda). Tras
+ * el registro se puede cambiar desde el perfil del negocio
+ * (OwnDeliveryToggle, business-profile-screen.tsx) sin repetir todo este
+ * formulario.
  *
  * contactPhone es `required` acá aunque BusinessInput lo declara
  * opcional en el backend (y sigue siéndolo para otros llamadores, ej.
  * registro asistido) — sin él no hay forma de completar la verificación
  * de teléfono (ver CLAUDE.md), y este asistente es hoy el único camino
  * que tiene un vendedor para registrar su propio negocio, así que
- * exigirlo acá evita dejarlo sin ninguna forma de agregarlo después (no
- * existe todavía una pantalla de "editar negocio" fuera de este flujo).
+ * exigirlo acá evita dejarlo sin ninguna forma de agregarlo después.
  */
 export function DetailsStep({
   categories,
@@ -51,10 +58,11 @@ export function DetailsStep({
   const [description, setDescription] = useState(initialValues.description);
   const [categoryId, setCategoryId] = useState<number | "">(initialValues.categoryId);
   const [contactPhone, setContactPhone] = useState(initialValues.contactPhone);
+  const [ownDelivery, setOwnDelivery] = useState(initialValues.ownDelivery);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit({ name, description, categoryId, contactPhone });
+    onSubmit({ name, description, categoryId, contactPhone, ownDelivery });
   }
 
   return (
@@ -123,6 +131,19 @@ export function DetailsStep({
         Es el mismo número que verán tus clientes en WhatsApp — también lo vamos a verificar por SMS
         antes de que tu negocio aparezca en el mapa.
       </p>
+
+      <label className="flex items-start gap-2 font-sans text-body-sm text-text">
+        <input
+          type="checkbox"
+          checked={ownDelivery}
+          onChange={(event) => setOwnDelivery(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">Hago domicilios propios</span> — yo mismo entrego mi producto a
+          domicilio (Ruteando no gestiona ni cobra esa entrega).
+        </span>
+      </label>
 
       {error && <p className="font-sans text-body-sm text-rojo">{error}</p>}
 

@@ -25,6 +25,12 @@
  * redondeada a ~111 m de "zona aproximada" — para que las distancias
  * pedidas (200 m, 900 m, 3 km...) se puedan verificar a ojo.
  *
+ * entregaPropia mezclado a propósito (3 en true, 2 en false) — campo
+ * nuevo sin RF asociado (ver CLAUDE.md, "Hace domicilios propios"): la
+ * mezcla es lo que permite verificar a ojo, en el mismo mapa, que la
+ * etiqueta del perfil público aparece para unos negocios y no para
+ * otros, sin tener que sembrar datos aparte para probarlo.
+ *
  * El horario de cada negocio se calcula respecto al día de HOY en hora
  * de Bogotá (momentoActualBogota, mismo helper que ya usa
  * disponibilidad.service.js): los negocios marcados "cerrado ahora"
@@ -86,6 +92,7 @@ const NEGOCIOS = [
     distanciaM: 250,
     rumbo: 0, // norte
     cerradoHoy: false,
+    entregaPropia: true,
   },
   {
     slug: 'perros-el-parche',
@@ -98,6 +105,7 @@ const NEGOCIOS = [
     distanciaM: 350,
     rumbo: 90, // este
     cerradoHoy: false,
+    entregaPropia: false,
   },
   {
     slug: 'dulces-la-abuela',
@@ -110,6 +118,7 @@ const NEGOCIOS = [
     distanciaM: 900,
     rumbo: 180, // sur
     cerradoHoy: true,
+    entregaPropia: true,
   },
   {
     slug: 'jugos-frutti-verde',
@@ -122,6 +131,7 @@ const NEGOCIOS = [
     distanciaM: 1400,
     rumbo: 270, // oeste
     cerradoHoy: false,
+    entregaPropia: false,
   },
   {
     slug: 'empanadas-el-fogon',
@@ -141,6 +151,7 @@ const NEGOCIOS = [
     // Humberto"), lejos del río/humedal que bordea el sur/suroccidente.
     rumbo: 160, // sursureste (evita Bosa, Bogotá — ver CLAUDE.md)
     cerradoHoy: true,
+    entregaPropia: true,
   },
 ];
 
@@ -198,10 +209,10 @@ async function sembrar() {
     const categoriaId = categoria.rows[0].id;
 
     const negocio = await pool.query(
-      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado)
-       VALUES ($1, $2, $3, $4, 'activo', $5, true)
+      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia)
+       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6)
        RETURNING id`,
-      [usuarioId, categoriaId, n.nombre, n.descripcion, n.telefono],
+      [usuarioId, categoriaId, n.nombre, n.descripcion, n.telefono, n.entregaPropia],
     );
     const negocioId = negocio.rows[0].id;
 
@@ -247,6 +258,7 @@ async function sembrar() {
       categoria: n.categoria,
       distanciaM: n.distanciaM,
       estadoAhora: n.cerradoHoy ? 'cerrado hoy' : 'abierto ahora',
+      entregaPropia: n.entregaPropia,
       correo: n.correo,
       whatsapp: n.telefono,
     });
@@ -258,7 +270,8 @@ async function sembrar() {
   console.log('\n=== Negocios de demo sembrados (Ciudad Verde, Soacha) ===\n');
   for (const r of resumen) {
     console.log(
-      `- ${r.nombre} [${r.categoria}] — ~${r.distanciaM} m, ${r.estadoAhora}\n` +
+      `- ${r.nombre} [${r.categoria}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
+        `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}\n` +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,
     );
   }

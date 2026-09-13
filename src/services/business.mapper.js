@@ -85,6 +85,12 @@ function toApiBusiness(row) {
     // rejectionReason): cualquiera puede ver si un negocio ya verificó
     // su teléfono o no.
     phoneVerified: Boolean(row.telefono_verificado),
+    // Entrega a domicilio hecha por el propio vendedor (petición directa
+    // del usuario, sin RF asociado — ver CLAUDE.md): la plataforma no
+    // intermedia esa logística ni ese pago, solo lo muestra como
+    // información declarada por el negocio. No es un dato sensible —
+    // visible para cualquiera, igual que status/phoneVerified.
+    ownDelivery: Boolean(row.entrega_propia),
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
     // Presentes solo cuando la consulta que produjo esta fila hizo el

@@ -1,12 +1,19 @@
 const pool = require('../config/db');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 
-async function crear({ usuarioId, categoriaId, nombre, descripcion, telefonoContacto }) {
+async function crear({
+  usuarioId,
+  categoriaId,
+  nombre,
+  descripcion,
+  telefonoContacto,
+  entregaPropia,
+}) {
   const { rows } = await pool.query(
-    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto, entrega_propia)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [usuarioId, categoriaId, nombre, descripcion ?? null, telefonoContacto ?? null],
+    [usuarioId, categoriaId, nombre, descripcion ?? null, telefonoContacto ?? null, entregaPropia],
   );
   return rows[0];
 }
@@ -25,15 +32,19 @@ async function buscarPorId(id) {
  * número real (o de un número a NULL) también cuente como "cambió", sin
  * el caso especial que `=` tendría con NULL.
  */
-async function actualizar(id, { categoriaId, nombre, descripcion, telefonoContacto }) {
+async function actualizar(
+  id,
+  { categoriaId, nombre, descripcion, telefonoContacto, entregaPropia },
+) {
   const { rows } = await pool.query(
     `UPDATE negocios
      SET categoria_id = $2, nombre = $3, descripcion = $4, telefono_contacto = $5,
          telefono_verificado = (telefono_verificado AND telefono_contacto IS NOT DISTINCT FROM $5::varchar),
+         entrega_propia = $6,
          fecha_actualizacion = now()
      WHERE id = $1
      RETURNING *`,
-    [id, categoriaId, nombre, descripcion ?? null, telefonoContacto ?? null],
+    [id, categoriaId, nombre, descripcion ?? null, telefonoContacto ?? null, entregaPropia],
   );
   return rows[0];
 }

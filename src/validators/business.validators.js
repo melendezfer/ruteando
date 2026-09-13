@@ -7,6 +7,12 @@ const businessInputSchema = z.object({
   // es arbitrario, es el rango real de la columna.
   categoryId: z.coerce.number().int().positive().max(32767),
   contactPhone: z.string().max(20).nullable().optional(),
+  // Sin .default() a propósito, mismo criterio que productInputSchema
+  // (available) — un PATCH que no menciona ownDelivery debe conservar el
+  // valor existente, no reactivarlo/desactivarlo en silencio. El default
+  // real de creación (false) se aplica en negocios.service.js#crear, no
+  // acá.
+  ownDelivery: z.boolean().optional(),
 });
 
 // Caja envolvente de Cundinamarca (regla de seguridad #6: "idealmente un

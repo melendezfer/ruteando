@@ -7,7 +7,7 @@ async function existePorId(id) {
 
 async function listar() {
   const { rows } = await pool.query(
-    'SELECT id, nombre, icono, orden_visualizacion FROM categorias ORDER BY orden_visualizacion, nombre',
+    'SELECT id, nombre, icono, orden_visualizacion, tipo FROM categorias ORDER BY orden_visualizacion, nombre',
   );
   return rows;
 }

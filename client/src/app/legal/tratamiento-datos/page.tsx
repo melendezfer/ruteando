@@ -11,8 +11,8 @@ export default function DataProcessingPolicyPage() {
       </header>
 
       <p className="font-sans text-body text-text">
-        Ruteando conecta consumidores con vendedores de comida callejera y gastronomía informal en Ciudad
-        Verde, Soacha. Para prestar ese servicio recolectamos algunos datos personales, siempre con tu
+        Ruteando conecta consumidores con vendedores de comercio informal (comida callejera, productos y
+        servicios) en Ciudad Verde, Soacha. Para prestar ese servicio recolectamos algunos datos personales, siempre con tu
         consentimiento previo, expreso e informado, conforme a la Ley 1581 de 2012 de Colombia.
       </p>
 

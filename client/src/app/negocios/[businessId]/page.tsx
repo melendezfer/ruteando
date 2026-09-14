@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { BusinessProfileScreen } from "@/components/business/business-profile-screen";
+import type { CatalogType } from "@/lib/catalog/catalog-label";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
+type Category = components["schemas"]["Category"];
 
 interface PageParams {
   businessId: string;
@@ -32,10 +34,16 @@ async function getBusinessProfile(businessId: string): Promise<BusinessProfile |
   return data;
 }
 
-async function getCategoryName(categoryId: number | null | undefined): Promise<string | null> {
+/**
+ * Devuelve la categoría completa (no solo el nombre) — desde la
+ * expansión de alcance (CLAUDE.md sección 31), `type` decide cómo se
+ * rotula la sección de contenido del perfil (Menú/Productos/Servicios,
+ * ver catalog-label.ts), no solo el nombre visible bajo el título.
+ */
+async function getCategory(categoryId: number | null | undefined): Promise<Category | null> {
   if (categoryId == null) return null;
   const { data } = await api.GET("/categories", { cache: "no-store" });
-  return data?.find((category) => category.id === categoryId)?.name ?? null;
+  return data?.find((category) => category.id === categoryId) ?? null;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -48,7 +56,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const heroPhotoUrl = profile.photos?.find((photo) => photo.type === "business")?.url;
   const ratingText = profile.averageRating != null ? ` — ${profile.averageRating.toFixed(1)}★` : "";
-  const description = `Comida callejera en Ciudad Verde, Soacha${ratingText}. Contáctalos directo por WhatsApp en Ruteando.`;
+  // Sin "Comida callejera" fijo (expansión de alcance, CLAUDE.md sección
+  // 31) — la vista previa de WhatsApp ya no puede asumir que todo
+  // negocio es gastronómico.
+  const description = `Comercio informal en Ciudad Verde, Soacha${ratingText}. Contáctalos directo por WhatsApp en Ruteando.`;
   const title = `${profile.name ?? "Negocio"} — Ruteando`;
 
   return {
@@ -68,7 +79,13 @@ export default async function BusinessProfilePage({ params }: PageProps) {
 
   if (!profile) notFound();
 
-  const categoryName = await getCategoryName(profile.categoryId);
+  const category = await getCategory(profile.categoryId);
 
-  return <BusinessProfileScreen profile={profile} categoryName={categoryName} />;
+  return (
+    <BusinessProfileScreen
+      profile={profile}
+      categoryName={category?.name ?? null}
+      catalogType={(category?.type as CatalogType | undefined) ?? null}
+    />
+  );
 }

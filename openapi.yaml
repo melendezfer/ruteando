@@ -1,11 +1,13 @@
 openapi: 3.1.0
 info:
-  title: API RUTEANDO — Plataforma de Geolocalización Gastronómica de Ciudad Verde
+  title: API RUTEANDO — Plataforma de Geolocalización de Comercio Informal de Ciudad Verde
   version: '1.0.0'
   description: >
-    API REST para el descubrimiento de vendedores gastronómicos
-    informales en Ciudad Verde, Soacha. Ver Documento 07 (modelo
-    de datos) y Documento 05 (requisitos funcionales).
+    API REST para el descubrimiento de vendedores de comercio informal
+    (gastronómico y no gastronómico — ver CLAUDE.md sección 31) en
+    Ciudad Verde, Soacha. Ver Documento 07 (modelo de datos) y Documento
+    05 (requisitos funcionales) para el alcance original, exclusivamente
+    gastronómico.
 servers:
   - url: https://api.ciudadverdegastronomica.co/v1
     description: Producción
@@ -160,6 +162,20 @@ components:
         name: { type: string }
         icon: { type: string, nullable: true }
         displayOrder: { type: integer }
+        type:
+          type: string
+          enum: [food, goods, services]
+          description: >-
+            Expansión de alcance sin RF asociado (ver CLAUDE.md sección
+            31): distingue qué tan genérico es el catálogo de un negocio
+            de esta categoría — `food` (comida, el alcance original del
+            proyecto) muestra su catálogo como "Menú"; `goods` (bienes
+            físicos no gastronómicos, ej. artesanías) como "Productos";
+            `services` (ej. costura/sastrería, asesoría legal básica)
+            como "Servicios". No cambia la forma de los datos
+            subyacentes (Product sigue siendo nombre/descripción/precio/
+            disponible/foto para los tres) — solo cómo se presenta la
+            sección de contenido del perfil público.
 
     Business:
       type: object
@@ -1049,7 +1065,7 @@ paths:
   /categories:
     get:
       tags: [Categorías]
-      summary: Listar categorías gastronómicas
+      summary: Listar categorías de comercio informal (gastronómico y no gastronómico)
       security: []
       responses:
         '200':
@@ -1326,7 +1342,10 @@ paths:
   /businesses/{businessId}/products:
     post:
       tags: [Productos]
-      summary: Agregar un producto al menú
+      summary: >-
+        Agregar un ítem al catálogo del negocio (un plato del menú, un
+        producto o un servicio, según el tipo de categoría — ver
+        Category.type)
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       requestBody:
         required: true
@@ -1345,7 +1364,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     get:
       tags: [Productos]
-      summary: Listar el menú de un negocio
+      summary: Listar el catálogo de un negocio (menú, productos o servicios)
       security: []
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:

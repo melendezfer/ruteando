@@ -1,6 +1,26 @@
 const pool = require('../config/db');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 const { ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES } = require('../config/constants');
+const env = require('../config/env');
+
+// TEMPORAL, SOLO DESARROLLO — ver CLAUDE.md sección 21 y el comentario
+// completo en src/config/env.js. `env.NODE_ENV === 'development'` se
+// repite acá aunque env.js ya lo valida al arrancar (su .refine() hace
+// fallar el proceso si SKIP_PHONE_VERIFICATION_CHECK='true' fuera de
+// development) — defensa en profundidad: este archivo nunca confía en
+// que esa variable ya llegó "segura", vuelve a comprobar el ambiente él
+// mismo antes de relajar el filtro.
+const SALTAR_VERIFICACION_TELEFONO =
+  env.NODE_ENV === 'development' && env.SKIP_PHONE_VERIFICATION_CHECK;
+
+/**
+ * `listar()`, `construirConsultaCercanos()` y `clusterizar()` comparten
+ * este mismo criterio de visibilidad — un solo lugar que decide si la
+ * cláusula real de verificación de teléfono aplica o se saltea.
+ */
+function clausulaTelefonoVerificado() {
+  return SALTAR_VERIFICACION_TELEFONO ? 'true' : 'n.telefono_verificado = true';
+}
 
 async function crear({
   usuarioId,
@@ -252,7 +272,9 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
   // el teléfono de contacto por SMS. GET /businesses/{businessId} (perfil
   // por id directo) NO tiene este filtro a propósito: ahí es donde el
   // propio dueño ve el estado "pendiente de verificación" de su negocio.
-  const clausulas = [`n.estado = 'activo'`, `n.telefono_verificado = true`];
+  // clausulaTelefonoVerificado() la saltea con SKIP_PHONE_VERIFICATION_CHECK
+  // (solo development, ver cabecera de este archivo).
+  const clausulas = [`n.estado = 'activo'`, clausulaTelefonoVerificado()];
   const params = [];
 
   agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
@@ -316,7 +338,7 @@ function construirConsultaCercanos({
   limit,
 }) {
   // Ver el comentario equivalente en listar() sobre telefono_verificado.
-  const clausulas = [`n.estado = 'activo'`, `n.telefono_verificado = true`];
+  const clausulas = [`n.estado = 'activo'`, clausulaTelefonoVerificado()];
   const params = [lng, lat]; // $1, $2 — el punto objetivo
   params.push(radiusKm * 1000); // $3 — radio en metros
   clausulas.push(`ST_DWithin(u.punto, objetivo.punto, $3)`);
@@ -409,7 +431,7 @@ async function clusterizar({ lat, lng, radiusKm }) {
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
      CROSS JOIN objetivo
-     WHERE n.estado = 'activo' AND n.telefono_verificado = true
+     WHERE n.estado = 'activo' AND ${clausulaTelefonoVerificado()}
        AND ST_DWithin(u.punto, objetivo.punto, $3)`,
     [lng, lat, radiusKm * 1000, ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES],
   );
@@ -426,6 +448,11 @@ module.exports = {
   cercanos,
   explicarCercanos,
   clusterizar,
+  // Exportada solo para tests unitarios (ver
+  // tests/unit/negocios.repository.test.js) — sin esto, probar
+  // SKIP_PHONE_VERIFICATION_CHECK exigiría ejecutar una consulta real
+  // contra Postgres solo para inspeccionar un fragmento de SQL.
+  clausulaTelefonoVerificado,
   escaparComodinesLike,
   listarPendientes,
   aprobar,

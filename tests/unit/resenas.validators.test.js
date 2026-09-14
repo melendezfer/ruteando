@@ -47,8 +47,8 @@ describe('reviewInputSchema', () => {
     ).toBe(false);
   });
 
-  it('acepta las 8 etiquetas del catálogo a la vez, sin repetir', () => {
-    expect(REVIEW_TAG_API_VALUES).toHaveLength(8);
+  it('acepta las 15 etiquetas del catálogo a la vez, sin repetir (4 genéricas + 4 de alimentos + 3 de productos + 4 de servicios — ver CLAUDE.md sección 31/32)', () => {
+    expect(REVIEW_TAG_API_VALUES).toHaveLength(15);
     expect(reviewInputSchema.safeParse({ rating: 4, tags: REVIEW_TAG_API_VALUES }).success).toBe(
       true,
     );

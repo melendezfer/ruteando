@@ -204,19 +204,36 @@ const MODERATION_STATUS_DB_TO_API = {
   rechazada: 'rejected',
 };
 
-// Catálogo fijo de etiquetas rápidas de reseñas (petición directa del
+// Catálogo de etiquetas rápidas de reseñas (petición directa del
 // usuario, sin RF asociado — ver CLAUDE.md, "retroalimentación privada").
-// Corto a propósito y sin pretender ser exhaustivo: cubre lo más común en
-// comida callejera, no cada posible matiz.
+// Corto a propósito y sin pretender ser exhaustivo: cubre lo más común
+// en cada rubro, no cada posible matiz. Ampliado en la expansión a
+// comercio no gastronómico (sección 31/32 de CLAUDE.md): las primeras 4
+// son genéricas (cualquier tipo de negocio); las siguientes se
+// muestran solo para el tipo de categoría que corresponde — ver
+// client/src/lib/reviews/review-tags.ts, el único lugar del frontend
+// que decide cuáles chips mostrar según Category.type.
 const REVIEW_TAG_DB_TO_API = {
-  comida_caliente: 'hot_food',
-  comida_fria: 'cold_food',
+  // Genéricas — cualquier tipo de negocio.
   buen_trato: 'good_service',
   espera_larga: 'long_wait',
   buen_precio: 'good_price',
   precio_alto: 'high_price',
+  // Solo `alimentos`.
+  comida_caliente: 'hot_food',
+  comida_fria: 'cold_food',
   buena_presentacion: 'good_presentation',
   poca_cantidad: 'small_portion',
+  // Solo `productos` (bienes no gastronómicos, ej. artesanías) —
+  // buena_presentacion (arriba) también aplica acá, se reusa.
+  buena_calidad: 'good_quality',
+  mala_calidad: 'poor_quality',
+  no_como_se_esperaba: 'not_as_described',
+  // Solo `servicios` (ej. costura/sastrería, asesoría legal básica).
+  buen_asesoramiento: 'knowledgeable',
+  no_resolvio_problema: 'did_not_solve_problem',
+  puntual: 'punctual',
+  impuntual: 'late',
 };
 
 const REVIEW_TAG_API_TO_DB = Object.fromEntries(

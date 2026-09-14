@@ -5,11 +5,18 @@ import { Star, HandHeart } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import { logReviewCreatedEvent } from "@/lib/api/events";
 import { getReviewSubmitErrorMessage } from "@/lib/api/error-messages";
-import { REVIEW_TAGS, REVIEW_TAG_LABELS, type ReviewTag } from "@/lib/reviews/review-tags";
+import { REVIEW_TAG_LABELS, resolveReviewTags, type ReviewTag } from "@/lib/reviews/review-tags";
+import type { CatalogType } from "@/lib/catalog/catalog-label";
 import { Button } from "@/components/ui/button";
 
 interface ReviewFormProps {
   businessId: string;
+  /**
+   * Corrige un bug real (ver CLAUDE.md sección 31/32): sin esto, el
+   * catálogo de chips de "¿Algo puntual?" mostraba siempre las etiquetas
+   * de comida, sin importar el tipo de negocio.
+   */
+  catalogType: CatalogType | null;
 }
 
 type Stage = "form" | "submitted" | "already_reviewed";
@@ -33,7 +40,8 @@ const RATING_LABELS: Record<number, string> = {
  * transaccional ("calificación enviada") a propósito: quiere sentirse
  * como un aporte a la comunidad, no como completar un formulario.
  */
-export function ReviewForm({ businessId }: ReviewFormProps) {
+export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
+  const reviewTags = resolveReviewTags(catalogType);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [tags, setTags] = useState<ReviewTag[]>([]);
@@ -142,7 +150,7 @@ export function ReviewForm({ businessId }: ReviewFormProps) {
               ¿Algo puntual? (opcional, privado)
             </p>
             <div className="flex flex-wrap gap-2">
-              {REVIEW_TAGS.map((tag) => {
+              {reviewTags.map((tag) => {
                 const active = tags.includes(tag);
                 return (
                   <button

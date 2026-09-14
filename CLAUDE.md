@@ -2945,3 +2945,338 @@ servidor de desarrollo real, con los datos reales sembrados de arriba):
   visual (una zona real de DBSCAN no es necesariamente circular) — no
   es una representación geométrica exacta del cluster, es una señal de
   "por acá hay una aglomeración", suficiente para el propósito.
+
+## 33. Carga de fotos desde el frontend, y corrección del catálogo de etiquetas de reseñas
+
+Dos funcionalidades sin épica/RF asociado hasta ahora, pedidas juntas —
+propia rama (`feature/carga-fotos-frontend`). La primera cierra un gap
+real: el backend de fotos (Épica 3) existía completo desde hace mucho,
+pero **nunca hubo ninguna forma de usarlo desde la web** — ni en el
+asistente de registro ni en el perfil de negocio. La segunda corrige un
+bug ya documentado como gap conocido (sección 31).
+
+### Carga de fotos — negocio y catálogo
+
+`PhotoUploadControl` (nuevo, `client/src/components/business/photo-upload-control.tsx`)
+es el único componente de carga, reusado tal cual para la foto principal
+del negocio (`business-profile-screen.tsx`) y la foto de cada
+producto/servicio del catálogo (`product-row.tsx`, dentro de la fila
+expandida) — la lógica de reemplazo es idéntica en los dos casos, solo
+cambian las funciones de subida/borrado que se le pasan como props (ver
+`client/src/lib/api/photos.ts`). Consume los endpoints reales de la
+Épica 3 (`POST /businesses/{businessId}/photos`,
+`POST /products/{productId}/photos`, `DELETE /photos/{photoId}`), sin
+ningún mock — respeta las validaciones que ya existían en el backend
+(tipo de archivo real vía Sharp, `PHOTO_MAX_SIZE_BYTES`), duplicadas del
+lado del cliente en `client/src/lib/photos/photo-constraints.ts` solo
+para dar feedback inmediato antes de gastar una subida completa (mismo
+criterio que `ZONE_RADIUS_METERS` en la sección 32 — dos codebases sin
+paquete compartido).
+
+**Vista previa antes de subir** (pedido explícito): seleccionar un
+archivo no sube nada todavía — muestra una vista previa local
+(`URL.createObjectURL`, revocada al cambiar de archivo o desmontar) con
+botones "Subir foto"/"Cancelar". Solo al confirmar se dispara la subida
+real.
+
+**Reemplazo, no acumulación** (pedido explícito, pensando en las fotos
+de relleno de picsum.photos del seed de demo): el backend no impone un
+límite de fotos por negocio/producto (`fotos.repository.js#crearConOrdenSiguiente`
+simplemente le asigna el siguiente `orden_visualizacion`), así que sin
+ningún criterio del lado del cliente, cada subida se habría ido
+acumulando sin límite. `PhotoUploadControl` en cambio trata "ya había
+una foto" (real o de relleno — desde acá son indistinguibles, y se
+tratan igual a propósito) como un reemplazo: sube la nueva primero y,
+solo si eso tuvo éxito, borra la anterior (`DELETE /photos/{photoId}`,
+best-effort — si ese borrado falla, no se revierte la subida nueva ni
+se bloquea al vendedor). El texto "Al subir una foto nueva, reemplaza
+automáticamente la anterior — incluida la foto de muestra, si todavía
+no habías subido una propia" queda siempre visible bajo el control, para
+que esto sea explícito en la interfaz, no solo un comportamiento
+implícito del código.
+
+**Hallazgo real al diseñar el reemplazo, no obvio de antemano**: como el
+borrado de la foto anterior es best-effort (puede fallar), y
+`GET /businesses/{businessId}` devuelve `photos` ordenado ASCENDENTE por
+`displayOrder` (`fotos.repository.js#listarPorNegocio`,
+`ORDER BY orden_visualizacion`), el `.find()` que ya usaba
+`business-profile-screen.tsx`/`product-row.tsx` para elegir "la" foto a
+mostrar tomaba la PRIMERA coincidencia — es decir, la más ANTIGUA, no la
+más reciente. Antes de esta funcionalidad eso nunca importó (el seed de
+demo nunca sembró más de una foto por negocio/producto); con una subida
+real que puede convivir un instante (o para siempre, si el borrado de la
+vieja falla) con la anterior, mostrar la más antigua habría hecho que
+"reemplazar" pareciera no funcionar. Se agregó
+`client/src/lib/photos/pick-latest-photo.ts#pickLatestPhoto` (por
+`displayOrder` más alto, no por posición en el array) y se usa en los
+dos lugares — así, incluso si el borrado de la foto vieja falla, lo que
+se ve en el perfil es siempre la más reciente.
+
+**Orden de varias fotos — revisado, como pidió el usuario**: sí importa
+(`orden_visualizacion`/`displayOrder`, asignado automáticamente por
+`crearConOrdenSiguiente` con un `pg_advisory_xact_lock` por dueño, ver
+sección 6 de este archivo, Épica 3) pero no hay ningún endpoint para
+reordenar fotos a mano, y no se construyó ninguna UI de "arrastrar para
+reordenar" — no se pidió, y con el modelo de "una foto reemplaza a la
+anterior" de este control, en la práctica nunca hay más de una foto
+vigente por negocio/producto desde la interfaz. `pickLatestPhoto` es el
+único lugar donde el orden importa del lado del cliente: decide cuál
+mostrar cuando, por la razón de arriba, llegan a convivir dos.
+
+**Errores**: `getPhotoUploadErrorMessage`/`getPhotoDeleteErrorMessage`
+(nuevas, `client/src/lib/api/error-messages.ts`), mismo patrón que el
+resto del archivo — el 422 más común no es "archivo muy grande" (eso ya
+se atajó en el cliente) sino que el archivo no decodifica como una
+imagen real de un formato permitido (regla de seguridad #7).
+
+**Detalle técnico encontrado, no oculto**: `openapi-fetch` tipa el body
+de estas dos rutas como `{ file: string }` (openapi-typescript
+representa `format: binary` como `string`, correcto para documentación,
+no para el tipo real en tiempo de ejecución) — pero SÍ soporta pasar un
+`FormData` real como body (su `bodySerializer` por defecto detecta
+`body instanceof FormData` y lo manda tal cual, dejando que el navegador
+fije `Content-Type`/boundary solo, verificado leyendo
+`openapi-fetch/src/index.js` antes de escribir el código). `photos.ts`
+usa `body: formData as never` — el escape hatch mínimo para ese
+desajuste puntual de tipos, documentado con un comentario en el sitio
+exacto, no una forma de saltarse ninguna validación real (esa sigue
+siendo enteramente del backend).
+
+### Datos de demo
+
+No hizo falta agregar negocios nuevos — el propósito de esta
+funcionalidad es reemplazar fotos ya existentes (las de relleno de
+picsum.photos que ya sembraba `seedDemoBusinesses.js` desde la sección
+25), así que los 8 negocios y sus ítems de catálogo con foto (Artesanías
+Telar Andino) ya eran el escenario de prueba correcto tal cual estaban.
+
+### Verificado con Playwright
+
+Mismo criterio que el resto de las funcionalidades de esta sección del
+archivo — script exploratorio contra el servidor real, con MinIO real
+(no mockeado, `docker-compose.yml`) y los datos de demo reales,
+generando dos JPEG válidos de verdad con `sharp` (no archivos
+renombrados) para que la carga pase por la verificación real del
+backend:
+
+- Foto principal del negocio: el banner arranca mostrando la foto de
+  relleno de picsum.photos → se selecciona un archivo real → aparece la
+  vista previa (antes de subir) → "Subir foto" → el banner ya no
+  muestra picsum, muestra la foto real recién subida.
+- Esa misma foto se ve igual en el perfil público desde una sesión
+  anónima aparte (mismo `src` exacto que subió el dueño).
+- "Eliminar foto" → el banner vuelve al ícono de respaldo (la olla, para
+  una categoría de tipo `food` — ver sección 31), no queda ninguna
+  `<img>`.
+- Mismo flujo completo (reemplazar y eliminar) para la foto de un
+  producto del catálogo (Artesanías Telar Andino), acotando cada
+  consulta al `<div>` del producto específico por su nombre — la foto
+  propia del negocio y la de cada producto comparten el mismo
+  `PhotoUploadControl` en la misma página, así que sin acotar por
+  nombre las consultas de "Cambiar foto"/"Eliminar foto" habrían sido
+  ambiguas entre el control del negocio y el del producto.
+- Los datos de demo se resembraron (`npm run seed:demo`) después de la
+  verificación, para dejar las fotos de relleno originales tal como
+  estaban antes de la prueba.
+
+### Bug corregido: catálogo de etiquetas de reseñas ya no asume comida
+
+Gap ya documentado explícitamente en la sección 31 ("Las etiquetas
+rápidas de reseñas siguen centradas en comida... queda documentado como
+pendiente"). El catálogo de 8 etiquetas del rediseño de reseñas (sección
+26) nació pensado solo para comida (`hot_food`, `small_portion`...) —
+calificar una costurera o una asesoría legal seguía mostrando esas
+mismas etiquetas, sin ningún sentido para esos rubros.
+
+**Modelo de datos**: `etiqueta_resena` (ENUM, ver sección 26) solo
+admite AGREGAR valores, nunca quitarlos — así que las 8 etiquetas
+originales no se tocan (siguen existiendo, siguen siendo válidas para
+reseñas ya creadas). Migración `etiquetas-resena-por-tipo-categoria`
+agrega 7 valores nuevos. De las 8 originales, 4 resultaron ser
+genéricas en realidad (`buen_trato`/`good_service`,
+`espera_larga`/`long_wait`, `buen_precio`/`good_price`,
+`precio_alto`/`high_price` — nada de eso es específico de comida) y se
+reclasifican como tales, mostradas siempre sin importar el rubro; las
+otras 4 (`comida_caliente`, `comida_fria`, `buena_presentacion`,
+`poca_cantidad`) quedan exclusivas de `alimentos`. Nuevas, para
+`productos` (bienes no gastronómicos, ej. artesanías): `buena_calidad`,
+`mala_calidad`, `no_como_se_esperaba` (`buena_presentacion`, ya
+existente, se reusa también acá — aplica igual de bien al
+empaque/acabado de un producto que a un plato). Nuevas, para
+`servicios`: `buen_asesoramiento`, `no_resolvio_problema`, `puntual`,
+`impuntual`.
+
+**Sin cambios en la validación del backend más allá del enum** —
+`resenas.validators.js#REVIEW_TAG_API_VALUES` ya se derivaba
+dinámicamente de `business.mapper.js#REVIEW_TAG_API_TO_DB` (no una lista
+hardcodeada aparte), así que agregar los mapeos nuevos ahí fue
+suficiente para que el validador los acepte — el backend sigue sin
+saber ni le importa qué categoría tiene el negocio que se está
+calificando; es puramente una decisión del frontend cuáles chips
+mostrar.
+
+**Frontend**: `client/src/lib/reviews/review-tags.ts#resolveReviewTags(catalogType)`
+devuelve las 4 genéricas + el grupo específico del tipo (`food`/`goods`/
+`services`, el mismo `CatalogType` de `catalog-label.ts`, sección 31) —
+`business-profile-screen.tsx` ya tenía ese valor calculado (lo usa para
+el rótulo del catálogo) y ahora también se lo pasa a `ReviewForm`.
+`REVIEW_TAG_LABELS` (textos en español) sigue siendo un solo diccionario
+con las 15 etiquetas — `reviews-tab.tsx`/`business-feedback-panel.tsx`
+(que solo muestran etiquetas que una reseña YA tiene, sin necesitar
+saber el catálogo completo disponible) no necesitaron cambios.
+
+**Verificado**: prueba de integración actualizada
+(`tests/unit/resenas.validators.test.js`, ahora espera 15 valores en vez
+de 8) y `tsc`/lint del frontend en verde con el nuevo prop
+`catalogType` en `ReviewForm`. No se agregó una prueba de Playwright
+aparte para esto — el flujo de calificar ya estaba cubierto
+manualmente en la verificación de la sección 26, y el cambio acá es
+puramente de qué catálogo de chips se muestra, verificable leyendo
+`resolveReviewTags` y su prueba unitaria equivalente del lado del
+backend (`business.mapper.test.js`, sin cambios necesarios porque no
+testea el catálogo completo, solo el mapeo de valores puntuales).
+
+### Gaps conocidos, no ocultos
+
+- **Sin galería de varias fotos por negocio/producto**: el backend sí lo
+  permite (ninguna restricción de cantidad), pero `PhotoUploadControl`
+  expone deliberadamente un modelo de "una sola foto vigente,
+  reemplazable" — coherente con cómo ya se mostraba el perfil antes de
+  esta funcionalidad (`.find()`/ahora `pickLatestPhoto`, siempre una
+  sola). Construir una galería real (varias fotos, orden elegido a
+  mano, carrusel en el perfil) no se pidió y habría sido una
+  funcionalidad bastante más grande.
+- **Sin barra de progreso de subida real** — `uploading`/`loading` es un
+  booleano simple (spinner de texto del `Button` compartido), no un
+  porcentaje. No se pidió, y a 8 MB máximo sobre una red razonable no
+  hizo falta más para esta primera versión.
+- **El borrado de la foto anterior en un reemplazo es best-effort, sin
+  reintento automático** — si falla, el negocio queda con dos fotos
+  hasta que alguien las borre a mano (la vieja ya no se ve gracias a
+  `pickLatestPhoto`, pero sigue ocupando espacio en el bucket). Mismo
+  nivel de tolerancia a huérfanos ya aceptado en el resto del proyecto
+  para el storage (ver Épica 3, sección 6).
+- El asistente de registro de negocio (Épica F5) sigue sin un paso de
+  fotos — el vendedor solo puede agregar la foto principal después,
+  desde el perfil ya creado. No se pidió agregarlo al asistente, y
+  mantenerlo corto (RNF-013) sigue siendo la prioridad de esa pantalla.
+
+## 34. Dos bloqueos de prueba resueltos: verificación de teléfono y propiedad de negocios de prueba
+
+Petición directa del usuario, mientras probaba manualmente QR/sello de
+higiene/domicilios en su propio navegador (no parte de ninguna épica) —
+propia rama (`chore/desbloqueos-prueba-manual`).
+
+### SKIP_PHONE_VERIFICATION_CHECK (TEMPORAL, SOLO DESARROLLO)
+
+Sin proveedor de SMS conectado en ningún ambiente (sección 21), un
+negocio de prueba nunca puede completar el flujo real de OTP — y sin
+teléfono verificado, no aparece en `/businesses`, `/businesses/nearby`
+ni `/businesses/zones` (regla de seguridad, ver `negocios.repository.js`).
+Eso bloqueaba cualquier prueba manual de descubrimiento (mapa, búsqueda,
+zonas) contra un negocio recién registrado por la UI real.
+
+- `src/config/env.js`: variable nueva `SKIP_PHONE_VERIFICATION_CHECK`
+  (string, default vacío → `false`). Un `.refine()` nuevo hace **fallar
+  el arranque completo del proceso** (no lo ignora en silencio) si esta
+  variable queda en `'true'` con `NODE_ENV` distinto de `development` —
+  no es "se ignora fuera de dev", es "el proceso ni siquiera arranca".
+- `negocios.repository.js`: `SALTAR_VERIFICACION_TELEFONO = env.NODE_ENV
+  === 'development' && env.SKIP_PHONE_VERIFICATION_CHECK` — vuelve a
+  comprobar `NODE_ENV` por su cuenta (defensa en profundidad, no confía
+  ciegamente en que el booleano ya "llegó seguro" desde env.js).
+  `clausulaTelefonoVerificado()` es el único lugar que decide el
+  fragmento SQL real (`'true'` vs. `'n.telefono_verificado = true'`),
+  usado en las tres consultas que antes tenían el filtro hardcodeado:
+  `listar()`, `construirConsultaCercanos()` y `clusterizar()` (zonas,
+  sección 32).
+- **La suite de pruebas no depende de esto ni puede verse afectada por
+  el valor real de `.env.development`**: `npm test`/`test:unit`/
+  `test:integration` ahora fijan `SKIP_PHONE_VERIFICATION_CHECK=` (vacío)
+  explícitamente antes de invocar Jest — sin esto, una corrida local con
+  la bandera activada en `.env.development` (ver abajo) habría hecho
+  fallar la prueba de integración que confirma que un negocio sin
+  verificar NO cuenta para una zona (`tests/integration/zonas.test.js`).
+  Encontrado corriendo la suite completa después de activar la bandera
+  localmente, no anticipado de antemano.
+- Pruebas nuevas: `tests/unit/env.skipPhoneVerification.test.js` (parseo
+  y el `.refine()` de arranque, con `process.exit`/`console.error`
+  mockeados) y un `describe` nuevo en
+  `tests/unit/negocios.repository.test.js` (las tres combinaciones de
+  `clausulaTelefonoVerificado()`, vía `jest.doMock('../../src/config/env', ...)`
+  — `SALTAR_VERIFICACION_TELEFONO` se calcula una sola vez al cargar el
+  módulo, así que probarlo exige recargar el módulo fresco con un env
+  mockeado distinto en cada caso, mismo patrón que `env.cors.test.js`
+  ya usaba para env.js mismo).
+- Activada en `.env.development` de este entorno
+  (`SKIP_PHONE_VERIFICATION_CHECK=true`, con un comentario que recuerda
+  quitarla cuando haya proveedor de SMS real) y documentada en
+  `.env.example` con la misma advertencia. **Nunca** copiar este valor a
+  `.env.staging`/`.env.production` — el arranque fallaría a propósito.
+
+### Los negocios de prueba NO vienen de registro asistido — investigado, no asumido
+
+Se revisó la base de datos de desarrollo antes de responder, en vez de
+asumir. Hallazgo: **ningún** negocio sembrado por `seedDemoBusinesses.js`
+ni los negocios propios del usuario vienen de
+`POST /auth/assisted-registration`. El único registro genuinamente
+asistido en toda la base es una cuenta de prueba vieja y no relacionada
+(`donalirio@example.com` / "Fritanga Don Alirio", con el consentimiento
+`tipo = 'registro_asistido'` como marca real) — de una verificación
+manual anterior, ajena a esta sesión.
+
+La confusión venía de una columna que parece indicar lo contrario pero
+no lo hace: `usuarios.contrasena_establecida_en` (migración
+`usuarios-registro-asistido`) queda `NULL` quien NO reclamó todavía una
+cuenta de registro asistido — pero **también** queda `NULL` en cualquier
+cuenta insertada por un `INSERT` directo que no pase por
+`usuariosRepo.crear()`/`actualizarContrasena()`, como hace
+`scripts/seedDemoBusinesses.js` (nunca la menciona en su lista de
+columnas). Esa columna no bloquea login ni autorización — es solo un
+campo de auditoría que usa `PATCH /admin/users/{userId}/reissue-claim-token`
+para decidir si reemitir un token de reclamo (409 si ya se reclamó). Los
+9 negocios de demo y los negocios propios del usuario tienen contraseña
+real desde el `INSERT`/registro mismo — inician sesión y matchean
+`ownerId` sin ningún paso adicional, tal como se verificó repetidas
+veces en las secciones 30-33 de este archivo.
+
+**Negocios propios reales del usuario, encontrados en la base**:
+`melendezfer97@gmail.com` (rol `vendedor`, contraseña real, registrado
+por la vía normal — no asistida) ya era dueño de dos negocios antes de
+esta sesión: "Arepas j" (`01a091e2-b763-79e3-9160-2720a90c7620`) y
+"arepas j" (`01a090a6-96fc-735f-b942-80fc44f7b349`, duplicado, mismo
+teléfono de contacto). Ambos estaban en `estado = 'pendiente'` (cola de
+moderación, RF-019 — un gate distinto e intencional, no relacionado con
+la verificación de teléfono) y sin teléfono verificado. Se aprobó
+"Arepas j" directo por SQL (`UPDATE negocios SET estado = 'activo'`,
+mismo criterio que ya usa `seedDemoBusinesses.js` para saltarse la cola
+de moderación en datos de prueba) — con `SKIP_PHONE_VERIFICATION_CHECK`
+activo, ya aparece en `/businesses`/`/businesses/nearby`/mapa sin haber
+pasado por el OTP. Verificado en vivo contra la API real
+(`GET /businesses?q=Arepas%20j`) antes de darlo por resuelto, no solo
+razonado.
+
+**Para seguir probando como dueño reconocido**: iniciar sesión con
+`melendezfer97@gmail.com` (la contraseña que se usó al registrarse) y
+abrir `/negocios/01a091e2-b763-79e3-9160-2720a90c7620` — el QR, el sello
+de higiene, "hago domicilios propios" y la carga de fotos (sección 33)
+ya deberían verse con los controles de dueño, sin ningún paso de reclamo
+de por medio. "arepas j" (el duplicado) queda tal como estaba
+(pendiente, sin aprobar) — no se tocó, por si el usuario prefiere
+borrarlo a mano en vez de que esta sesión decida por él.
+
+### Gaps conocidos, no ocultos
+
+- La aprobación de "Arepas j" fue manual, por SQL — no existe todavía
+  ningún atajo de un clic para "aprobar mi propio negocio de prueba" en
+  la interfaz (el flujo real, `POST /admin/businesses/{id}/approve`,
+  exige una cuenta de administrador). Coherente con que esto es un
+  desbloqueo puntual de esta sesión, no una funcionalidad nueva del
+  producto.
+- No se investigó ni se tocó a las otras cuentas `administrador` que ya
+  existían en la base (`admin-f5@example.com`,
+  `phone-admin-1789138959@example.com`, ambas de verificaciones
+  anteriores) — sus contraseñas no se conocen desde esta sesión; si el
+  usuario quiere probar el flujo real de aprobación/registro asistido
+  como administrador, la vía más simple sigue siendo registrar una
+  cuenta `administrador` nueva a mano.

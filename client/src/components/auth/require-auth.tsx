@@ -32,7 +32,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         <CookingPot size={48} weight="duotone" className="text-terracota" />
         <h1 className="font-heading text-display font-bold text-text">Ruteando</h1>
         <p className="max-w-sm font-sans text-body text-text-muted">
-          Encuentra comida callejera cerca de ti y contacta al vendedor directo por WhatsApp.
+          Encuentra comercio informal cerca de ti y contacta al vendedor directo por WhatsApp.
         </p>
         <div className="flex gap-3">
           <Link href="/login">

@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CookingPot, Moped, NavigationArrow, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import {
+  Briefcase,
+  CookingPot,
+  Moped,
+  NavigationArrow,
+  Package,
+  Storefront,
+  WhatsappLogo,
+} from "@phosphor-icons/react/dist/ssr";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
@@ -17,6 +25,11 @@ import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
+import {
+  resolveCatalogEmptyState,
+  resolveCatalogSectionLabel,
+  type CatalogType,
+} from "@/lib/catalog/catalog-label";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -24,7 +37,26 @@ type BusinessProfile = components["schemas"]["BusinessProfile"];
 interface BusinessProfileScreenProps {
   profile: BusinessProfile;
   categoryName: string | null;
+  /**
+   * Expansión de alcance (ver CLAUDE.md sección 31) — decide el rótulo de
+   * la sección de contenido ("Menú"/"Productos"/"Servicios") y el ícono
+   * de respaldo cuando el negocio no tiene foto. `null` cuando la
+   * categoría no resolvió (dato defensivo, no debería pasar en la
+   * práctica ya que categoryId es obligatorio al crear un negocio).
+   */
+  catalogType: CatalogType | null;
 }
+
+// Ícono de respaldo del banner cuando el negocio no tiene foto — antes
+// de la expansión de alcance (CLAUDE.md sección 31) siempre era
+// CookingPot, asumiendo comida; ahora se elige según el tipo de
+// categoría para no mostrar una olla en el perfil de un abogado o una
+// costurera.
+const HERO_FALLBACK_ICON_BY_TYPE: Record<CatalogType, typeof CookingPot> = {
+  food: CookingPot,
+  goods: Package,
+  services: Briefcase,
+};
 
 /**
  * Perfil público de negocio (Épica F4, RF-012 a RF-014). Recibe el
@@ -32,7 +64,7 @@ interface BusinessProfileScreenProps {
  * que también lo usa para generateMetadata) — no vuelve a pedirlo, para
  * no duplicar la llamada que ya hizo el render de servidor.
  */
-export function BusinessProfileScreen({ profile, categoryName }: BusinessProfileScreenProps) {
+export function BusinessProfileScreen({ profile, categoryName, catalogType }: BusinessProfileScreenProps) {
   const { user } = useAuth();
   // Estado local aparte de `profile` (inmutable, viene del Server
   // Component) — así, al confirmar el código, el aviso desaparece de
@@ -59,6 +91,9 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
   const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
   const heroPhoto = profile.photos?.find((photo) => photo.type === "business") ?? null;
+  const HeroFallbackIcon = catalogType ? HERO_FALLBACK_ICON_BY_TYPE[catalogType] : Storefront;
+  const catalogSectionLabel = resolveCatalogSectionLabel(catalogType);
+  const catalogEmptyState = resolveCatalogEmptyState(catalogType);
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
   const directionsHref = profile.location
     ? `https://www.google.com/maps/dir/?api=1&destination=${profile.location.latitude},${profile.location.longitude}`
@@ -80,7 +115,7 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
           <img src={heroPhoto.url} alt={profile.name ?? "Negocio"} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <CookingPot size={64} weight="duotone" className="text-text-muted" />
+            <HeroFallbackIcon size={64} weight="duotone" className="text-text-muted" />
           </div>
         )}
         <span
@@ -95,7 +130,7 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
       <div className="flex flex-col gap-1 px-5 py-4">
         <h1 className="font-heading text-title-1 font-bold text-text">{profile.name}</h1>
         <p className="font-sans text-body-sm text-text-muted">
-          {categoryName ?? "Comida callejera"}
+          {categoryName ?? "Comercio informal"}
           {profile.averageRating != null &&
             ` · ${profile.averageRating.toFixed(1)} ★ (${profile.reviewCount ?? 0} reseña${profile.reviewCount === 1 ? "" : "s"})`}
         </p>
@@ -165,9 +200,9 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
       )}
 
       <section className="flex flex-col gap-3 px-5 py-4">
-        <h2 className="font-heading text-title-2 font-semibold text-text">Menú</h2>
+        <h2 className="font-heading text-title-2 font-semibold text-text">{catalogSectionLabel}</h2>
         {(profile.products?.length ?? 0) === 0 && (
-          <p className="font-sans text-body-sm text-text-muted">Este negocio todavía no publicó su menú.</p>
+          <p className="font-sans text-body-sm text-text-muted">{catalogEmptyState}</p>
         )}
         {profile.products?.map((product) => (
           <ProductRow

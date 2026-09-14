@@ -40,6 +40,25 @@
  * verificar a ojo que ambas insignias conviven en el mismo perfil sin
  * pisarse, y que cada una aparece/desaparece de forma independiente.
  *
+ * Expansión de alcance (ver CLAUDE.md sección 31): además de los 5
+ * negocios gastronómicos originales, se suman 3 negocios NO
+ * gastronómicos — uno por cada categoría nueva sembrada por la
+ * migración `categorias-tipo-comercio-no-gastronomico`
+ * (`categoriaTipo`/`productos` en cada entrada de NEGOCIOS, ambos
+ * opcionales y con default 'alimentos'/[] para no tener que tocar las 5
+ * entradas de comida): una costurera (servicios, sin fotos en su
+ * catálogo — demuestra que el catálogo de "Servicios" no fuerza foto) y
+ * una asesoría legal básica (servicios), ambas con `entregaPropia`/
+ * `higieneAutodeclarada` en false a propósito (ninguna de las dos
+ * aplica a un servicio: no hay "domicilio del producto" ni "higiene en
+ * la preparación de alimentos" que declarar), y una artesana (bienes,
+ * con foto y precio en cada ítem, como pidió el usuario explícitamente
+ * de ejemplo). Cada negocio nuevo lleva 2-3 ítems de catálogo propios
+ * (`productos`, insertados directo en la tabla `productos` — y `fotos`
+ * para los que llevan foto) para que la sección de contenido del perfil
+ * (Menú/Productos/Servicios, catalog-label.ts) se pueda probar con datos
+ * reales, no solo con el estado vacío.
+ *
  * El horario de cada negocio se calcula respecto al día de HOY en hora
  * de Bogotá (momentoActualBogota, mismo helper que ya usa
  * disponibilidad.service.js): los negocios marcados "cerrado ahora"
@@ -167,6 +186,81 @@ const NEGOCIOS = [
     entregaPropia: true,
     higieneAutodeclarada: true,
   },
+  // --- Negocios NO gastronómicos (expansión de alcance, CLAUDE.md sección 31) ---
+  {
+    slug: 'costuras-arreglos-maria',
+    nombre: 'Costuras y Arreglos María',
+    descripcion: 'Arreglos de ropa, bastillas y confección a la medida, en el mismo barrio.',
+    categoria: 'Costura y sastrería',
+    categoriaTipo: 'servicios',
+    correo: 'demo-costuras-arreglos-maria@ruteando.test',
+    nombreDueno: 'María Elena Cárdenas',
+    telefono: '3001110006',
+    // Mismo rumbo que Arepas Doña Rosa (0°/norte, verificado dentro de
+    // Ciudad Verde a 250 m) pero más cerca del centro (150 m < 250 m) —
+    // un punto sobre un rayo ya verificado como seguro, sin necesitar
+    // una nueva geocodificación inversa para esta distancia menor.
+    distanciaM: 150,
+    rumbo: 0,
+    cerradoHoy: false,
+    entregaPropia: false, // no aplica: es un servicio, no hay producto que entregar a domicilio
+    higieneAutodeclarada: false, // no aplica: no es manejo de alimentos
+    // Catálogo de "Servicios" (ver catalog-label.ts) — sin fotos a
+    // propósito, para demostrar que el catálogo no fuerza una foto por
+    // ítem cuando la categoría es de servicios.
+    productos: [
+      { nombre: 'Arreglo de bastilla o dobladillo', precio: 8000, disponible: true },
+      { nombre: 'Ajuste de prenda (entalle)', precio: 15000, disponible: true },
+      { nombre: 'Confección a la medida', precio: 60000, disponible: false },
+    ],
+  },
+  {
+    slug: 'asesoria-legal-rapida',
+    nombre: 'Asesoría Legal Rápida',
+    descripcion: 'Consultas y trámites legales básicos, en lenguaje claro y sin tecnicismos.',
+    categoria: 'Servicios legales básicos',
+    categoriaTipo: 'servicios',
+    correo: 'demo-asesoria-legal-rapida@ruteando.test',
+    nombreDueno: 'Javier Andrés Suárez',
+    telefono: '3001110007',
+    // Mismo rumbo que Perros El Parche (90°/este, verificado a 350 m),
+    // más cerca del centro (200 m < 350 m).
+    distanciaM: 200,
+    rumbo: 90,
+    cerradoHoy: false,
+    entregaPropia: false,
+    higieneAutodeclarada: false,
+    productos: [
+      { nombre: 'Consulta legal básica (30 min)', precio: 25000, disponible: true },
+      { nombre: 'Redacción de derecho de petición', precio: 40000, disponible: true },
+      { nombre: 'Revisión de contrato de arrendamiento', precio: 35000, disponible: true },
+    ],
+  },
+  {
+    slug: 'artesanias-telar-andino',
+    nombre: 'Artesanías Telar Andino',
+    descripcion: 'Mochilas, manillas y tejidos hechos a mano en telar tradicional.',
+    categoria: 'Artesanías',
+    categoriaTipo: 'productos',
+    correo: 'demo-artesanias-telar-andino@ruteando.test',
+    nombreDueno: 'Lucía Fernanda Quiroga',
+    telefono: '3001110008',
+    // Mismo rumbo que Dulces La Abuela (180°/sur, verificado a 900 m),
+    // más cerca del centro (500 m < 900 m).
+    distanciaM: 500,
+    rumbo: 180,
+    cerradoHoy: true,
+    entregaPropia: false,
+    higieneAutodeclarada: false,
+    // Catálogo de "Productos" (ver catalog-label.ts) — con foto en cada
+    // ítem, como pidió el usuario explícitamente de ejemplo ("productos
+    // con foto y precio para un artesano").
+    productos: [
+      { nombre: 'Mochila tejida en telar', precio: 55000, disponible: true, foto: true },
+      { nombre: 'Manilla de macramé', precio: 12000, disponible: true, foto: true },
+      { nombre: 'Cuadro decorativo tejido', precio: 38000, disponible: false, foto: true },
+    ],
+  },
 ];
 
 async function limpiar() {
@@ -214,11 +308,17 @@ async function sembrar() {
       [usuarioId, TEXTO_VERSION_CONSENTIMIENTO],
     );
 
+    // `tipo` (ver migración categorias-tipo-comercio-no-gastronomico,
+    // CLAUDE.md sección 31) se manda explícito en vez de confiar en el
+    // default de la columna ('alimentos') — así este script sigue
+    // etiquetando bien las categorías nuevas aunque algún día se corra
+    // contra una base donde esa migración insertó la categoría de otra
+    // forma (defensivo, no depende del orden migración->seed).
     const categoria = await pool.query(
-      `INSERT INTO categorias (nombre) VALUES ($1)
-       ON CONFLICT (nombre) DO UPDATE SET nombre = EXCLUDED.nombre
+      `INSERT INTO categorias (nombre, tipo) VALUES ($1, $2)
+       ON CONFLICT (nombre) DO UPDATE SET nombre = EXCLUDED.nombre, tipo = EXCLUDED.tipo
        RETURNING id`,
-      [n.categoria],
+      [n.categoria, n.categoriaTipo ?? 'alimentos'],
     );
     const categoriaId = categoria.rows[0].id;
 
@@ -275,27 +375,55 @@ async function sembrar() {
       [negocioId, `https://picsum.photos/seed/${n.slug}/900/600`],
     );
 
+    // Ítems de catálogo (expansión de alcance, CLAUDE.md sección 31) —
+    // `productos` es opcional (los 5 negocios gastronómicos originales
+    // no llevan ninguno, mismo comportamiento de antes de esta
+    // funcionalidad); cada ítem con `foto: true` suma también una fila
+    // en `fotos` (tipo='producto'), mismo placeholder externo que ya usa
+    // la foto de negocio de arriba, con una semilla distinta por
+    // producto para que no sea la misma imagen repetida.
+    for (const [indice, p] of (n.productos ?? []).entries()) {
+      const producto = await pool.query(
+        `INSERT INTO productos (negocio_id, nombre, precio, disponible)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [negocioId, p.nombre, p.precio, p.disponible],
+      );
+      const productoId = producto.rows[0].id;
+
+      if (p.foto) {
+        await pool.query(
+          `INSERT INTO fotos (producto_id, tipo, url)
+           VALUES ($1, 'producto', $2)`,
+          [productoId, `https://picsum.photos/seed/${n.slug}-${indice}/600/600`],
+        );
+      }
+    }
+
     resumen.push({
       nombre: n.nombre,
       categoria: n.categoria,
+      categoriaTipo: n.categoriaTipo ?? 'alimentos',
       distanciaM: n.distanciaM,
       estadoAhora: n.cerradoHoy ? 'cerrado hoy' : 'abierto ahora',
       entregaPropia: n.entregaPropia,
       higieneAutodeclarada: n.higieneAutodeclarada,
+      catalogoItems: (n.productos ?? []).length,
       correo: n.correo,
       whatsapp: n.telefono,
     });
   }
 
   console.log('Actualizando estadísticas (ANALYZE)...');
-  await pool.query('ANALYZE negocios, ubicaciones, horarios, fotos, consentimientos');
+  await pool.query('ANALYZE negocios, ubicaciones, horarios, fotos, productos, consentimientos');
 
   console.log('\n=== Negocios de demo sembrados (Ciudad Verde, Soacha) ===\n');
   for (const r of resumen) {
     console.log(
-      `- ${r.nombre} [${r.categoria}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
+      `- ${r.nombre} [${r.categoria} · ${r.categoriaTipo}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
         `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}, ` +
-        `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}\n` +
+        `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}, ` +
+        `${r.catalogoItems} ítem(s) de catálogo\n` +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,
     );
   }

@@ -2446,3 +2446,255 @@ este entorno de ejecución, no algo para automatizar en el repo.
   verificación de teléfono (sección 21): ese script sigue sin sembrar
   `higiene_autodeclarada`, que por default queda en `false`, sin que
   eso afecte la prueba de carga (no filtra por ese campo).
+
+## 31. Expansión de alcance: de "directorio de comida callejera" a "directorio de comercio informal"
+
+**Esto es un cambio de alcance real, pedido explícitamente así por el
+usuario — no una categoría más.** Hasta acá, todo el proyecto (sección 0
+de este archivo, los 13 documentos de especificación que lo respaldan,
+cada texto legal, cada copy de la interfaz) asumía que RUTEANDO era
+exclusivamente un directorio de comida callejera y gastronomía informal.
+Esta funcionalidad, sin RF asociado (fuera de los Documentos 05-15),
+agrega comercio informal NO gastronómico — costura/sastrería, servicios
+legales básicos, artesanías, y lo que se agregue después — como un tipo
+de negocio igual de válido que un puesto de arepas, no como una
+excepción tolerada. Propia rama (`feature/comercio-no-gastronomico`). La
+sección 0/1 de este archivo **no se reescribió** — sigue siendo la
+traducción operativa de la especificación original, exclusivamente
+gastronómica; esta sección es la que documenta dónde y por qué el
+alcance real ya no coincide con esa especificación.
+
+### Qué tan genérico era ya el modelo de datos (verificado, no asumido)
+
+Antes de escribir una sola línea de código se revisó `schema.sql`: el
+95% del modelo ya era completamente agnóstico al rubro.
+
+- `negocios`: `nombre`/`descripcion`/`categoria_id`/`telefono_contacto` —
+  nada asume comida. Un abogado, una costurera y un vendedor de arepas
+  son la misma fila con distinta `categoria_id`.
+- `productos`: `nombre`/`descripcion`/`precio`/`disponible` — la misma
+  fila representa igual de bien "Salchipapa" ($8.000) que "Consulta
+  legal básica" ($25.000). No hizo falta ninguna columna nueva, ninguna
+  tabla `servicios` aparte.
+- `ubicaciones`/`horarios`/`fotos`/`resenas`/`favoritos`/`eventos`: todos
+  genéricos por diseño desde el principio (ver secciones 2-30 de este
+  archivo) — ninguno tiene una columna o un enum que presuma comida.
+- **Lo único que faltaba**: `categorias` no tenía ninguna forma de saber
+  qué tan genérico es el catálogo de un negocio de esa categoría — "el
+  menú de un restaurante" y "la lista de servicios de un abogado" son
+  conceptualmente distintos aunque la fila de `productos` que los
+  representa sea idéntica. Esa es, en el fondo, toda la superficie real
+  de este cambio: una columna nueva (`categorias.tipo`) y todo lo que el
+  frontend hace con ella para no forzar la palabra "Menú" en todas
+  partes.
+
+### Modelo de datos
+
+- `tipo_categoria` (ENUM nuevo, 3 valores — mismo criterio que
+  `tipo_ubicacion`/`dia_semana`, un catálogo cerrado y pequeño):
+  `alimentos` | `productos` | `servicios`. Migración
+  `categorias-tipo-comercio-no-gastronomico`.
+- `categorias.tipo tipo_categoria NOT NULL DEFAULT 'alimentos'` — default
+  explícito a propósito: **ninguna categoría existente cambia de
+  comportamiento**, es el requisito central de "agregar las nuevas
+  categorías sin romper las existentes de comida". Verificado con una
+  prueba de integración (`GET /categories`, ver abajo) que crea una
+  categoría con el mismo INSERT mínimo que ya usaba el resto de la suite
+  (`INSERT INTO categorias (nombre) VALUES ($1)`, sin tocar) y confirma
+  que sigue resolviendo a `type: "food"`.
+- 3 categorías nuevas, insertadas por la misma migración (no solo por el
+  script de demo — `categorias` no tiene endpoint de creación,
+  administrada solo por el equipo del proyecto, ver el comentario
+  original en `schema.sql`; sin este INSERT, un vendedor real en
+  producción no tendría ninguna categoría no gastronómica real para
+  elegir):
+  - **Costura y sastrería** → `servicios`
+  - **Servicios legales básicos** → `servicios`
+  - **Artesanías** → `productos`
+- `categorias.service.js#TIPO_CATEGORIA_DB_TO_API` mapea
+  `alimentos→food`, `productos→goods`, `servicios→services` — mismo
+  patrón español(DB)→inglés(API) que `STATUS_DB_TO_API`/`DAY_DB_TO_API`
+  en `business.mapper.js`.
+
+### El "catálogo" — generalizado en el frontend, no en el contrato de `Product`
+
+**Decisión deliberada**: `Product`/`ProductInput`/las rutas
+`/businesses/{id}/products` **no se renombraron**. La forma de los datos
+(nombre/descripción/precio/disponible/foto) ya servía igual de bien para
+un plato, un producto artesanal o un servicio — renombrar `productos` a
+`items_catalogo` en la base de datos y en el contrato habría sido un
+cambio disruptivo (migración de tabla, breaking change de API) para un
+problema que en realidad era solo de **presentación**: qué rótulo lleva
+la sección y qué texto muestra cuando está vacía. Se resolvió
+enteramente en el frontend:
+
+- `client/src/lib/catalog/catalog-label.ts` (nuevo, único lugar del
+  frontend con esta correspondencia — mismo criterio que
+  `review-tags.ts`/`hygiene.ts`): mapea `Category.type` a un rótulo de
+  sección (`food→"Menú"`, `goods→"Productos"`, `services→"Servicios"`,
+  ausente→"Catálogo") y a un texto de estado vacío correspondiente.
+- `client/src/app/negocios/[businessId]/page.tsx`: `getCategoryName`
+  se convirtió en `getCategory` (devuelve la categoría completa, no solo
+  el nombre) — `BusinessProfileScreen` recibe un prop nuevo `catalogType`
+  además de `categoryName`.
+- `business-profile-screen.tsx`: el `<h2>` que antes decía "Menú" fijo, y
+  el texto de "todavía no publicó su menú", ahora salen de
+  `resolveCatalogSectionLabel`/`resolveCatalogEmptyState`. El ícono de
+  respaldo del banner (cuando el negocio no tiene foto) también se
+  volvió dependiente del tipo — antes siempre `CookingPot` (una olla,
+  asumiendo comida), ahora `CookingPot` para `food`, `Package` para
+  `goods`, `Briefcase` para `services`, `Storefront` genérico si la
+  categoría no resolvió. Verificado con Playwright contra un negocio
+  recién registrado sin ninguna foto todavía (el caso real donde este
+  ícono se ve) — ver más abajo.
+- `product-row.tsx`: ya toleraba una foto ausente desde antes de esta
+  funcionalidad (`{photoUrl && <img .../>}`) — nada que cambiar ahí para
+  que un servicio sin foto se vea bien. Sí se generalizaron dos textos
+  que sí asumían comida: el badge "Agotado" (tiene sentido para un plato
+  o un producto físico, no para un servicio) pasó a "No disponible"; el
+  texto de descripción vacía pasó de "Este plato todavía no tiene
+  descripción" a "Este ítem todavía no tiene descripción".
+
+### Otros textos generalizados (auditoría completa, no solo lo obvio)
+
+Se corrió una búsqueda exhaustiva de "comida"/"plato"/"menú"/"antoja"/
+"gastronóm" en todo `client/src` antes de dar esto por cerrado — no solo
+se tocó lo que saltaba a la vista en la pantalla de perfil:
+
+- `home-screen.tsx`: "¿qué se te antoja hoy?" (asumía comida) →
+  "¿qué estás buscando hoy?".
+- `search-bar.tsx`: placeholder "Nombre del negocio o tipo de comida" →
+  "Nombre del negocio, producto o servicio".
+- `business-card.tsx`/`business-profile-screen.tsx`: el fallback cuando
+  no hay nombre de categoría pasó de "Comida callejera" a "Comercio
+  informal" (fallback defensivo — `categoryId` es obligatorio al crear
+  un negocio, así que en la práctica casi nunca se ve).
+- `(auth)/register/page.tsx`: el radio del rol vendedor decía
+  literalmente **"Vendo comida (vendedor)"** — el hallazgo más
+  significativo de esta auditoría, porque es el primer texto que ve
+  cualquiera que se registra como vendedor sin importar su rubro. Pasó a
+  "Tengo un negocio (vendedor)".
+- `layout.tsx` (meta description PWA), `require-auth.tsx` (pantalla de
+  "inicia sesión"), `negocios/[businessId]/page.tsx` (descripción Open
+  Graph por negocio — esta es la más importante de las tres: es lo que
+  ve cualquiera que reciba el link de un negocio no gastronómico por
+  WhatsApp), `legal/tratamiento-datos/page.tsx` y
+  `legal/terminos-condiciones/page.tsx` (párrafo de apertura de ambos
+  textos legales) — todos actualizados para hablar de "comercio
+  informal" en vez de asumir comida. `package.json` (raíz) y
+  `openapi.yaml` (`info.title`/`info.description`, el summary de
+  `GET /categories` y los summaries de las rutas de productos) también.
+- **Deliberadamente NO tocado**: las URLs de `servers:` en
+  `openapi.yaml` (`ciudadverdegastronomica.co`) — son infraestructura
+  real, no prosa, y cambiar un dominio no es parte de este alcance. El
+  ícono de carga de `RequireAuth` (`CookingPot`, mostrado mientras
+  resuelve la sesión, antes de saber nada del negocio) tampoco — no hay
+  ningún negocio en contexto todavía en esa pantalla para elegir un
+  ícono distinto, y es branding de la app entera, no de un perfil.
+
+### Datos de demo
+
+`scripts/seedDemoBusinesses.js` suma 3 negocios no gastronómicos a los 5
+gastronómicos originales — uno por cada categoría nueva, cada uno con su
+propio catálogo de 2-3 ítems (`productos`/`foto` opcional por entrada de
+`NEGOCIOS`, con default `'alimentos'`/`[]` para no tener que tocar las 5
+entradas de comida existentes):
+
+| Negocio | Categoría | Tipo | Catálogo |
+|---|---|---|---|
+| Costuras y Arreglos María | Costura y sastrería | `servicios` | 3 servicios, **sin fotos** (demuestra que "Servicios" no las fuerza) |
+| Asesoría Legal Rápida | Servicios legales básicos | `servicios` | 3 servicios, sin fotos |
+| Artesanías Telar Andino | Artesanías | `productos` | 3 productos, **con foto** cada uno (pedido explícito del usuario: "productos con foto y precio para un artesano") |
+
+`entregaPropia`/`higieneAutodeclarada` en `false` para los tres —
+explícito, no un olvido: ninguna de las dos aplica a un servicio (no hay
+"domicilio del producto" que declarar en una consulta legal, ni "higiene
+en la preparación de alimentos" en un arreglo de ropa).
+
+Las coordenadas de los 3 negocios nuevos reusan los mismos rumbos ya
+verificados por geocodificación inversa para los negocios originales
+(sección 25: 0°/norte, 90°/este, 180°/sur — todos confirmados dentro de
+Soacha/Ciudad Verde), pero a una distancia **menor** que el punto ya
+verificado en cada rumbo (150 m/200 m/500 m vs. los 250 m/350 m/900 m
+verificados) — un punto más cerca del centro sobre un rayo ya
+confirmado seguro no necesita una nueva geocodificación.
+
+La consulta `INSERT INTO categorias (nombre, tipo) VALUES ($1, $2) ON
+CONFLICT (nombre) DO UPDATE SET nombre = ..., tipo = ...` manda `tipo`
+explícito (con default `'alimentos'` para las categorías de comida) en
+vez de confiar en que la migración ya corrió antes — defensivo, para que
+el script siga etiquetando bien las categorías nuevas sin importar el
+orden en que se ejecuten migración/seed en un entorno nuevo.
+
+### Verificado con Playwright
+
+Mismo criterio que el resto de las funcionalidades de esta sección del
+archivo (sin test suite e2e committeada — ver sección 30): script
+exploratorio contra el servidor de desarrollo real, con los datos reales
+sembrados por `seedDemoBusinesses.js`. Encontró y corrigió dos problemas
+reales del script de verificación (no del producto) en el camino, ambos
+por el mismo motivo de fondo — `locator.isVisible()`/`.check()` de
+Playwright no esperan, evalúan el estado exacto en el instante en que se
+llaman:
+
+1. Un `getByText(...).isVisible()` inmediato tras `page.goto()` podía
+   correr antes de que el asistente de registro (cliente puro, sin SSR)
+   terminara de hidratarse — se reemplazó por un helper `waitVisible()`
+   que sondea hasta un timeout, mismo espíritu que el fix de
+   `.check()`/`.uncheck()` documentado en la sección 30.
+2. `button[aria-expanded]` sin acotar a la sección del catálogo también
+   matcheaba el botón de las Next.js Dev Tools (`aria-expanded` en su
+   propio botón de menú, visible solo en modo desarrollo) — se acotó el
+   selector a la sección que contiene el `<h2>` del catálogo.
+
+Verificado de punta a punta:
+
+- **Registro real de un negocio no gastronómico**: cuenta de vendedor
+  nueva → asistente completo (detalles con categoría "Costura y
+  sastrería", ubicación, horario) → llega a "¡Listo!" sin ningún error →
+  el perfil propio (recién creado, sin fotos, pendiente de aprobación)
+  muestra el catálogo rotulado "Servicios" (nunca "Menú") y el ícono de
+  respaldo del banner es el maletín (`Briefcase`), no la olla de comida.
+- **Búsqueda por texto**: "legal" encuentra "Asesoría Legal Rápida".
+- **Búsqueda por categoría (chip)**: el chip "Artesanías" (categoría
+  nueva, en la fila de categorías rápidas de Inicio) filtra
+  correctamente y muestra "Artesanías Telar Andino".
+- **Perfil público de un negocio de bienes** (Artesanías Telar Andino):
+  catálogo rotulado "Productos", los 3 ítems sembrados visibles, el
+  primero expandido muestra su foto y el precio formateado en COP
+  (`$ 55.000`), el ítem marcado `disponible: false` muestra el badge
+  "No disponible" (ya no "Agotado").
+- **Perfil público de un negocio de servicios** (Asesoría Legal Rápida):
+  catálogo rotulado "Servicios", los 3 ítems sembrados visibles, la
+  única `<img>` de toda la página es la foto de portada del negocio — un
+  servicio sin foto no fuerza ninguna imagen en su fila expandida.
+
+### Gaps conocidos, no ocultos
+
+- **Las etiquetas rápidas de reseñas siguen centradas en comida**
+  (`comida_caliente`/`comida_fria` → "Comida caliente"/"Comida fría",
+  ver sección 26) — quedan raras en el feedback privado de una
+  costurera o un abogado. No se tocó: cambiar el catálogo de etiquetas
+  requiere una migración de enum (los valores de un ENUM de Postgres no
+  se pueden quitar, solo agregar) y no fue parte de lo pedido para esta
+  funcionalidad — queda documentado como pendiente para cuando se
+  aborde el catálogo de etiquetas de reseñas específicamente.
+- **`OwnDeliveryToggle`/"Hago domicilios propios"** sigue apareciendo
+  igual en el asistente de registro y en el perfil sin importar el tipo
+  de categoría — no se ocultó condicionalmente para `services` (un
+  vendedor de servicios simplemente no lo marca; es opcional). No se
+  pidió esa distinción y agregarla habría sido sobre-diseñar un checkbox
+  opcional.
+- **Sin panel de administración para el catálogo de categorías**: siguen
+  administrándose solo por migración/SQL directo, mismo criterio que
+  desde el principio del proyecto (ver `schema.sql`) — agregar una
+  cuarta categoría (o un cuarto `tipo`) en el futuro sigue siendo
+  trabajo de backend, no algo que un administrador pueda hacer desde la
+  interfaz. No es una regresión de esta funcionalidad, es una limitación
+  preexistente que esta funcionalidad no intentó resolver.
+- El campo `icon` de `Category` sigue sin usarse en ningún lado del
+  frontend (ni `CategoryChips` ni el selector del asistente lo leen) —
+  las 3 categorías nuevas se sembraron sin ícono propio, igual que la
+  mayoría de las categorías de comida existentes. Si en el futuro se
+  diseña un set de íconos por categoría, este campo ya existe para
+  eso — no hizo falta agregarlo en esta funcionalidad.

@@ -102,7 +102,7 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
           <div className="flex flex-col gap-0.5">
             <span className="font-heading text-title-2 font-semibold text-text">{business.name}</span>
             <span className="font-sans text-body-sm text-text-muted">
-              {categoryName ?? "Comida callejera"}
+              {categoryName ?? "Comercio informal"}
               {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
             </span>
           </div>

@@ -29,7 +29,7 @@ export function SearchBar({ onSearch }: SearchBarProps) {
       <div className="flex-1">
         <TextField
           label="Buscar"
-          placeholder="Nombre del negocio o tipo de comida"
+          placeholder="Nombre del negocio, producto o servicio"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />

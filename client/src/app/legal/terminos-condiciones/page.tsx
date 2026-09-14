@@ -13,9 +13,10 @@ export default function TermsAndConditionsPage() {
       <section className="flex flex-col gap-2">
         <h2 className="font-heading text-title-2 font-semibold text-text">Qué es Ruteando</h2>
         <p className="font-sans text-body text-text">
-          Ruteando es una plataforma de geolocalización que conecta consumidores con vendedores de comida
-          callejera y gastronomía informal en Ciudad Verde, Soacha. Un vendedor se registra sin necesidad
-          de registro mercantil ni facturación electrónica; un consumidor lo encuentra en un mapa y lo
+          Ruteando es una plataforma de geolocalización que conecta consumidores con vendedores de
+          comercio informal (comida callejera, productos como artesanías, y servicios como costura o
+          asesoría legal básica) en Ciudad Verde, Soacha. Un vendedor se registra sin necesidad de
+          registro mercantil ni facturación electrónica; un consumidor lo encuentra en un mapa y lo
           contacta directamente por WhatsApp.
         </p>
       </section>

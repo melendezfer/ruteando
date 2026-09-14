@@ -1,7 +1,7 @@
 {
   "name": "ruteando",
   "version": "1.0.0",
-  "description": "API de RUTEANDO: geolocalización de vendedores gastronómicos informales en Ciudad Verde, Soacha.",
+  "description": "API de RUTEANDO: geolocalización de comercio informal (gastronómico y no gastronómico) en Ciudad Verde, Soacha.",
   "main": "src/server.js",
   "engines": {
     "node": ">=24"

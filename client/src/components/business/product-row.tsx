@@ -14,10 +14,14 @@ interface ProductRowProps {
 }
 
 /**
- * Plato del menú, expandible in-place (CLAUDE.md sección 17: "cada plato
- * se expande al tocarlo... sin navegar a otra pantalla"). `onExpand` se
- * dispara cada vez que se abre (no solo la primera vez) — es el mismo
- * criterio que un clic de analítica normal, no un "visto una sola vez".
+ * Ítem de catálogo (plato, producto o servicio, según el tipo de
+ * categoría del negocio — ver CLAUDE.md sección 31 y
+ * client/src/lib/catalog/catalog-label.ts), expandible in-place
+ * (CLAUDE.md sección 17: "cada plato se expande al tocarlo... sin
+ * navegar a otra pantalla" — el mismo patrón de interacción aplica sin
+ * cambios a un producto o a un servicio). `onExpand` se dispara cada vez
+ * que se abre (no solo la primera vez) — es el mismo criterio que un
+ * clic de analítica normal, no un "visto una sola vez".
  */
 export function ProductRow({ product, photoUrl, onExpand }: ProductRowProps) {
   const [expanded, setExpanded] = useState(false);
@@ -45,7 +49,7 @@ export function ProductRow({ product, photoUrl, onExpand }: ProductRowProps) {
         <div className="flex shrink-0 items-center gap-2">
           {product.available === false && (
             <span className="rounded-full bg-ambar/20 px-2 py-1 font-sans text-caption font-medium uppercase tracking-wide text-ambar">
-              Agotado
+              No disponible
             </span>
           )}
           {expanded ? (
@@ -59,7 +63,7 @@ export function ProductRow({ product, photoUrl, onExpand }: ProductRowProps) {
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
           {photoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- foto remota de ancho variable, no vale la pena el pipeline de next/image para una sola foto por plato
+            // eslint-disable-next-line @next/next/no-img-element -- foto remota de ancho variable, no vale la pena el pipeline de next/image para un solo ítem de catálogo
             <img
               src={photoUrl}
               alt={product.name ?? "Producto"}
@@ -67,7 +71,7 @@ export function ProductRow({ product, photoUrl, onExpand }: ProductRowProps) {
             />
           )}
           <p className="font-sans text-body-sm text-text">
-            {product.description ?? "Este plato todavía no tiene descripción."}
+            {product.description ?? "Este ítem todavía no tiene descripción."}
           </p>
         </div>
       )}

@@ -85,6 +85,31 @@ describe('GET /categories', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
+
+  // Expansión de alcance (ver CLAUDE.md sección 31): una categoría creada
+  // sin especificar `tipo` (mismo INSERT mínimo que ya usan crearCategoria()
+  // y el resto de la suite) debe seguir comportándose como comida — no
+  // romper ninguna categoría existente es el punto central de esta
+  // funcionalidad.
+  it('una categoría sin tipo explícito default a type=food', async () => {
+    const categoryId = await crearCategoria();
+    const res = await request(app).get('/categories');
+    const categoria = res.body.find((c) => c.id === categoryId);
+    expect(categoria).toBeDefined();
+    expect(categoria.type).toBe('food');
+  });
+
+  it('una categoría de servicios (ej. costura/sastrería) devuelve type=services', async () => {
+    const { rows } = await pool.query(
+      "INSERT INTO categorias (nombre, tipo) VALUES ($1, 'servicios') RETURNING id",
+      [`Categoría de servicio ${crypto.randomUUID()}`],
+    );
+    categoriaIdsCreadas.push(rows[0].id);
+
+    const res = await request(app).get('/categories');
+    const categoria = res.body.find((c) => c.id === rows[0].id);
+    expect(categoria.type).toBe('services');
+  });
 });
 
 describe('GET /businesses/nearby', () => {

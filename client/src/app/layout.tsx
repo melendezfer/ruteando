@@ -20,7 +20,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Ruteando",
   description:
-    "Encuentra vendedores de comida callejera y gastronomía informal cerca de ti en Ciudad Verde, Soacha.",
+    "Encuentra vendedores de comercio informal — comida callejera, productos y servicios — cerca de ti en Ciudad Verde, Soacha.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon.svg",

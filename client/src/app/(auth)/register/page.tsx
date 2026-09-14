@@ -119,7 +119,7 @@ export default function RegisterPage() {
               checked={role === "vendor"}
               onChange={() => setRole("vendor")}
             />
-            Vendo comida (vendedor)
+            Tengo un negocio (vendedor)
           </label>
         </fieldset>
 

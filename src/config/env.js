@@ -63,6 +63,29 @@ const envSchema = z
       ),
 
     RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
+
+    // TEMPORAL, SOLO DESARROLLO — ver CLAUDE.md sección 21 (verificación
+    // de teléfono de vendedores). Sin proveedor de SMS conectado en
+    // ningún ambiente todavía (smsSender.service.js registra el código
+    // en el log estructurado en vez de enviarlo), completar el flujo
+    // real de OTP para un negocio de prueba es engorroso (hay que leer
+    // el log del proceso) o directamente imposible fuera de ese log. Con
+    // esta bandera en 'true', negocios.repository.js#listar/cercanos/
+    // clusterizar dejan de exigir `telefono_verificado = true` para que
+    // un negocio de prueba aparezca en el mapa/búsquedas sin pasar por
+    // el OTP. Nunca tiene efecto fuera de NODE_ENV=development, pase lo
+    // que pase con esta variable (ver el .refine() más abajo, que hace
+    // fallar el arranque completo si alguien la deja en 'true' en
+    // staging/production — no un simple "se ignora en silencio") — y
+    // negocios.repository.js repite el chequeo de NODE_ENV por su cuenta
+    // (defensa en profundidad, no confía solo en este .refine()).
+    // Quitar esta bandera y su lectura el día que haya un proveedor de
+    // SMS real conectado: no es una funcionalidad del producto, es un
+    // parche de desarrollo.
+    SKIP_PHONE_VERIFICATION_CHECK: z
+      .string()
+      .optional()
+      .transform((value) => value === 'true'),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_REFRESH_SECRET debe ser distinto de JWT_ACCESS_SECRET',
@@ -88,7 +111,12 @@ const envSchema = z
         'FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY son obligatorias en production (confirmación de disponibilidad en tiempo real)',
       path: ['FIREBASE_PROJECT_ID'],
     },
-  );
+  )
+  .refine((data) => data.NODE_ENV === 'development' || !data.SKIP_PHONE_VERIFICATION_CHECK, {
+    message:
+      'SKIP_PHONE_VERIFICATION_CHECK solo puede estar en "true" con NODE_ENV=development — es un parche temporal de desarrollo (ver CLAUDE.md sección 21), nunca un comportamiento válido en staging/production',
+    path: ['SKIP_PHONE_VERIFICATION_CHECK'],
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

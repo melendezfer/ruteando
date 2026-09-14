@@ -25,11 +25,15 @@ import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
+import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import {
   resolveCatalogEmptyState,
   resolveCatalogSectionLabel,
   type CatalogType,
 } from "@/lib/catalog/catalog-label";
+import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
+import { uploadBusinessPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
+import { getPhotoUploadErrorMessage, getPhotoDeleteErrorMessage } from "@/lib/api/error-messages";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -72,6 +76,27 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // perfil completo solo por este campo.
   const [phoneVerified, setPhoneVerified] = useState(Boolean(profile.phoneVerified));
 
+  // Carga de fotos desde el frontend (sin épica asignada hasta ahora —
+  // ver CLAUDE.md): estado local aparte de `profile` (inmutable), mismo
+  // criterio que `phoneVerified` arriba — así una foto nueva/eliminada
+  // se refleja de inmediato sin depender de recargar la página. Se
+  // inicializa con pickLatestPhoto (la MÁS RECIENTE, no la primera —
+  // ver el comentario en ese archivo) para partir del mismo estado que
+  // ya se ve en el resto del perfil.
+  const [heroPhoto, setHeroPhoto] = useState<UploadedPhoto | null>(() => {
+    const photo = pickLatestPhoto(profile.photos, (p) => p.type === "business");
+    return photo?.id && photo.url ? { id: photo.id, url: photo.url } : null;
+  });
+  const [productPhotos, setProductPhotos] = useState<Record<string, UploadedPhoto | null>>(() => {
+    const inicial: Record<string, UploadedPhoto | null> = {};
+    for (const product of profile.products ?? []) {
+      if (!product.id) continue;
+      const photo = pickLatestPhoto(profile.photos, (p) => p.type === "product" && p.productId === product.id);
+      inicial[product.id] = photo?.id && photo.url ? { id: photo.id, url: photo.url } : null;
+    }
+    return inicial;
+  });
+
   useEffect(() => {
     if (profile.id) logBusinessViewEvent(profile.id);
     // Una sola vez por montaje real de esta pantalla — no por cada
@@ -90,7 +115,6 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // depender de eso.
   const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
-  const heroPhoto = profile.photos?.find((photo) => photo.type === "business") ?? null;
   const HeroFallbackIcon = catalogType ? HERO_FALLBACK_ICON_BY_TYPE[catalogType] : Storefront;
   const catalogSectionLabel = resolveCatalogSectionLabel(catalogType);
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
@@ -199,6 +223,21 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
+      {isOwner && profile.id && (
+        <div className="px-5 pb-4">
+          <PhotoUploadControl
+            id={`business-photo-${profile.id}`}
+            label="Foto principal del negocio"
+            currentPhoto={heroPhoto}
+            uploadPhoto={(file) => uploadBusinessPhoto(profile.id!, file)}
+            deletePhoto={deletePhoto}
+            onPhotoChange={setHeroPhoto}
+            uploadErrorMessage={getPhotoUploadErrorMessage}
+            deleteErrorMessage={getPhotoDeleteErrorMessage}
+          />
+        </div>
+      )}
+
       <section className="flex flex-col gap-3 px-5 py-4">
         <h2 className="font-heading text-title-2 font-semibold text-text">{catalogSectionLabel}</h2>
         {(profile.products?.length ?? 0) === 0 && (
@@ -208,10 +247,13 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           <ProductRow
             key={product.id}
             product={product}
-            photoUrl={
-              profile.photos?.find((photo) => photo.type === "product" && photo.productId === product.id)?.url ??
-              null
-            }
+            photoUrl={productPhotos[product.id ?? ""]?.url ?? null}
+            isOwner={isOwner}
+            currentPhoto={product.id ? (productPhotos[product.id] ?? null) : null}
+            onPhotoChange={(photo) => {
+              if (!product.id) return;
+              setProductPhotos((prev) => ({ ...prev, [product.id!]: photo }));
+            }}
             onExpand={(expandedProduct) => {
               if (profile.id && expandedProduct.id) logProductViewEvent(profile.id, expandedProduct.id);
             }}
@@ -227,7 +269,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
       {profile.id && !isOwner && user && (
         <div className="px-5 pb-4">
-          <ReviewForm businessId={profile.id} />
+          <ReviewForm businessId={profile.id} catalogType={catalogType} />
         </div>
       )}
 

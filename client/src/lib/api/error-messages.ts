@@ -120,3 +120,27 @@ export function getReviewSubmitErrorMessage(status: number | undefined): string 
   if (status === 422) return "Revisa la calificación e intenta de nuevo.";
   return GENERIC_ERROR;
 }
+
+/**
+ * POST /businesses/{businessId}/photos, POST /products/{productId}/photos
+ * (carga de fotos, sin épica de frontend asignada hasta ahora — ver
+ * CLAUDE.md). El 422 real más común no es "tamaño" (eso ya se valida en
+ * el cliente antes de subir, ver photo-upload-control.tsx) sino que el
+ * archivo no decodifica como una imagen real de un formato permitido
+ * (regla de seguridad #7 — un archivo renombrado con otra extensión).
+ */
+export function getPhotoUploadErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "No encontramos dónde guardar esta foto. Puede que ya no exista.";
+  if (status === 422) return "Ese archivo no es una imagen válida (JPEG, PNG o WEBP). Prueba con otra foto.";
+  return GENERIC_ERROR;
+}
+
+/** DELETE /photos/{photoId}. */
+export function getPhotoDeleteErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "Esa foto ya no existe.";
+  return GENERIC_ERROR;
+}

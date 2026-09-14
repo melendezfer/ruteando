@@ -527,20 +527,39 @@ components:
 
     ReviewTag:
       description: >-
-        Catálogo fijo y corto de etiquetas rápidas de retroalimentación
-        (sin RF asociado, petición directa del usuario — ver CLAUDE.md).
-        Ninguna es obligatoria; una reseña puede llevar varias a la vez o
-        ninguna.
+        Catálogo corto de etiquetas rápidas de retroalimentación (sin RF
+        asociado, petición directa del usuario — ver CLAUDE.md). Ninguna
+        es obligatoria; una reseña puede llevar varias a la vez o
+        ninguna. Ampliado en la expansión a comercio no gastronómico
+        (sección 31/32 de CLAUDE.md): `good_service`/`long_wait`/
+        `good_price`/`high_price` son genéricas (cualquier tipo de
+        negocio); `hot_food`/`cold_food`/`good_presentation`/
+        `small_portion` son de comida; `good_quality`/`poor_quality`/
+        `good_presentation`/`not_as_described` son de bienes físicos no
+        gastronómicos (ej. artesanías); `knowledgeable`/
+        `did_not_solve_problem`/`punctual`/`late` son de servicios (ej.
+        costura, asesoría legal básica). El backend acepta cualquier
+        valor del enum sin importar la categoría del negocio (RF-016 no
+        cambia esa validación) — es el frontend el que decide cuáles
+        mostrar como chips según Category.type, ver
+        client/src/lib/reviews/review-tags.ts.
       type: string
       enum:
-        - hot_food
-        - cold_food
         - good_service
         - long_wait
         - good_price
         - high_price
+        - hot_food
+        - cold_food
         - good_presentation
         - small_portion
+        - good_quality
+        - poor_quality
+        - not_as_described
+        - knowledgeable
+        - did_not_solve_problem
+        - punctual
+        - late
 
     Review:
       description: >-

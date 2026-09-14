@@ -68,6 +68,43 @@
  * "abierto ahora" sin depender de la hora exacta en que se corra el
  * script.
  *
+ * "Zonas de aglomeración" (ver CLAUDE.md sección 32, sin RF asociado):
+ * las distancias/rumbos de 4 negocios se REACOMODARON (no se tocaron sus
+ * ids/slugs/categorías/fotos, solo su posición) para formar dos zonas
+ * reales y claramente distintas — GET /businesses/zones usa
+ * ST_ClusterDBSCAN con eps=200m/minpoints=3
+ * (ZONE_RADIUS_METERS/ZONE_MIN_BUSINESSES en src/config/constants.js), y
+ * las posiciones originales (repartidas en 5 rumbos distintos desde el
+ * centro, pensadas para "Cerca de ti" y no para clustering) casi nunca
+ * quedaban a menos de 200m entre sí:
+ *
+ * - **Zona norte (alta variedad, rumbo 0°, 150-250m)**: Costuras y
+ *   Arreglos María (150m, sin cambios), Asesoría Legal Rápida (movida de
+ *   200m@90° a 180m@0°), Artesanías Telar Andino (movida de 500m@180° a
+ *   220m@0°) y Arepas Doña Rosa (250m, sin cambios) — 4 negocios a
+ *   ≤100m entre sí, 4 categorías distintas (Arepas, Costura y
+ *   sastrería, Servicios legales básicos, Artesanías).
+ * - **Zona este (baja variedad, rumbo 90°, 300-350m)**: Salchipapas Doña
+ *   Nury (nueva, misma categoría que Perros El Parche —
+ *   "Perros calientes y salchipapas"), Jugos Frutti Verde (movida de
+ *   1400m@270° a 320m@90°) y Perros El Parche (350m, sin cambios) — 3
+ *   negocios a ≤50m entre sí, pero solo 2 categorías distintas (dos de
+ *   los tres son el mismo rubro) — a propósito, para poder comparar
+ *   contra la zona norte.
+ * - Dulces La Abuela (900m@180°) y Empanadas El Fogón (3000m@160°)
+ *   quedan sin cambios, deliberadamente aislados (sin suficientes
+ *   vecinos cerca para formar zona) — siguen siendo pines individuales
+ *   en el mapa, no todo negocio tiene por qué estar en una zona.
+ *
+ * Todas las distancias nuevas quedan por debajo del máximo ya verificado
+ * por geocodificación inversa en el mismo rumbo (sección 25 de
+ * CLAUDE.md: 0° seguro hasta 250m, 90° seguro hasta 350m) — un punto más
+ * cerca del centro sobre un rayo ya confirmado dentro de Soacha no
+ * necesita una nueva verificación (mismo criterio ya aplicado con las 3
+ * categorías no gastronómicas, sección 31). Verificado además a mano con
+ * `ST_ClusterDBSCAN` contra la base de desarrollo antes de escribir este
+ * comentario — no solo calculado en teoría.
+ *
  * Datos claramente de prueba, fáciles de borrar antes de un piloto real:
  *   node scripts/seedDemoBusinesses.js --clean
  *
@@ -138,6 +175,28 @@ const NEGOCIOS = [
     higieneAutodeclarada: true,
   },
   {
+    // Nuevo, sin RF asociado (ver CLAUDE.md sección 32) — mismo rumbo y
+    // categoría que Perros El Parche a propósito: completa la "zona
+    // este" a 3 negocios mutuamente cercanos (eps=200m), pero repitiendo
+    // categoría en vez de sumar una nueva, para que esa zona tenga
+    // MENOS variedad que la "zona norte" y así se pueda demostrar la
+    // comparación entre zonas.
+    slug: 'salchipapas-dona-nury',
+    nombre: 'Salchipapas Doña Nury',
+    descripcion: 'Salchipapas y perros calientes, porciones grandes para compartir.',
+    categoria: 'Perros calientes y salchipapas',
+    correo: 'demo-salchipapas-dona-nury@ruteando.test',
+    nombreDueno: 'Nury Esperanza Baquero',
+    telefono: '3001110009',
+    // Mismo rumbo que Perros El Parche/Jugos Frutti Verde (90°/este,
+    // verificado a 350m), a ~20-50m de ambos.
+    distanciaM: 300,
+    rumbo: 90,
+    cerradoHoy: false,
+    entregaPropia: false,
+    higieneAutodeclarada: false,
+  },
+  {
     slug: 'dulces-la-abuela',
     nombre: 'Dulces La Abuela',
     descripcion: 'Obleas, cocadas y postres caseros de siempre.',
@@ -159,8 +218,12 @@ const NEGOCIOS = [
     correo: 'demo-jugos-frutti-verde@ruteando.test',
     nombreDueno: 'Marcela Pinzón',
     telefono: '3001110004',
-    distanciaM: 1400,
-    rumbo: 270, // oeste
+    // Reacomodado para la "zona este" de baja variedad (ver CLAUDE.md
+    // sección 32) — antes 1400m@270°(oeste), aislado; ahora sobre el
+    // mismo rumbo que Perros El Parche (90°/este, verificado a 350m),
+    // más cerca del centro (320m < 350m), a ~30m de Perros.
+    distanciaM: 320,
+    rumbo: 90,
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: false,
@@ -223,10 +286,12 @@ const NEGOCIOS = [
     correo: 'demo-asesoria-legal-rapida@ruteando.test',
     nombreDueno: 'Javier Andrés Suárez',
     telefono: '3001110007',
-    // Mismo rumbo que Perros El Parche (90°/este, verificado a 350 m),
-    // más cerca del centro (200 m < 350 m).
-    distanciaM: 200,
-    rumbo: 90,
+    // Reacomodado para la "zona norte" de alta variedad (ver CLAUDE.md
+    // sección 32) — antes 200m@90°(este); ahora sobre el mismo rumbo que
+    // Costuras y Arreglos María/Arepas Doña Rosa (0°/norte, verificado a
+    // 250m), a ~30-100m de sus otros 3 miembros.
+    distanciaM: 180,
+    rumbo: 0,
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: false,
@@ -245,10 +310,12 @@ const NEGOCIOS = [
     correo: 'demo-artesanias-telar-andino@ruteando.test',
     nombreDueno: 'Lucía Fernanda Quiroga',
     telefono: '3001110008',
-    // Mismo rumbo que Dulces La Abuela (180°/sur, verificado a 900 m),
-    // más cerca del centro (500 m < 900 m).
-    distanciaM: 500,
-    rumbo: 180,
+    // Reacomodado para la "zona norte" de alta variedad (ver CLAUDE.md
+    // sección 32) — antes 500m@180°(sur), aislado; ahora sobre el mismo
+    // rumbo que Costuras y Arreglos María/Arepas Doña Rosa (0°/norte,
+    // verificado a 250m), a ~30-70m de sus otros 3 miembros.
+    distanciaM: 220,
+    rumbo: 0,
     cerradoHoy: true,
     entregaPropia: false,
     higieneAutodeclarada: false,

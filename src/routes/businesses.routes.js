@@ -14,6 +14,7 @@ const {
   phoneVerificationConfirmSchema,
   businessListQuerySchema,
   businessNearbyQuerySchema,
+  businessZonesQuerySchema,
 } = require('../validators/business.validators');
 const { productInputSchema } = require('../validators/product.validators');
 const { reviewInputSchema, reviewListQuerySchema } = require('../validators/resenas.validators');
@@ -30,11 +31,13 @@ router.post(
   controller.create,
 );
 
-// IMPORTANTE: /nearby (y GET '/') deben registrarse ANTES de
-// GET /:businessId — si no, Express intentaría matchear "nearby" como el
-// parámetro :businessId (validarBusinessId lo rechazaría con 404 antes de
-// llegar siquiera al controlador correcto).
+// IMPORTANTE: /nearby, /zones (y GET '/') deben registrarse ANTES de
+// GET /:businessId — si no, Express intentaría matchear "nearby"/"zones"
+// como el parámetro :businessId (validarBusinessId lo rechazaría con 404
+// antes de llegar siquiera al controlador correcto).
 router.get('/nearby', validateQuery(businessNearbyQuerySchema), controller.nearby);
+// "Zonas de aglomeración" (ver CLAUDE.md sección 32, sin RF asociado).
+router.get('/zones', validateQuery(businessZonesQuerySchema), controller.zones);
 router.get('/', validateQuery(businessListQuerySchema), controller.list);
 
 // optionalAuthenticate (no authenticate a secas): la ruta sigue siendo

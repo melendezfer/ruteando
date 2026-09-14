@@ -2698,3 +2698,250 @@ Verificado de punta a punta:
   mayoría de las categorías de comida existentes. Si en el futuro se
   diseña un set de íconos por categoría, este campo ya existe para
   eso — no hizo falta agregarlo en esta funcionalidad.
+
+## 32. Zonas de aglomeración
+
+Sin RF asociado (fuera de los Documentos 05-15) — petición directa del
+usuario: agrupar negocios por proximidad geográfica real y comparar la
+variedad de comercio disponible entre zonas cercanas, "incluso cruzando
+a otro barrio", en vez de mostrar solo pines sueltos en el mapa. Propia
+rama (`feature/zonas-aglomeracion`).
+
+### Trade-off técnico (decidido ANTES de implementar, como pidió el usuario)
+
+**Opción A — clustering en tiempo real por consulta** (PostGIS
+`ST_ClusterDBSCAN`, sin tabla nueva) vs. **Opción B — zonas
+precalculadas** (tabla `zonas` materializada, con un job/cron que la
+recalcule periódicamente).
+
+Se eligió **A**, por estas razones concretas:
+
+1. **Escala real del proyecto**: RUTEANDO es un directorio de UN barrio
+   (Ciudad Verde, Soacha — CLAUDE.md sección 0), no una ciudad completa.
+   La prueba de carga de la Épica 4 (sección 10) ya demostró que
+   `ST_DWithin` + un índice GIST maneja 5.000 negocios sintéticos con
+   p95≈150ms — clusterizar el subconjunto dentro de un radio de
+   búsqueda (unas pocas decenas o cientos de filas en el peor caso
+   realista) con `ST_ClusterDBSCAN` sobre esos mismos negocios ya
+   indexados es, en la práctica, un costo marginal sobre una consulta
+   que el proyecto ya sabe que es rápida a esta escala — no la misma
+   pregunta que "clusterizar todo Bogotá en cada request".
+2. **Coherencia con el resto del proyecto**: cada vez que este archivo
+   documenta una decisión de "tiempo real vs. precalculado", gana tiempo
+   real — expiración perezosa de `solicitudes_disponibilidad` (sección
+   11), de `codigos_recuperacion`/`codigos_verificacion_telefono`
+   (secciones 1/21), "abierto ahora" calculado contra el reloj en cada
+   petición (Épica 4) — **nunca** se introdujo un cron en este proyecto
+   todavía, y una tabla `zonas` materializada lo habría requerido
+   (recalcular cuando se aprueba/suspende un negocio, cuando cambia de
+   ubicación, cuando se verifica su teléfono...). Zonas precalculadas
+   son correctas hasta el próximo recálculo, nunca antes — inconsistente
+   con que un negocio recién aprobado (RF-019) o recién verificado por
+   SMS (sección 21) ya es visible de inmediato en `/businesses` y
+   `/businesses/nearby`; una zona precalculada obsoleta contradiría esa
+   frescura en la misma pantalla del mapa.
+3. **Encaje técnico real, no solo conveniencia**: la definición que pide
+   esta funcionalidad ("radio de distancia, densidad mínima") es
+   literalmente la firma de `ST_ClusterDBSCAN(geom, eps, minpoints)` —
+   no hubo que inventar un algoritmo de agrupación propio ni forzar el
+   problema a encajar en una herramienta pensada para otra cosa.
+4. **Sin tabla nueva, sin migración**: sección 5 de este archivo. sin
+   ids de zona persistentes que mantener consistentes, sin decidir qué
+   pasa con negocios que "cambian de zona" cuando otro negocio cercano
+   se aprueba o se cierra — ese problema completo desaparece cuando la
+   zona es, por definición, "lo que resulta de consultar ahora mismo".
+
+**Costo real aceptado, no ignorado**: cada consulta a
+`GET /businesses/zones` reclusteriza desde cero (sin caché) — aceptable
+mientras el volumen real de negocios por radio de búsqueda siga siendo
+del orden de decenas/cientos (el caso real de un solo barrio), no miles.
+Si el piloto creciera mucho más allá de eso, cachear el resultado por
+un TTL corto (no una tabla materializada completa, solo una capa de
+caché sobre el mismo cómputo) sería el primer paso razonable antes de
+migrar a zonas precalculadas — no se implementó por no ser necesario
+hoy (regla del proyecto: no construir para una escala que no existe
+todavía).
+
+### Qué hace a un grupo de negocios una "zona"
+
+`ST_ClusterDBSCAN` sobre `ubicaciones.punto` de negocios `activo` +
+`telefono_verificado` (mismo filtro de visibilidad que
+`/businesses`/`/businesses/nearby`), con dos parámetros propios, no
+citados de ningún documento (`src/config/constants.js`):
+
+- **`ZONE_RADIUS_METERS = 200`** (el `eps`) — un radio caminable de
+  "misma cuadra/par de cuadras": agrupa lo que un consumidor recorrería
+  a pie sin pensarlo como "otro viaje", sin fusionar zonas realmente
+  distintas del barrio.
+- **`ZONE_MIN_BUSINESSES = 3`** (el `minpoints`) — con 2 negocios cerca
+  no hay mucho que comparar todavía; 3 es el mínimo para que agruparlos
+  se sienta como una "zona" real. Nota técnica de `ST_ClusterDBSCAN`:
+  minpoints cuenta el punto mismo, así que en la práctica hacen falta
+  al menos 3 negocios mutuamente cercanos.
+
+Un negocio sin suficientes vecinos dentro de `eps` queda como "ruido"
+(`cluster_id = null` para DBSCAN) — no forma zona, pero sigue
+apareciendo como pin individual en el mapa exactamente igual que antes
+de esta funcionalidad; esta funcionalidad es un resaltado adicional,
+nunca un reemplazo de los pines.
+
+### `GET /businesses/zones`
+
+Público (`security: []`, igual que `/businesses/nearby`), parámetros
+`lat`/`lng` (obligatorios, mismo chequeo de caja de Cundinamarca que el
+resto de los endpoints geoespaciales) y `radiusKm` (default 3 — más
+generoso que el default de `/businesses/nearby` (2), porque comparar
+"la zona más cercana con más variedad, incluso cruzando a otro barrio"
+necesita ver más allá del radio inmediato de negocios individuales).
+Deliberadamente **sin** los filtros combinables de RF-010/011
+(categoría/texto/precio/abierto ahora) — filtrar antes de clusterizar
+fragmentaría las zonas de forma engañosa (con `categoryId` puesto, una
+zona de 4 categorías se vería como una de 1, perdiendo justo la señal
+de variedad que este endpoint existe para mostrar).
+
+Devuelve `BusinessZone[]`, ordenado por distancia ascendente al punto
+de búsqueda:
+
+```
+{
+  id,                // válido solo dentro de esta respuesta, nunca persistente
+  centerLatitude, centerLongitude,  // centroide = promedio simple de lat/lng de los miembros
+  businessCount,
+  categoryCount,     // la señal de "variedad"
+  categories: [{ categoryId, categoryName, count }],  // más frecuente primero
+  distanceMeters,    // al miembro MÁS CERCANO de la zona, no al centroide
+}
+```
+
+Implementación dividida a propósito entre PostGIS y JS:
+`negocios.repository.js#clusterizar` hace la parte cara (clustering
+espacial, sobre el índice GIST existente) y devuelve una fila por
+negocio con su `cluster_id`; `zonas.service.js#agruparEnZonas` (función
+**pura**, sin acceso a datos) agrupa esas filas en zonas — separada así
+para poder probarla con filas de prueba hechas a mano, sin mockear el
+repositorio ni tocar la base de datos, mismo criterio que
+`disponibilidad.service.js#estaAbiertoAhora`/`business.mapper.js` en
+este mismo archivo. `ST_ClusterDBSCAN` exige `geometry`, no `geography`,
+y su `eps` se mide en las unidades del sistema de coordenadas de esa
+geometría — en 4326 (grados) un `eps` en metros no significa nada, así
+que la consulta transforma a Web Mercator (SRID 3857) solo para el
+clustering; la distorsión de esa proyección es insignificante a esta
+escala (agrupaciones de ~200m, cerca del ecuador) — mismo tipo de
+aproximación plana ya aceptado en
+`scripts/seedDemoBusinesses.js#desplazar`.
+
+### En el mapa
+
+`leaflet-map.tsx` recibe una prop `zones` nueva y dibuja un `<Circle>`
+translúcido (color `mostaza`, para distinguirse de los pines
+`terracota`) por zona, con un `<Tooltip>` con el resumen
+("N negocios · M tipos de comercio distintos"). Esto es un resaltado
+**adicional**, no un reemplazo de `react-leaflet-cluster`
+(`MarkerClusterGroup`), que ya vivía en el proyecto desde la Épica F3 —
+son dos cosas distintas que conviven sin pisarse: `MarkerClusterGroup`
+agrupa pines por proximidad en PÍXELES de pantalla según el zoom (una
+optimización visual estándar de cualquier mapa con muchos puntos, sin
+ningún conocimiento de categorías ni variedad), mientras que los
+círculos de zona son 100% datos reales de `GET /businesses/zones`
+(proximidad geográfica real, con resumen de variedad) — el hallazgo
+central que motivó esta funcionalidad es que lo primero ya existía y no
+alcanzaba para lo que pedía el usuario. Los círculos se dibujan en el
+`overlayPane` de Leaflet, que por diseño queda debajo del `markerPane`
+(z-index 400 vs. 600) sin importar el orden en el JSX — los pines
+individuales siguen siendo el objetivo de clic principal.
+
+### Comparación entre zonas cercanas
+
+`ZoneComparisonCard` (nueva, `client/src/components/map/zone-comparison-card.tsx`):
+`zones` ya viene ordenado por distancia ascendente, así que
+`zones[0]` (la más cercana al consumidor) es el proxy de "la zona en la
+que está" — sin necesitar un concepto aparte de "estoy DENTRO de una
+zona" con su propio umbral (ver el trade-off de arriba: mantener esto
+simple fue deliberado). `betterZone` es la siguiente zona más cercana
+con **estrictamente más** `categoryCount` que la actual; si no existe
+(la más cercana ya es la más variada, o solo hay una zona en el radio),
+el componente no renderiza nada — no hay nada que sugerir. Solo se
+piden zonas con geolocalización concedida (sin un punto de referencia
+real del consumidor, "la zona en la que estás" no significa nada); sin
+geolocalización, el mapa sigue mostrando pines individuales
+normalmente, solo se pierde el resaltado y la comparación.
+
+`client/src/lib/zones/zone-format.ts` — `WALKING_SPEED_METERS_PER_MINUTE
+= 80` (~4.8 km/h, cifra propia no citada de ningún documento, un
+promedio habitual de caminata urbana casual) convierte `distanceMeters`
+a minutos para el texto "A ~X min caminando hay una zona con...". "Ver
+esa zona" recentra el mapa sobre el centroide de la zona sugerida
+(mismo `mapInstanceRef.current.setView` que ya usa "Mi ubicación").
+
+### Datos de demo
+
+`scripts/seedDemoBusinesses.js`: las posiciones originales (5 rumbos
+distintos desde el centro, pensadas para "Cerca de ti", RF-009) casi
+nunca quedaban a menos de 200m entre sí — se **reacomodaron** (mismos
+ids/slugs/categorías/fotos, solo coordenadas) 4 de los 9 negocios, y se
+agregó 1 nuevo, para formar dos zonas reales y claramente distintas
+(verificado a mano con `ST_ClusterDBSCAN` contra la base de desarrollo
+antes de escribir el script, no solo calculado en teoría):
+
+| Zona | Rumbo | Miembros | Categorías | Variedad |
+|---|---|---|---|---|
+| Norte | 0° (150-250m) | Costuras y Arreglos María, Asesoría Legal Rápida (movida), Artesanías Telar Andino (movida), Arepas Doña Rosa | Costura y sastrería, Servicios legales básicos, Artesanías, Arepas | **4** categorías |
+| Este | 90° (300-350m) | Salchipapas Doña Nury (nueva), Jugos Frutti Verde (movida), Perros El Parche | Perros calientes y salchipapas (×2), Jugos naturales | **2** categorías |
+
+Salchipapas Doña Nury comparte categoría con Perros El Parche a
+propósito — la zona este necesitaba MENOS variedad que la zona norte
+para poder demostrar la comparación ("desde la zona este, sugerir la
+zona norte"), no solo tener 3 negocios cualquiera cerca. Dulces La
+Abuela (900m@180°) y Empanadas El Fogón (3000m@160°) quedan sin
+cambios, deliberadamente aislados — no todo negocio tiene que estar en
+una zona. Todas las coordenadas nuevas caen por debajo del máximo ya
+verificado por geocodificación inversa en el mismo rumbo (sección 25:
+0° seguro hasta 250m, 90° seguro hasta 350m) — un punto más cerca del
+centro sobre un rayo ya confirmado dentro de Soacha no necesita nueva
+verificación (mismo criterio ya aplicado en la sección 31).
+
+### Verificado con Playwright
+
+Mismo criterio que el resto de las funcionalidades de esta sección del
+archivo (sin test suite e2e committeada — script exploratorio contra el
+servidor de desarrollo real, con los datos reales sembrados de arriba):
+
+- Parado en la zona este (baja variedad, geolocalización mockeada en
+  las coordenadas reales de Perros El Parche): el mapa dibuja
+  exactamente los 2 círculos de zona esperados, los pines/clusters
+  individuales se siguen mostrando, y la tarjeta de comparación aparece
+  con el texto exacto — "Estás cerca de una zona con 2 tipos de
+  comercio distintos. A ~5 min caminando hay una zona con 4 tipos de
+  comercio distintos." (el ~5 min calculado coincide con la distancia
+  real medida a mano por PostGIS antes de escribir el seed:
+  ~380m ÷ 80 m/min ≈ 4.75 → 5). "Ver esa zona" se puede tocar sin
+  error; una captura antes/después confirma visualmente que el mapa
+  recentra sobre la zona norte, con sus dos círculos de zona (`mostaza`,
+  translúcidos) claramente visibles alrededor de los clusters de pines.
+- Parado en la zona norte (ya la más variada de las dos): las zonas se
+  siguen dibujando, pero la tarjeta de comparación NO aparece — no hay
+  ninguna zona cercana con más variedad que sugerir.
+
+### Gaps conocidos, no ocultos
+
+- **Sin caché**: cada llamada a `GET /businesses/zones` reclusteriza
+  desde cero (ver el trade-off arriba) — aceptable a la escala real de
+  un solo barrio, documentado como el primer paso a dar si el piloto
+  creciera mucho más allá de eso.
+- **El "estoy en esta zona" es un proxy, no una pertenencia real**: la
+  zona más cercana al punto de búsqueda puede no ser, técnicamente, una
+  zona que "contiene" al consumidor (si está a 500m de cualquier zona,
+  igual se trata la más cercana como "la actual"). Se consideró un
+  umbral explícito (`distanceMeters <= ZONE_RADIUS_METERS`) para decidir
+  "adentro vs. afuera" y se descartó a propósito por simplicidad — la
+  redacción ("Estás CERCA de una zona con...") ya es honesta sobre esto,
+  no promete "estás DENTRO".
+- **Sin nombre propio por zona** ("Zona Norte", etc.) — nombrar una zona
+  requeriría geocodificación inversa por centroide (otra dependencia
+  externa) o un catálogo de zonas administradas a mano, ninguna de las
+  dos pedida. La zona se identifica por su resumen (negocios/variedad),
+  no por un nombre.
+- El radio de 200m del círculo dibujado en el mapa es una aproximación
+  visual (una zona real de DBSCAN no es necesariamente circular) — no
+  es una representación geométrica exacta del cluster, es una señal de
+  "por acá hay una aglomeración", suficiente para el propósito.

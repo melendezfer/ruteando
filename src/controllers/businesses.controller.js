@@ -1,4 +1,5 @@
 const negociosService = require('../services/negocios.service');
+const zonasService = require('../services/zonas.service');
 const ubicacionService = require('../services/ubicacion.service');
 const horarioService = require('../services/horario.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
@@ -23,6 +24,11 @@ async function list(req, res) {
 async function nearby(req, res) {
   const resultado = await negociosService.cercanos(req.validatedQuery);
   res.status(200).json(resultado);
+}
+
+async function zones(req, res) {
+  const zonas = await zonasService.buscarCercanas(req.validatedQuery);
+  res.status(200).json(zonas);
 }
 
 async function getOne(req, res) {
@@ -149,6 +155,7 @@ module.exports = {
   create,
   list,
   nearby,
+  zones,
   getOne,
   update,
   remove,

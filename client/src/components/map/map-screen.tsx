@@ -11,9 +11,11 @@ import { Skeleton } from "@/components/discovery/skeleton";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { MapFiltersSheet, type MapFiltersState } from "@/components/map/map-filters";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
+import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
 type Category = components["schemas"]["Category"];
+type BusinessZone = components["schemas"]["BusinessZone"];
 
 // Centro de referencia de Ciudad Verde, Soacha (mismo punto que usa
 // scripts/seedLoadTest.js en el backend) — solo se usa cuando el
@@ -48,6 +50,7 @@ export function MapScreen() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [businesses, setBusinesses] = useState<BusinessPin[]>([]);
+  const [zones, setZones] = useState<BusinessZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<BusinessPin | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -118,16 +121,48 @@ export function MapScreen() {
     setLoading(false);
   }, [geolocation.status, geolocation.coords, filters]);
 
+  /**
+   * "Zonas de aglomeración" (ver CLAUDE.md sección 32) — solo se piden
+   * con geolocalización concedida a propósito: sin un punto de
+   * referencia real del consumidor, "la zona en la que estás" no
+   * significa nada (mismo criterio que ZoneComparisonCard, que usa la
+   * primera zona del resultado como proxy de "zona actual"). Sin
+   * geolocalización, el mapa sigue mostrando pines individuales
+   * normalmente — solo se pierde el resaltado de zonas y la
+   * comparación, no la búsqueda en sí.
+   */
+  const loadZones = useCallback(async () => {
+    const coords = geolocation.status === "granted" ? geolocation.coords : null;
+    if (!coords) {
+      setZones([]);
+      return;
+    }
+
+    const { data } = await api.GET("/businesses/zones", {
+      params: {
+        query: {
+          lat: coords.lat,
+          lng: coords.lng,
+          radiusKm: filters.radiusKm,
+        },
+      },
+    });
+    setZones(data ?? []);
+  }, [geolocation.status, geolocation.coords, filters.radiusKm]);
+
   useEffect(() => {
     if (geolocation.status === "loading" || geolocation.status === "idle") return;
     let ignore = false;
     Promise.resolve().then(() => {
-      if (!ignore) loadBusinesses();
+      if (!ignore) {
+        loadBusinesses();
+        loadZones();
+      }
     });
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, loadBusinesses]);
+  }, [geolocation.status, loadBusinesses, loadZones]);
 
   let center = DEFAULT_CENTER;
   if (geolocation.status === "granted" && geolocation.coords) {
@@ -156,6 +191,15 @@ export function MapScreen() {
   function handleSelectBusiness(business: BusinessPin) {
     setFiltersOpen(false);
     setSelected(business);
+  }
+
+  /** "Ver esa zona" en ZoneComparisonCard — recentra el mapa sobre la zona sugerida, mismo zoom que "Mi ubicación". */
+  function handleJumpToZone(zone: BusinessZone) {
+    if (mapInstanceRef.current && zone.centerLatitude != null && zone.centerLongitude != null) {
+      mapInstanceRef.current.setView([zone.centerLatitude, zone.centerLongitude], LOCATE_ME_ZOOM, {
+        animate: true,
+      });
+    }
   }
 
   function handleToggleFilters() {
@@ -217,6 +261,7 @@ export function MapScreen() {
               center={center}
               userLocation={userLocation}
               businesses={businesses}
+              zones={zones}
               selectedBusinessId={selected?.id ?? null}
               onSelectBusiness={handleSelectBusiness}
               onMapReady={(map) => {
@@ -233,6 +278,8 @@ export function MapScreen() {
             </p>
           </div>
         )}
+
+        {!selected && !filtersOpen && <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} />}
 
         {selected && (
           <BusinessSummarySheet

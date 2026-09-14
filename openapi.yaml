@@ -254,6 +254,47 @@ components:
             /businesses/nearby, que nunca devuelven un negocio "rejected")
             es null.
 
+    BusinessZone:
+      description: >-
+        "Zona de aglomeración" (GET /businesses/zones, sin RF asociado —
+        ver CLAUDE.md sección 32): un grupo de negocios mutuamente
+        cercanos (clustering por densidad, no zonas administradas ni
+        con nombre propio). `id` solo es válido dentro de esta misma
+        respuesta — no es un identificador persistente, dos negocios
+        pueden quedar en clusters con id distinto en la siguiente
+        consulta si el conjunto de negocios activos cambió entre medio.
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Identificador del cluster, válido solo dentro de esta respuesta.
+        centerLatitude: { type: number, format: double }
+        centerLongitude: { type: number, format: double }
+        businessCount:
+          type: integer
+          description: Cuántos negocios activos y verificados componen esta zona.
+        categoryCount:
+          type: integer
+          description: >-
+            Cuántas categorías distintas hay en esta zona — la señal de
+            "variedad" que motivó esta funcionalidad.
+        categories:
+          type: array
+          description: Desglose por categoría, la más frecuente primero.
+          items:
+            type: object
+            properties:
+              categoryId: { type: integer }
+              categoryName: { type: string, nullable: true }
+              count: { type: integer }
+        distanceMeters:
+          type: number
+          format: double
+          description: >-
+            Distancia real al negocio MÁS CERCANO de la zona (no al
+            centroide) desde el punto de búsqueda — el centroide en sí
+            puede no tener ningún negocio ahí.
+
     BusinessInput:
       type: object
       required: [name, categoryId]
@@ -1164,6 +1205,48 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Business' }
                   pagination: { $ref: '#/components/schemas/Pagination' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /businesses/zones:
+    get:
+      tags: [Negocios]
+      summary: >-
+        Agrupar negocios cercanos en "zonas de aglomeración" (sin RF
+        asociado — ver CLAUDE.md sección 32)
+      description: >-
+        Agrupa negocios activos y verificados por proximidad real
+        (ST_ClusterDBSCAN sobre ubicaciones.punto, no zonas
+        precalculadas — ver el trade-off documentado en CLAUDE.md) y
+        devuelve, por cada grupo con al menos varios negocios mutuamente
+        cercanos, un resumen de cuántos hay y qué tan variado es su
+        catálogo (cuántas categorías distintas). Un negocio sin
+        suficientes vecinos cerca no aparece en ninguna zona (sigue
+        siendo un pin individual en el mapa, fuera de esta respuesta).
+        Ordenado por distancia ascendente al punto de búsqueda — el
+        cliente puede comparar la primera zona (la más cercana) contra
+        las siguientes para sugerir "una zona con más variedad un poco
+        más lejos".
+      security: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, format: double, minimum: -90, maximum: 90 }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, format: double, minimum: -180, maximum: 180 }
+        - name: radiusKm
+          in: query
+          schema: { type: number, default: 3, maximum: 10 }
+      responses:
+        '200':
+          description: Zonas ordenadas por distancia ascendente al punto de búsqueda
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BusinessZone' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/{businessId}:

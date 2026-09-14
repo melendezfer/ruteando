@@ -5,21 +5,33 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import { Circle, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { components } from "@/lib/api/schema";
+import { describeVariety } from "@/lib/zones/zone-format";
 
 type Business = components["schemas"]["Business"];
+type BusinessZone = components["schemas"]["BusinessZone"];
 
 export interface BusinessPin extends Business {
   latitude: number;
   longitude: number;
 }
 
+// Mismo valor que ZONE_RADIUS_METERS en src/config/constants.js (backend)
+// — acá es solo el radio del círculo que se DIBUJA alrededor del
+// centroide de cada zona, no un parámetro real de clustering (eso ya lo
+// hizo PostGIS). Duplicado a propósito, no importado de ningún lado
+// compartido: frontend y backend son dos codebases separadas sin un
+// paquete común, y este valor rara vez cambia.
+const ZONE_CIRCLE_RADIUS_METERS = 200;
+
 interface LeafletMapProps {
   center: { lat: number; lng: number };
   userLocation: { lat: number; lng: number } | null;
   businesses: BusinessPin[];
+  /** "Zonas de aglomeración" (ver CLAUDE.md sección 32) — resaltado visual, además de los pines individuales de siempre. */
+  zones: BusinessZone[];
   selectedBusinessId: string | null;
   onSelectBusiness: (business: BusinessPin) => void;
   /** Entrega la instancia real de L.Map apenas está lista — usada por el botón "Mi ubicación" para recentrar sin pasar por fitBounds. */
@@ -52,6 +64,7 @@ export function LeafletMap({
   center,
   userLocation,
   businesses,
+  zones,
   selectedBusinessId,
   onSelectBusiness,
   onMapReady,
@@ -78,6 +91,36 @@ export function LeafletMap({
       {userLocation && (
         <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} zIndexOffset={1000} />
       )}
+
+      {/*
+        "Zonas de aglomeración" (CLAUDE.md sección 32) — resaltado
+        translúcido, no otro tipo de agrupación de pines (MarkerClusterGroup
+        ya cubre eso, sin relación con esto: agrupa por proximidad de
+        PÍXELES en pantalla según el zoom, no por proximidad geográfica
+        real ni sabe nada de variedad de categorías). Se dibuja en el
+        overlayPane de Leaflet, que por diseño queda DEBAJO del
+        markerPane (z-index 400 vs. 600) sin importar el orden en el
+        JSX — los pines individuales siguen siendo el objetivo de clic
+        principal, esto es solo un resaltado de fondo.
+      */}
+      {zones.map((zone) => (
+        <Circle
+          key={zone.id}
+          center={[zone.centerLatitude ?? 0, zone.centerLongitude ?? 0]}
+          radius={ZONE_CIRCLE_RADIUS_METERS}
+          pathOptions={{
+            color: "var(--color-mostaza)",
+            weight: 2,
+            fillColor: "var(--color-mostaza)",
+            fillOpacity: 0.15,
+          }}
+        >
+          <Tooltip direction="top" opacity={1}>
+            {zone.businessCount} negocio{zone.businessCount === 1 ? "" : "s"} ·{" "}
+            {describeVariety(zone.categoryCount ?? 0)}
+          </Tooltip>
+        </Circle>
+      ))}
 
       <MarkerClusterGroup
         iconCreateFunction={(cluster) =>

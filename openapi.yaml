@@ -189,6 +189,20 @@ components:
             declarada por el negocio. No es un dato sensible: visible
             para cualquiera, igual que `status`/`phoneVerified`. Default
             `false` cuando no se manda en BusinessInput.
+        hygieneSelfDeclared:
+          type: boolean
+          description: >-
+            El vendedor declaró voluntariamente que sigue un conjunto de
+            buenas prácticas de higiene (lavar y preparar en casa,
+            mantener la comida tapada, manejo seguro del cilindro de gas,
+            entre otras) — petición directa del usuario, sin RF asociado
+            (ver CLAUDE.md). IMPORTANTE: es una AUTOdeclaración del
+            vendedor. RUTEANDO no verifica su cumplimiento ni esto
+            constituye una certificación sanitaria oficial — el cliente
+            que integre este campo debe conservar esa aclaración en
+            cualquier texto o insignia que lo muestre, nunca presentarlo
+            como una certificación o verificación de la plataforma.
+            Default `false` cuando no se manda en BusinessInput.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         latitude:
@@ -241,6 +255,15 @@ components:
             en POST, omitirlo equivale a `false`; en PATCH, omitirlo
             conserva el valor existente del negocio en vez de
             restablecerlo — mismo criterio que `description`/`contactPhone`.
+        hygieneSelfDeclared:
+          type: boolean
+          description: >-
+            Activa/desactiva el sello de higiene autodeclarada (ver
+            CLAUDE.md) — es una declaración voluntaria del vendedor, no
+            una verificación de la plataforma. Opcional, sin `default`
+            declarado a propósito, mismo criterio que `ownDelivery`: en
+            POST, omitirlo equivale a `false`; en PATCH, omitirlo
+            conserva el valor existente.
 
     AssistedRegistrationInput:
       description: >-

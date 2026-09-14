@@ -31,6 +31,15 @@
  * etiqueta del perfil público aparece para unos negocios y no para
  * otros, sin tener que sembrar datos aparte para probarlo.
  *
+ * higieneAutodeclarada (sello de higiene autodeclarada, ver CLAUDE.md)
+ * también mezclado (3 en true, 2 en false) y deliberadamente
+ * independiente del patrón de entregaPropia — dos negocios llevan las
+ * dos insignias a la vez (Arepas Doña Rosa, Empanadas El Fogón), uno
+ * lleva solo el sello de higiene sin domicilios (Perros El Parche), y
+ * los otros dos llevan como mucho una sola de las dos — así se puede
+ * verificar a ojo que ambas insignias conviven en el mismo perfil sin
+ * pisarse, y que cada una aparece/desaparece de forma independiente.
+ *
  * El horario de cada negocio se calcula respecto al día de HOY en hora
  * de Bogotá (momentoActualBogota, mismo helper que ya usa
  * disponibilidad.service.js): los negocios marcados "cerrado ahora"
@@ -93,6 +102,7 @@ const NEGOCIOS = [
     rumbo: 0, // norte
     cerradoHoy: false,
     entregaPropia: true,
+    higieneAutodeclarada: true,
   },
   {
     slug: 'perros-el-parche',
@@ -106,6 +116,7 @@ const NEGOCIOS = [
     rumbo: 90, // este
     cerradoHoy: false,
     entregaPropia: false,
+    higieneAutodeclarada: true,
   },
   {
     slug: 'dulces-la-abuela',
@@ -119,6 +130,7 @@ const NEGOCIOS = [
     rumbo: 180, // sur
     cerradoHoy: true,
     entregaPropia: true,
+    higieneAutodeclarada: false,
   },
   {
     slug: 'jugos-frutti-verde',
@@ -132,6 +144,7 @@ const NEGOCIOS = [
     rumbo: 270, // oeste
     cerradoHoy: false,
     entregaPropia: false,
+    higieneAutodeclarada: false,
   },
   {
     slug: 'empanadas-el-fogon',
@@ -152,6 +165,7 @@ const NEGOCIOS = [
     rumbo: 160, // sursureste (evita Bosa, Bogotá — ver CLAUDE.md)
     cerradoHoy: true,
     entregaPropia: true,
+    higieneAutodeclarada: true,
   },
 ];
 
@@ -209,10 +223,18 @@ async function sembrar() {
     const categoriaId = categoria.rows[0].id;
 
     const negocio = await pool.query(
-      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia)
-       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6)
+      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia, higiene_autodeclarada)
+       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6, $7)
        RETURNING id`,
-      [usuarioId, categoriaId, n.nombre, n.descripcion, n.telefono, n.entregaPropia],
+      [
+        usuarioId,
+        categoriaId,
+        n.nombre,
+        n.descripcion,
+        n.telefono,
+        n.entregaPropia,
+        n.higieneAutodeclarada,
+      ],
     );
     const negocioId = negocio.rows[0].id;
 
@@ -259,6 +281,7 @@ async function sembrar() {
       distanciaM: n.distanciaM,
       estadoAhora: n.cerradoHoy ? 'cerrado hoy' : 'abierto ahora',
       entregaPropia: n.entregaPropia,
+      higieneAutodeclarada: n.higieneAutodeclarada,
       correo: n.correo,
       whatsapp: n.telefono,
     });
@@ -271,7 +294,8 @@ async function sembrar() {
   for (const r of resumen) {
     console.log(
       `- ${r.nombre} [${r.categoria}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
-        `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}\n` +
+        `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}, ` +
+        `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}\n` +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,
     );
   }

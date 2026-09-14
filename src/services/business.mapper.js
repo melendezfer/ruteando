@@ -91,6 +91,15 @@ function toApiBusiness(row) {
     // información declarada por el negocio. No es un dato sensible —
     // visible para cualquiera, igual que status/phoneVerified.
     ownDelivery: Boolean(row.entrega_propia),
+    // Sello de higiene autodeclarada (petición directa del usuario, sin
+    // RF asociado — ver CLAUDE.md). CUIDADO LEGAL: esto es una
+    // AUTOdeclaración del vendedor, nunca una verificación de
+    // cumplimiento hecha por RUTEANDO ni una certificación sanitaria
+    // oficial — el texto exacto de la insignia pública (que deja esto
+    // explícito) vive en el frontend (hygiene-badge.tsx), no acá; este
+    // campo es solo el booleano crudo. No es un dato sensible: visible
+    // para cualquiera, igual que status/phoneVerified/ownDelivery.
+    hygieneSelfDeclared: Boolean(row.higiene_autodeclarada),
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
     // Presentes solo cuando la consulta que produjo esta fila hizo el

@@ -14,6 +14,9 @@ import { BusinessFeedbackPanel } from "@/components/business/business-feedback-p
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
+import { HygieneBadge } from "@/components/business/hygiene-badge";
+import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
+import { BusinessQrCode } from "@/components/business/business-qr-code";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -99,12 +102,15 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
         {profile.location?.referenceAddress && (
           <p className="font-sans text-body-sm text-text-muted">{profile.location.referenceAddress}</p>
         )}
-        {profile.ownDelivery && (
-          <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
-            <Moped size={16} weight="bold" />
-            Hace domicilios propios
-          </span>
-        )}
+        <div className="mt-1 flex flex-wrap gap-2">
+          {profile.ownDelivery && (
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
+              <Moped size={16} weight="bold" />
+              Hace domicilios propios
+            </span>
+          )}
+          {profile.hygieneSelfDeclared && <HygieneBadge />}
+        </div>
       </div>
 
       {isOwner && !phoneVerified && profile.id && (
@@ -136,6 +142,25 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
             contactPhone={profile.contactPhone ?? null}
             initialOwnDelivery={Boolean(profile.ownDelivery)}
           />
+        </div>
+      )}
+
+      {isOwner && profile.id && profile.name != null && profile.categoryId != null && (
+        <div className="px-5 pb-4">
+          <HygieneBadgeToggle
+            businessId={profile.id}
+            name={profile.name}
+            description={profile.description ?? null}
+            categoryId={profile.categoryId}
+            contactPhone={profile.contactPhone ?? null}
+            initialHygieneSelfDeclared={Boolean(profile.hygieneSelfDeclared)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && (
+        <div className="px-5 pb-4">
+          <BusinessQrCode businessId={profile.id} businessName={profile.name ?? "negocio"} />
         </div>
       )}
 

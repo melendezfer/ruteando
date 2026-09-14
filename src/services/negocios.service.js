@@ -93,6 +93,7 @@ async function crear(usuarioId, input) {
     descripcion: input.description,
     telefonoContacto: input.contactPhone,
     entregaPropia: input.ownDelivery ?? false,
+    higieneAutodeclarada: input.hygieneSelfDeclared ?? false,
   });
 
   return toApiBusiness(negocio);
@@ -115,6 +116,10 @@ async function actualizar(usuarioId, id, input) {
     telefonoContacto:
       input.contactPhone !== undefined ? input.contactPhone : negocio.telefono_contacto,
     entregaPropia: input.ownDelivery !== undefined ? input.ownDelivery : negocio.entrega_propia,
+    higieneAutodeclarada:
+      input.hygieneSelfDeclared !== undefined
+        ? input.hygieneSelfDeclared
+        : negocio.higiene_autodeclarada,
   });
 
   return toApiBusiness(actualizado);

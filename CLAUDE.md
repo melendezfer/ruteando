@@ -2248,3 +2248,201 @@ tarjeta del propio negocio de quien tiene la sesión iniciada.
   verificó por separado con Playwright (el flujo completo sí se probó en
   Inicio y en el perfil de negocio, que comparten el mismo componente),
   pero no hay ninguna razón para que se comporte distinto ahí.
+
+## 30. Código QR del perfil y sello de higiene autodeclarada
+
+Dos funciones nuevas y relacionadas, ambas sin RF asociado (fuera del
+alcance de los Documentos 05-15) — petición directa del usuario, propia
+rama (`feature/qr-y-sello-higiene`). Se implementaron juntas porque
+ambas viven en la misma pantalla de gestión del negocio (la propia
+`business-profile-screen.tsx` cuando `isOwner`, no existe una pantalla
+de "editar negocio" separada — ver sección 26/27) y ambas están pensadas
+para que el vendedor las use en el punto de venta físico: el QR para que
+lo escaneen, el sello para que se vea en el perfil que ese QR abre.
+
+### Código QR del negocio
+
+Genera un QR que apunta directo a `/negocios/{businessId}` (la misma URL
+pública que ya sirve de vista previa enriquecida por WhatsApp, CLAUDE.md
+sección 12) — visible solo para el dueño
+(`client/src/components/business/business-qr-code.tsx`), con botones
+"Descargar" (PNG) y "Copiar enlace".
+
+- **Sin dependencia nueva evitable**: se revisó primero que no hubiera
+  ya una librería de generación de QR instalada en el proyecto (no
+  había ninguna) antes de agregar `qrcode` (con `@types/qrcode`) a
+  `client/package.json` — la única dependencia nueva de esta
+  funcionalidad.
+- **Generado enteramente en el navegador**, sin llamar a ningún
+  servicio externo (a diferencia de, por ejemplo, `picsum.photos` para
+  fotos de demo, sección 25 — ahí sí es aceptable por ser solo datos de
+  prueba): funciona sin conexión, coherente con la PWA instalable
+  (CLAUDE.md sección 12), y no depende de ningún endpoint nuevo del
+  backend — la URL que codifica ya es pública y accesible sin sesión.
+- `window.location.origin` (no una variable de entorno nueva) construye
+  la URL absoluta — funciona igual en desarrollo, en la LAN (sección 24
+  de CLAUDE.md), en staging y en producción sin configuración adicional.
+  Leerlo directamente en el cuerpo del componente (no en un
+  `useEffect`/`useState`) es seguro acá porque el componente nunca se
+  renderiza en el servidor: solo se monta cuando `isOwner` es `true`,
+  algo que depende de `useAuth()` y por lo tanto solo se resuelve
+  después de la hidratación.
+- El nombre del archivo descargado (`qr-<slug-del-nombre>.png`) sale de
+  una función `slugify()` propia del componente — quita tildes
+  (normaliza a NFD y descarta los diacríticos combinantes antes de
+  pasar a minúsculas), no una dependencia nueva solo para esto.
+
+### Sello de higiene autodeclarada
+
+Campo nuevo `hygieneSelfDeclared` (`negocios.higiene_autodeclarada` en
+la base de datos, migración `higiene-autodeclarada-negocio`) que el
+dueño activa voluntariamente desde su perfil, declarando que sigue un
+conjunto de buenas prácticas de higiene. Mismo patrón exacto que
+`ownDelivery`/"Hace domicilios propios" (sección 5/CLAUDE.md, sin
+sección propia hasta ahora): vive en `BusinessInput`/`Business`, se
+cambia con el mismo `PATCH /businesses/{businessId}` que ya usa el
+asistente de registro (sin endpoint nuevo), sin `.default()` en el
+validador (Zod) a propósito — un PATCH que no lo menciona conserva el
+valor existente, nunca lo restablece en silencio — y con default
+`false` en la creación.
+
+**CUIDADO LEGAL, el punto central de esta funcionalidad**: en ningún
+texto de esta funcionalidad — ni el corto de la insignia, ni el modal
+público, ni la pantalla donde el dueño la activa, ni la descripción del
+campo en `openapi.yaml` — se sugiere que RUTEANDO certifica, inspecciona
+o verifica el cumplimiento de normas de higiene. Es, en todos los
+lugares donde aparece, una AUTOdeclaración voluntaria del vendedor. El
+texto exacto vive en un solo lugar
+(`client/src/lib/hygiene/hygiene.ts`, mismo criterio que
+`review-tags.ts` con el catálogo de etiquetas de reseñas — un único
+lugar evita que el texto del toggle y el de la insignia pública
+diverjan con el tiempo):
+
+- Insignia pública (corta): "Higiene autodeclarada".
+- Aclaración completa (modal, se abre al tocar la insignia — **nunca
+  aparece el texto corto sin que se pueda llegar a esta aclaración**):
+  > "Este vendedor declaró, por su propia cuenta, que sigue un conjunto
+  > de buenas prácticas de higiene en la preparación y manejo de sus
+  > alimentos (por ejemplo: lavar y preparar en casa, mantener la
+  > comida tapada, manejo seguro del cilindro de gas).
+  >
+  > Esta declaración es voluntaria y no ha sido verificada por
+  > RUTEANDO. No es una certificación oficial de sanidad ni una
+  > garantía de cumplimiento de normas sanitarias — RUTEANDO es un
+  > intermediario de información, no un ente certificador."
+- La misma aclaración se muestra en la pantalla del dueño
+  (`HygieneBadgeToggle`) **antes** del interruptor, no como letra
+  pequeña después de activarlo — quien está por declarar el sello debe
+  leer primero qué implica (y qué no implica) hacerlo.
+- `openapi.yaml` (`Business.hygieneSelfDeclared`,
+  `BusinessInput.hygieneSelfDeclared`) repite la misma aclaración en la
+  descripción del campo, con una nota explícita para quien integre la
+  API: "el cliente que integre este campo debe conservar esa aclaración
+  en cualquier texto o insignia que lo muestre, nunca presentarlo como
+  una certificación o verificación de la plataforma" — para que el
+  cuidado legal no dependa solo de que el frontend propio de RUTEANDO
+  lo respete.
+
+**Guía de 5 pasos de buenas prácticas** (contenido educativo de
+referencia, texto simple sin diseño elaborado, pedido explícitamente
+así): vive en el mismo `hygiene.ts`, colapsada detrás de un botón "Ver
+guía de 5 pasos de buenas prácticas" dentro de `HygieneBadgeToggle` (no
+siempre visible, para no alargar la tarjeta del interruptor). Los 5
+títulos son los que pidió el usuario, textual — la descripción de cada
+uno es la única redacción propia de esta rama:
+
+1. **Lava y prepara en casa** — lávate bien las manos y lava los
+   utensilios antes de preparar tus alimentos.
+2. **Tapa siempre tu comida** — protégela del polvo, los insectos y el
+   sol mientras la vendes.
+3. **Cuídate para cuidar al cliente** — si estás enfermo o tienes
+   heridas en las manos, evita manipular alimentos ese día.
+4. **El cilindro de gas lejos del paso** — ubica y revisa tu cilindro en
+   un lugar seguro, lejos del tránsito de gente.
+5. **Usa tu celular a tu favor** — avisa a tus clientes por WhatsApp si
+   cambias de horario o de ubicación.
+
+### Datos de demo
+
+`scripts/seedDemoBusinesses.js` (sección 25) suma `higieneAutodeclarada`
+a cada negocio, mezclado a propósito (3 en `true`, 2 en `false`) y
+deliberadamente independiente del patrón de `entregaPropia` — dos
+negocios llevan las dos insignias a la vez (Arepas Doña Rosa, Empanadas
+El Fogón), uno lleva solo el sello de higiene sin domicilios (Perros El
+Parche), y los otros dos llevan como mucho una sola de las dos, para
+poder verificar a ojo que ambas insignias conviven en el mismo perfil
+sin pisarse y que cada una aparece/desaparece de forma independiente.
+
+### Verificado con Playwright
+
+Mismo criterio que el resto de las funcionalidades sin test suite
+committeada de esta sección del archivo (no hay `playwright.config` ni
+carpeta de e2e en el repo — cada verificación de este tipo es un script
+exploratorio contra el servidor de desarrollo real, no una prueba
+permanente). Se verificó, contra los datos reales sembrados por
+`seedDemoBusinesses.js`:
+
+- Visitante anónimo en un negocio **con** el sello: la insignia es
+  visible, tocarla abre el modal, y el modal contiene el texto legal
+  exacto ("declaración es voluntaria y no ha sido verificada por
+  RUTEANDO", "No es una certificación oficial de sanidad"). El mismo
+  visitante NO ve ni el bloque de QR ni el interruptor de higiene (son
+  solo del dueño).
+- Visitante anónimo en un negocio **sin** el sello: la insignia no
+  aparece en absoluto.
+- Dueño autenticado: ve el bloque de QR (canvas con contenido real,
+  texto con la URL pública exacta debajo, descarga de un PNG real vía
+  el botón "Descargar" con el nombre de archivo esperado) y el
+  interruptor de higiene ya reflejando el valor sembrado (`true` para
+  Arepas Doña Rosa) — expandir "Ver guía de 5 pasos" muestra los 5
+  títulos pedidos.
+- Dueña de un negocio sembrado con el sello en `false`: lo activa
+  (interruptor pasa a marcado, sin error) → recarga la página → la
+  insignia pública aparece → un visitante anónimo en otra sesión
+  también la ve ahora → lo desactiva de nuevo → recarga → la insignia
+  desaparece. Deja los datos de demo como estaban al terminar.
+
+**Hallazgo real durante la propia verificación, no solo del código de
+producto**: el checkbox de `HygieneBadgeToggle` (y el de
+`OwnDeliveryToggle`, que sigue el mismo patrón) es 100% controlado por
+React (`checked={enabled}`, donde `enabled` solo cambia cuando el PATCH
+resuelve) — el método `.check()`/`.uncheck()` de Playwright asume que la
+propiedad `checked` del DOM cambia de inmediato tras un clic nativo, lo
+cual no aplica acá (React la revierte al valor de estado mientras la
+petición está en curso). El script de verificación usa `.click()` +
+espera explícita sobre `aria-checked`, no `.check()`. No es un bug del
+producto — es una discrepancia real entre cómo interactúa Playwright con
+checkboxes nativos y cómo se comporta un checkbox controlado async;
+válido tenerlo presente para cualquier prueba futura sobre estos dos
+interruptores.
+
+**Limitación del propio entorno de verificación, no del producto**: este
+entorno de desarrollo no tenía instaladas las librerías nativas que
+necesita Chromium headless (`libnspr4`, `libnss3`, `libasound2`, entre
+otras) y no hay `sudo` sin contraseña disponible para instalarlas con
+`apt-get install`. Se resolvió descargando los `.deb` con
+`apt-get download` (no requiere privilegios) y extrayéndolos con
+`dpkg-deb -x` a un prefijo local, apuntando `LD_LIBRARY_PATH` ahí —
+sin tocar el sistema ni requerir la contraseña del usuario. Specific a
+este entorno de ejecución, no algo para automatizar en el repo.
+
+### Gaps conocidos, no ocultos
+
+- El toggle de higiene no actualiza la insignia pública en la misma
+  carga de página tras cambiarlo — mismo comportamiento ya existente en
+  `OwnDeliveryToggle` (la insignia lee de la prop `profile`, inmutable,
+  no del estado local del interruptor). Se verificó que el cambio real
+  sí se refleja tras recargar/en otra sesión (ver arriba); no se
+  "arregló" acá porque hubiera sido tocar un patrón ya establecido y
+  usado en otro lado sin que se pidiera.
+- El catálogo de la guía de 5 pasos es fijo en código
+  (`client/src/lib/hygiene/hygiene.ts`) — cambiar el texto hoy requiere
+  un despliegue de frontend, no hay panel de administración para
+  editarlo. No se pidió, y el texto no cambia con frecuencia suficiente
+  para justificarlo todavía.
+- `scripts/seedLoadTest.js` (miles de negocios sintéticos para la
+  prueba de carga, sección 10) no se tocó — mismo criterio ya aplicado
+  con `telefono_verificado`/`mostrar_ubicacion_exacta` en la
+  verificación de teléfono (sección 21): ese script sigue sin sembrar
+  `higiene_autodeclarada`, que por default queda en `false`, sin que
+  eso afecte la prueba de carga (no filtra por ese campo).

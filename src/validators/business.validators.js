@@ -13,6 +13,12 @@ const businessInputSchema = z.object({
   // real de creación (false) se aplica en negocios.service.js#crear, no
   // acá.
   ownDelivery: z.boolean().optional(),
+  // Sello de higiene autodeclarada (petición directa del usuario, sin RF
+  // asociado — ver CLAUDE.md). Mismo criterio que ownDelivery: sin
+  // `.default()` a propósito — un PATCH que no lo menciona conserva el
+  // valor existente en vez de reactivarlo/desactivarlo en silencio. El
+  // default real de creación (false) se aplica en negocios.service.js#crear.
+  hygieneSelfDeclared: z.boolean().optional(),
 });
 
 // Caja envolvente de Cundinamarca (regla de seguridad #6: "idealmente un

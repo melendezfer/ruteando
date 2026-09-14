@@ -1,12 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CaretDown, CaretUp } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react/dist/ssr";
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { uploadProductPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
-import { getPhotoUploadErrorMessage, getPhotoDeleteErrorMessage } from "@/lib/api/error-messages";
+import { deleteProduct } from "@/lib/api/products";
+import {
+  getPhotoUploadErrorMessage,
+  getPhotoDeleteErrorMessage,
+  getProductDeleteErrorMessage,
+} from "@/lib/api/error-messages";
 
 type Product = components["schemas"]["Product"];
 
@@ -14,10 +19,14 @@ interface ProductRowProps {
   product: Product;
   /** Foto de solo lectura para un visitante que no es el dueño — ignorada cuando `isOwner`. */
   photoUrl: string | null;
-  /** Sin épica de frontend asignada hasta ahora (petición directa del usuario) — solo el dueño puede subir/reemplazar/eliminar. */
+  /** Sin épica de frontend asignada hasta ahora (petición directa del usuario) — solo el dueño puede subir/reemplazar/eliminar, editar o borrar. */
   isOwner: boolean;
   currentPhoto: UploadedPhoto | null;
   onPhotoChange: (photo: UploadedPhoto | null) => void;
+  /** Abre el formulario de edición en business-profile-screen.tsx (el formulario en sí es un modal, un único componente reusado también para "Agregar"). */
+  onEdit: (product: Product) => void;
+  /** Notifica al padre DESPUÉS de un borrado ya exitoso — este componente hace la llamada a la API y su propio confirm/loading/error, mismo criterio que PhotoUploadControl. */
+  onDeleted: (productId: string) => void;
   onExpand: (product: Product) => void;
 }
 
@@ -37,14 +46,37 @@ export function ProductRow({
   isOwner,
   currentPhoto,
   onPhotoChange,
+  onEdit,
+  onDeleted,
   onExpand,
 }: ProductRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function toggle() {
     const next = !expanded;
     setExpanded(next);
     if (next) onExpand(product);
+  }
+
+  async function handleDelete() {
+    if (!product.id) return;
+    const confirmado = window.confirm(
+      `¿Eliminar "${product.name}"? Esta acción no se puede deshacer.`,
+    );
+    if (!confirmado) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteProduct(product.id);
+    setDeleting(false);
+
+    if (!result.ok) {
+      setDeleteError(getProductDeleteErrorMessage(result.status));
+      return;
+    }
+    onDeleted(product.id);
   }
 
   return (
@@ -77,6 +109,29 @@ export function ProductRow({
 
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
+          {isOwner && (
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onEdit(product)}
+                aria-label={`Editar ${product.name ?? "ítem"}`}
+                className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-text-muted transition-colors hover:bg-background"
+              >
+                <PencilSimple size={16} weight="bold" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                aria-label={`Eliminar ${product.name ?? "ítem"}`}
+                className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-rojo transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash size={16} weight="bold" />
+              </button>
+            </div>
+          )}
+          {deleteError && <p className="font-sans text-body-sm text-rojo">{deleteError}</p>}
+
           {isOwner && product.id ? (
             <PhotoUploadControl
               id={`product-photo-${product.id}`}

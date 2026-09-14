@@ -144,3 +144,24 @@ export function getPhotoDeleteErrorMessage(status: number | undefined): string {
   if (status === 404) return "Esa foto ya no existe.";
   return GENERIC_ERROR;
 }
+
+/**
+ * POST /businesses/{businessId}/products, PATCH /products/{productId}
+ * (gestión del catálogo, sin épica de frontend asignada hasta ahora —
+ * petición directa del usuario).
+ */
+export function getProductFormErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "No encontramos este negocio o este ítem. Puede que ya no exista.";
+  if (status === 422) return "Revisa los datos del formulario.";
+  return GENERIC_ERROR;
+}
+
+/** DELETE /products/{productId}. */
+export function getProductDeleteErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "Ese ítem ya no existe.";
+  return GENERIC_ERROR;
+}

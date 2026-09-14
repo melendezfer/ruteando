@@ -8,6 +8,7 @@ import {
   Moped,
   NavigationArrow,
   Package,
+  Plus,
   Storefront,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
@@ -26,17 +27,27 @@ import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
+import { ProductForm, type ProductFormValues } from "@/components/business/product-form";
 import {
   resolveCatalogEmptyState,
   resolveCatalogSectionLabel,
+  resolveItemNoun,
   type CatalogType,
 } from "@/lib/catalog/catalog-label";
 import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
 import { uploadBusinessPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
-import { getPhotoUploadErrorMessage, getPhotoDeleteErrorMessage } from "@/lib/api/error-messages";
+import { createProduct, updateProduct } from "@/lib/api/products";
+import {
+  getPhotoUploadErrorMessage,
+  getPhotoDeleteErrorMessage,
+  getProductFormErrorMessage,
+} from "@/lib/api/error-messages";
 import type { components } from "@/lib/api/schema";
 
 type BusinessProfile = components["schemas"]["BusinessProfile"];
+type Product = components["schemas"]["Product"];
+
+type ProductFormState = { mode: "create" } | { mode: "edit"; product: Product };
 
 interface BusinessProfileScreenProps {
   profile: BusinessProfile;
@@ -97,6 +108,82 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
     return inicial;
   });
 
+  // Gestión del catálogo (agregar/editar/eliminar, sin épica de frontend
+  // asignada hasta ahora — petición directa del usuario): estado local
+  // aparte de `profile.products` (inmutable), mismo criterio que
+  // heroPhoto/productPhotos arriba — así la lista se actualiza sola tras
+  // crear, editar o borrar, sin recargar la página completa.
+  const [products, setProducts] = useState<Product[]>(profile.products ?? []);
+  const [productForm, setProductForm] = useState<ProductFormState | null>(null);
+  const [productFormSubmitting, setProductFormSubmitting] = useState(false);
+  const [productFormError, setProductFormError] = useState<string | null>(null);
+  const [productFormFieldErrors, setProductFormFieldErrors] = useState<Record<string, string>>({});
+
+  function closeProductForm() {
+    setProductForm(null);
+    setProductFormError(null);
+    setProductFormFieldErrors({});
+  }
+
+  async function handleProductFormSubmit(values: ProductFormValues) {
+    if (!productForm || !profile.id) return;
+
+    const name = values.name.trim();
+    const priceNumber = Number(values.price);
+    if (!name || Number.isNaN(priceNumber) || priceNumber < 0) {
+      setProductFormError("Revisa el nombre y el precio.");
+      return;
+    }
+
+    setProductFormSubmitting(true);
+    setProductFormError(null);
+    setProductFormFieldErrors({});
+
+    const body = {
+      name,
+      price: priceNumber,
+      description: values.description.trim() ? values.description.trim() : undefined,
+      available: values.available,
+    };
+
+    const result =
+      productForm.mode === "create"
+        ? await createProduct(profile.id, body)
+        : await updateProduct(productForm.product.id!, body);
+
+    setProductFormSubmitting(false);
+
+    if (!result.ok || !result.product) {
+      setProductFormError(getProductFormErrorMessage(result.status));
+      setProductFormFieldErrors(result.fieldErrors);
+      return;
+    }
+
+    if (productForm.mode === "create") {
+      setProducts((prev) => [...prev, result.product!]);
+    } else {
+      setProducts((prev) => prev.map((p) => (p.id === result.product!.id ? result.product! : p)));
+    }
+    closeProductForm();
+  }
+
+  /**
+   * ProductRow ya hizo el DELETE real (mismo criterio "self-contained"
+   * que PhotoUploadControl) — esto solo actualiza el estado local: saca
+   * el producto de la lista y limpia su entrada en productPhotos, para
+   * no dejar una referencia de foto colgando de un producto que ya no
+   * existe (mismo espíritu de "reemplaza, no acumula" que la carga de
+   * fotos, aplicado acá al estado del cliente).
+   */
+  function handleProductDeleted(productId: string) {
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    setProductPhotos((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  }
+
   useEffect(() => {
     if (profile.id) logBusinessViewEvent(profile.id);
     // Una sola vez por montaje real de esta pantalla — no por cada
@@ -118,6 +205,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   const HeroFallbackIcon = catalogType ? HERO_FALLBACK_ICON_BY_TYPE[catalogType] : Storefront;
   const catalogSectionLabel = resolveCatalogSectionLabel(catalogType);
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
+  const itemNoun = resolveItemNoun(catalogType);
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
   const directionsHref = profile.location
     ? `https://www.google.com/maps/dir/?api=1&destination=${profile.location.latitude},${profile.location.longitude}`
@@ -239,11 +327,23 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       <section className="flex flex-col gap-3 px-5 py-4">
-        <h2 className="font-heading text-title-2 font-semibold text-text">{catalogSectionLabel}</h2>
-        {(profile.products?.length ?? 0) === 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-heading text-title-2 font-semibold text-text">{catalogSectionLabel}</h2>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setProductForm({ mode: "create" })}
+              className="flex items-center gap-1 font-sans text-body-sm font-semibold text-terracota"
+            >
+              <Plus size={16} weight="bold" />
+              Agregar {itemNoun}
+            </button>
+          )}
+        </div>
+        {products.length === 0 && (
           <p className="font-sans text-body-sm text-text-muted">{catalogEmptyState}</p>
         )}
-        {profile.products?.map((product) => (
+        {products.map((product) => (
           <ProductRow
             key={product.id}
             product={product}
@@ -254,12 +354,36 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
               if (!product.id) return;
               setProductPhotos((prev) => ({ ...prev, [product.id!]: photo }));
             }}
+            onEdit={(toEdit) => setProductForm({ mode: "edit", product: toEdit })}
+            onDeleted={handleProductDeleted}
             onExpand={(expandedProduct) => {
               if (profile.id && expandedProduct.id) logProductViewEvent(profile.id, expandedProduct.id);
             }}
           />
         ))}
       </section>
+
+      {productForm && (
+        <ProductForm
+          mode={productForm.mode}
+          itemNoun={itemNoun}
+          initialValues={
+            productForm.mode === "edit"
+              ? {
+                  name: productForm.product.name ?? "",
+                  price: productForm.product.price !== undefined ? String(productForm.product.price) : "",
+                  description: productForm.product.description ?? "",
+                  available: productForm.product.available !== false,
+                }
+              : undefined
+          }
+          submitting={productFormSubmitting}
+          error={productFormError}
+          fieldErrors={productFormFieldErrors}
+          onSubmit={handleProductFormSubmit}
+          onCancel={closeProductForm}
+        />
+      )}
 
       {profile.id && isOwner && (
         <div className="px-5 pb-4">

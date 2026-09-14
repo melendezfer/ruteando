@@ -3280,3 +3280,127 @@ borrarlo a mano en vez de que esta sesión decida por él.
   usuario quiere probar el flujo real de aprobación/registro asistido
   como administrador, la vía más simple sigue siendo registrar una
   cuenta `administrador` nueva a mano.
+
+## 35. Gestión del catálogo desde el perfil (agregar, editar, eliminar)
+
+Sin épica de frontend asignada hasta ahora — petición directa del
+usuario. El backend (Épica 3) ya tenía todo listo
+(`POST /businesses/{businessId}/products`, `PATCH`/
+`DELETE /products/{productId}`, `ProductInput`: name/price/description/
+available) sin ningún cambio necesario acá — esto fue enteramente
+construir la UI que faltaba, propia rama
+(`feature/gestion-catalogo-frontend`).
+
+### `ProductForm` — un solo componente para crear y editar
+
+`client/src/components/business/product-form.tsx`: mismos 4 campos
+(nombre, precio, descripción opcional, disponible) para crear y editar
+— `mode` solo cambia el título y el texto del botón de enviar, mismo
+criterio que `PhotoUploadControl` siendo un único componente para la
+foto del negocio y la de cada producto. Modal como "bottom sheet"
+(CLAUDE.md sección 17), calcado del patrón visual exacto de
+`AccountDeletionRequestModal`/`ConsentRequiredModal` (overlay
+`fixed inset-0`, panel `rounded-t-card`/`rounded-card`). El precio viaja
+como texto crudo desde el formulario — la conversión a número y su
+validación (`Number.isNaN`, `>= 0`) viven en quien llama
+(`business-profile-screen.tsx`), mismo criterio que
+`business-registration-wizard.tsx#handleLocationSubmit` con
+latitude/longitude.
+
+### Crear/editar vs. eliminar — dos arquitecturas distintas, cada una la que le correspondía
+
+- **Crear y editar** viven en `business-profile-screen.tsx` (el estado
+  del formulario — abierto/cerrado, en qué modo, con qué producto —
+  necesita conocer tanto "agregar nuevo" como "editar este otro
+  producto de la lista", así que naturalmente pertenece a quien
+  renderiza la lista completa, no a una fila individual).
+- **Eliminar** vive dentro de `product-row.tsx` mismo, self-contained
+  (su propio `window.confirm`, su propia llamada a
+  `deleteProduct()`, su propio estado de carga/error) — mismo criterio
+  ya establecido con `PhotoUploadControl` (sube/borra fotos sin
+  necesitar que el padre orqueste nada) y `FavoriteButton` (marca/
+  desmarca sin que el padre sepa cómo). Solo notifica al padre
+  DESPUÉS de un borrado ya exitoso (`onDeleted(productId)`), para que
+  actualice su lista y limpie la entrada de `productPhotos`
+  correspondiente.
+
+### "Agregar {ítem}" — el mismo rótulo que ya se adapta por tipo
+
+Botón nuevo junto al título de la sección de catálogo, visible solo
+`isOwner`. El texto usa `catalog-label.ts#resolveItemNoun` (nuevo en
+ese archivo): "Agregar plato"/"Agregar producto"/"Agregar servicio"
+según `Category.type` — mismo criterio exacto que
+`resolveCatalogSectionLabel` (sección 31), un solo lugar que ya sabía
+traducir el tipo de categoría a texto en español, extendido para el
+sustantivo singular en vez de solo el título de la sección.
+
+### Actualiza sin recargar — estado local, mismo patrón que fotos/higiene/QR
+
+`business-profile-screen.tsx` mantiene `products` como estado local
+(`useState`, inicializado desde `profile.products`, igual que
+`heroPhoto`/`productPhotos` ya hacían) — crear añade al array, editar
+reemplaza el elemento con el mismo `id`, eliminar (notificado por
+`ProductRow`) lo saca del array. Ninguno de los tres pasa por
+`router.refresh()` ni una recarga completa — la lista SIEMPRE se ve
+actualizada de inmediato, no depende de volver a pedir el perfil
+completo por un cambio en el catálogo.
+
+### "Reemplaza, no acumula" — ya lo cubría el backend, nada nuevo que hacer
+
+El pedido de mantener el mismo criterio que las fotos (sección 33) para
+un producto con foto asociada ya estaba resuelto de antes en el
+backend: `productos.service.js#eliminar` lista y limpia (best-effort)
+las fotos del producto en el bucket ANTES de borrar la fila
+(`ON DELETE CASCADE` se encarga de las filas de `fotos`). Lo único que
+hacía falta del lado del cliente era no dejar un residuo del lado del
+estado en memoria — `handleProductDeleted` en
+`business-profile-screen.tsx` también borra la entrada correspondiente
+de `productPhotos`, para que un `id` de producto ya eliminado no siga
+"recordando" una foto que técnicamente ya no existe en ningún lado.
+Editar un producto (PATCH, no crear+borrar) nunca toca la tabla
+`fotos` — la foto asociada se conserva sola, sin ninguna lógica extra
+necesaria acá.
+
+### Verificado con Playwright
+
+Mismo criterio que el resto de las funcionalidades de esta sección del
+archivo — script exploratorio contra el servidor real, con los datos de
+demo reales (Artesanías Telar Andino, categoría `productos`; Arepas
+Doña Rosa, categoría `alimentos` y catálogo vacío al empezar):
+
+- El botón dice "Agregar producto" en un negocio de bienes y "Agregar
+  plato" en uno de comida — mismo rótulo adaptado por tipo que el
+  título de la sección.
+- Crear un producto nuevo ("Llavero tejido", $15.000) lo muestra en la
+  lista sin recargar, con el precio formateado en COP.
+- Editarlo (precio → $18.000) abre el formulario ya precargado con los
+  valores actuales, y el cambio se refleja en la lista sin recargar —
+  los 3 productos sembrados originales siguen intactos.
+- Eliminarlo (aceptando el `window.confirm` nativo) lo saca de la lista
+  sin recargar.
+- Crear el primer plato de un catálogo vacío reemplaza el texto de
+  estado vacío por la lista con ese plato.
+- Un visitante anónimo no ve el botón de agregar ni los íconos de
+  editar/eliminar en ningún producto.
+- Los datos de demo se resembraron después de la verificación para
+  dejar el catálogo tal como estaba.
+
+### Gaps conocidos, no ocultos
+
+- **Sin campo de categoría del producto** (`ProductInput.categoryId`,
+  opcional en el backend) en `ProductForm` — no se pidió, y no hay
+  ningún lugar del perfil hoy que use la categoría de un producto
+  individual para nada (a diferencia de la categoría del NEGOCIO, que
+  sí decide el rótulo del catálogo entero). Queda en `null` para
+  productos creados desde esta UI, igual que para los ya sembrados por
+  el script de demo.
+- **`window.confirm` para la confirmación de borrado**, no un modal
+  propio — mismo criterio ya usado en
+  `business-registration-wizard.tsx#handleClose` para una confirmación
+  de "¿seguro que quieres salir?". Un modal a medida no se pidió y
+  hubiera sido más código para una confirmación de una sola pregunta.
+- **Sin reordenar productos a mano** — mismo criterio ya documentado en
+  la sección 33 sobre el orden de fotos: `orden_visualizacion` existe y
+  el backend lo asigna solo, pero no hay ningún endpoint para
+  reordenar y no se pidió construir uno. Los productos nuevos se
+  agregan al final de la lista (mismo orden que ya devuelve la API).

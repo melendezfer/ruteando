@@ -43,3 +43,21 @@ export function resolveCatalogSectionLabel(type: CatalogType | null | undefined)
 export function resolveCatalogEmptyState(type: CatalogType | null | undefined): string {
   return type ? CATALOG_EMPTY_STATE[type] : DEFAULT_EMPTY_STATE;
 }
+
+// Gestión del catálogo (agregar/editar/eliminar, sin épica asignada
+// hasta ahora — petición directa del usuario): nombre singular de un
+// ítem, para el botón "Agregar {X}" junto al título de la sección
+// (business-profile-screen.tsx) y los textos de ProductForm/confirmación
+// de borrado — mismo criterio que el resto de este archivo, un rótulo
+// distinto según el tipo de categoría en vez de asumir siempre "plato".
+const ITEM_NOUN: Record<CatalogType, string> = {
+  food: "plato",
+  goods: "producto",
+  services: "servicio",
+};
+
+const DEFAULT_ITEM_NOUN = "ítem";
+
+export function resolveItemNoun(type: CatalogType | null | undefined): string {
+  return type ? ITEM_NOUN[type] : DEFAULT_ITEM_NOUN;
+}

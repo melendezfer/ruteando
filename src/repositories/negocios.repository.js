@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
+const { ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES } = require('../config/constants');
 
 async function crear({
   usuarioId,
@@ -366,6 +367,55 @@ async function explicarCercanos(filtros) {
   return rows[0]['QUERY PLAN'][0];
 }
 
+/**
+ * "Zonas de aglomeración" (ver CLAUDE.md sección 32) — agrupa negocios
+ * activos y verificados por proximidad real con ST_ClusterDBSCAN
+ * (clustering por densidad: eps = radio máximo entre vecinos, minpoints
+ * = cuántos negocios mutuamente cercanos hacen falta para formar una
+ * zona). Devuelve UNA FILA POR NEGOCIO con el `cluster_id` que le tocó
+ * (`null` = "ruido", sin suficientes vecinos cerca para formar zona) —
+ * la agregación por zona (conteo, centroide, variedad de categorías) se
+ * hace en JS (zonas.service.js#agrupar), no acá: PostGIS ya resolvió la
+ * parte cara (clustering espacial sobre un índice GIST); agrupar unas
+ * pocas decenas de filas por cluster_id es trivial en JS y mantiene esta
+ * consulta legible en vez de anidar dos niveles de agregación en SQL.
+ *
+ * ST_ClusterDBSCAN exige `geometry`, no `geography`, y su `eps` se mide
+ * en las unidades del sistema de coordenadas de esa geometría — en 4326
+ * (grados) un eps en metros no significa nada. Se transforma a Web
+ * Mercator (SRID 3857, unidades ~metros) solo para el clustering; la
+ * distorsión de esa proyección es insignificante a esta escala
+ * (agrupaciones de ~200m, cerca del ecuador) — mismo tipo de
+ * aproximación plana ya aceptado en
+ * scripts/seedDemoBusinesses.js#desplazar ("suficiente a esta escala,
+ * <5 km"), no hace falta una zona UTM específica para Cundinamarca.
+ * `latitud`/`longitud`/`distancia_m` sí se calculan sobre la geografía
+ * real (4326/geography), sin pasar por la proyección — la transformación
+ * es solo una herramienta interna para el clustering, nunca lo que se
+ * devuelve.
+ */
+async function clusterizar({ lat, lng, radiusKm }) {
+  const { rows } = await pool.query(
+    `WITH objetivo AS (
+       SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS punto
+     )
+     SELECT
+       n.id AS negocio_id,
+       n.categoria_id,
+       ST_Y(u.punto::geometry) AS latitud,
+       ST_X(u.punto::geometry) AS longitud,
+       ST_Distance(u.punto, objetivo.punto) AS distancia_m,
+       ST_ClusterDBSCAN(ST_Transform(u.punto::geometry, 3857), $4, $5) OVER () AS cluster_id
+     FROM negocios n
+     JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
+     CROSS JOIN objetivo
+     WHERE n.estado = 'activo' AND n.telefono_verificado = true
+       AND ST_DWithin(u.punto, objetivo.punto, $3)`,
+    [lng, lat, radiusKm * 1000, ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES],
+  );
+  return rows;
+}
+
 module.exports = {
   crear,
   buscarPorId,
@@ -375,6 +425,7 @@ module.exports = {
   listar,
   cercanos,
   explicarCercanos,
+  clusterizar,
   escaparComodinesLike,
   listarPendientes,
   aprobar,

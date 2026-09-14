@@ -152,6 +152,30 @@ const businessNearbyQuerySchema = z
   )
   .refine(RANGO_PRECIO_REFINE, RANGO_PRECIO_MENSAJE);
 
+// GET /businesses/zones ("zonas de aglomeración", ver CLAUDE.md sección
+// 32) — a diferencia de businessNearbyQuerySchema, sin los filtros
+// combinables (categoría/texto/precio/abierto ahora): filtrar negocios
+// antes de clusterizar fragmentaría las zonas de forma confusa (ej. con
+// categoryId puesto, una zona de 4 categorías se vería como una zona de
+// 1, perdiendo justo la señal de variedad que este endpoint existe para
+// mostrar). radiusKm default más generoso que nearby (3 vs. 2): comparar
+// "la zona cercana con más variedad, incluso cruzando a otro barrio"
+// necesita ver más allá del radio inmediato de negocios individuales.
+const businessZonesQuerySchema = z
+  .object({
+    lat: z.coerce.number().min(-90).max(90),
+    lng: z.coerce.number().min(-180).max(180),
+    radiusKm: z.coerce.number().positive().max(10).default(3),
+  })
+  .refine(
+    (data) =>
+      data.lat >= CUNDINAMARCA_BBOX.latMin &&
+      data.lat <= CUNDINAMARCA_BBOX.latMax &&
+      data.lng >= CUNDINAMARCA_BBOX.lonMin &&
+      data.lng <= CUNDINAMARCA_BBOX.lonMax,
+    { message: 'Las coordenadas están fuera del rango esperado para Cundinamarca', path: ['lat'] },
+  );
+
 module.exports = {
   businessInputSchema,
   locationInputSchema,
@@ -161,4 +185,5 @@ module.exports = {
   phoneVerificationConfirmSchema,
   businessListQuerySchema,
   businessNearbyQuerySchema,
+  businessZonesQuerySchema,
 };

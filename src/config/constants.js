@@ -146,4 +146,25 @@ module.exports = {
   AVAILABILITY_REQUEST_RATE_LIMIT_PER_BUSINESS_WINDOW_MINUTES: 30,
   AVAILABILITY_REQUEST_RATE_LIMIT_PER_USER_MAX: 3,
   AVAILABILITY_REQUEST_RATE_LIMIT_PER_USER_WINDOW_MINUTES: 10,
+
+  // "Zonas de aglomeración" (ver CLAUDE.md sección 32) — parámetros de
+  // ST_ClusterDBSCAN en negocios.repository.js#clusterizar. Cifras
+  // propias, no citadas de ningún documento (funcionalidad sin RF
+  // asociado):
+  //
+  // ZONE_RADIUS_METERS (eps): 200m — un radio caminable de "misma
+  // cuadra/par de cuadras", suficiente para agrupar puestos que un
+  // consumidor recorrería a pie sin pensarlo como "otro viaje", pero no
+  // tan grande como para fusionar negocios de zonas realmente distintas
+  // del barrio.
+  //
+  // ZONE_MIN_BUSINESSES (minpoints): 3 — con 2 negocios cerca no hay
+  // mucho que "comparar" todavía (apenas un vecino); 3 es el mínimo para
+  // que agruparlos se sienta como una "zona" real y no solo un par de
+  // puestos vecinos. Nota técnica: ST_ClusterDBSCAN cuenta el punto
+  // mismo dentro de minpoints (un punto núcleo necesita minpoints-1
+  // vecinos reales dentro de eps), así que en la práctica esto exige al
+  // menos 3 negocios mutuamente cercanos para que se forme una zona.
+  ZONE_RADIUS_METERS: 200,
+  ZONE_MIN_BUSINESSES: 3,
 };

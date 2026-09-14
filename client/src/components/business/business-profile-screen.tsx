@@ -7,6 +7,7 @@ import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from 
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { BackButton } from "@/components/ui/back-button";
+import { FavoriteButton } from "@/components/business/favorite-button";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
@@ -63,6 +64,12 @@ export function BusinessProfileScreen({ profile, categoryName }: BusinessProfile
   return (
     <div className="flex flex-1 flex-col pb-24">
       <BackButton className="fixed left-3 top-3 z-40" />
+      <FavoriteButton
+        businessId={profile.id}
+        ownerId={profile.ownerId}
+        size={22}
+        className="fixed right-3 top-3 z-40 h-10 w-10 border border-border bg-surface/90 shadow-lg backdrop-blur transition-colors hover:bg-background"
+      />
 
       <div className="relative h-64 w-full bg-border">
         {heroPhoto ? (

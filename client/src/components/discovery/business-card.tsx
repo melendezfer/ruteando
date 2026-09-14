@@ -6,6 +6,7 @@ import { CaretDown, CaretUp, MapPin, Star } from "@phosphor-icons/react/dist/ssr
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
+import { FavoriteButton } from "@/components/business/favorite-button";
 
 type Business = components["schemas"]["Business"];
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -91,25 +92,33 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
 
   return (
     <div className="rounded-card border border-border bg-surface">
-      <button
-        type="button"
-        onClick={toggleExpanded}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-      >
-        <div className="flex flex-col gap-0.5">
-          <span className="font-heading text-title-2 font-semibold text-text">{business.name}</span>
-          <span className="font-sans text-body-sm text-text-muted">
-            {categoryName ?? "Comida callejera"}
-            {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
-          </span>
-        </div>
-        {expanded ? (
-          <CaretUp size={20} className="shrink-0 text-text-muted" />
-        ) : (
-          <CaretDown size={20} className="shrink-0 text-text-muted" />
-        )}
-      </button>
+      <div className="flex w-full items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+          className="flex flex-1 items-center justify-between gap-3 text-left"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="font-heading text-title-2 font-semibold text-text">{business.name}</span>
+            <span className="font-sans text-body-sm text-text-muted">
+              {categoryName ?? "Comida callejera"}
+              {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
+            </span>
+          </div>
+          {expanded ? (
+            <CaretUp size={20} className="shrink-0 text-text-muted" />
+          ) : (
+            <CaretDown size={20} className="shrink-0 text-text-muted" />
+          )}
+        </button>
+        {/* Sibling del <button> de arriba, no anidado dentro — un <button>
+            dentro de otro <button> es HTML inválido y, en la práctica,
+            haría que tocar el corazón también disparara toggleExpanded()
+            por el burbujeo del click (FavoriteButton igual llama a
+            stopPropagation por si acaso). */}
+        <FavoriteButton businessId={business.id} ownerId={business.ownerId} size={20} />
+      </div>
 
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-border px-4 py-3">

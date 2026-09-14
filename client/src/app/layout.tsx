@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AuthProvider } from "@/lib/auth/auth-context";
+import { FavoritesProvider } from "@/lib/favorites/favorites-context";
 import "./globals.css";
 
 const inter = Inter({
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${inter.variable} ${plusJakartaSans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <FavoritesProvider>{children}</FavoritesProvider>
+        </AuthProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

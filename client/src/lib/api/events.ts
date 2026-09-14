@@ -58,3 +58,8 @@ export function logBusinessRegisteredEvent(businessId: string): void {
 export function logReviewCreatedEvent(businessId: string): void {
   logEvent("review_created", businessId);
 }
+
+/** Al marcar un negocio como favorito (Épica F8) — no al desmarcarlo. */
+export function logFavoriteAddedEvent(businessId: string): void {
+  logEvent("favorite_added", businessId);
+}

@@ -2112,10 +2112,10 @@ botón de cerrar sesión.
 
 ### Gaps conocidos, no ocultos
 
-- Marcar/desmarcar favoritos (el corazón que agregaría/quitaría un
-  negocio de esta lista desde cualquier pantalla) sigue sin construirse
-  — `FavoritesScreen` sigue siendo de solo lectura, igual que la pestaña
-  que reemplazó. Promover la pantalla no fue promover la funcionalidad.
+- ~~Marcar/desmarcar favoritos... sigue sin construirse~~ — **resuelto**,
+  ver sección 29 (Épica F8 completa: corazón en el perfil y en
+  `BusinessCard`, optimistic update, `FavoritesScreen` ya no es de solo
+  lectura).
 - El perfil de negocio no muestra `BottomNavBar` ni para un visitante con
   sesión activa (ver arriba, "Pantallas fuera de la barra") — decisión de
   alcance, documentada, no un olvido.
@@ -2124,3 +2124,127 @@ botón de cerrar sesión.
   disponible). Si ese documento aparece más adelante y dice algo
   distinto, esta sección queda desactualizada hasta que se corrija a
   mano — no hay ninguna forma automática de detectar esa discrepancia.
+
+## 29. Épica F8 completa — marcar/desmarcar favoritos (RF-017)
+
+Cierra el gap que había quedado documentado en la sección 28
+("Marcar/desmarcar favoritos... sigue sin construirse") — `FavoritesScreen`
+(la lista de `/favoritos`) dejó de ser de solo lectura. Propia rama
+(`feature/favoritos-marcar-desmarcar`).
+
+**Backend: sin cambios.** `POST`/`DELETE /businesses/{businessId}/favorite`
+y `GET /users/me/favorites` ya existían completos desde la Épica 7
+(sección 6 de este archivo) — idempotentes en los dos sentidos (`204` sin
+body, `ON CONFLICT DO NOTHING` al marcar, `DELETE` normal al desmarcar,
+sin 409/404 por "ya estaba así"), con autenticación obligatoria y su
+propia suite de pruebas (`tests/integration/favoritos.test.js`). Este
+trabajo fue enteramente de frontend: consumir esos dos endpoints ya
+existentes desde un corazón real en la interfaz.
+
+### `FavoritesContext` (`client/src/lib/favorites/favorites-context.tsx`)
+
+Estado compartido de "cuáles negocios son favoritos del usuario actual"
+— sin esto, cada corazón (perfil de negocio, y cada `BusinessCard` de
+Inicio/Mapa/Favoritos) tendría que pedir su propio estado por separado,
+un N+1 real contra `GET /users/me/favorites` por cada tarjeta visible en
+una búsqueda. En vez de eso, `FavoritesProvider` (montado en
+`layout.tsx`, dentro de `AuthProvider` — depende de `useAuth()`) pide esa
+lista **una sola vez** cuando `status === "authenticated"` (mismo límite
+de 50 que ya usaba `FavoritesScreen`, "razonable para la cantidad de
+favoritos que alguien acumula en la práctica", sin paginación real) y la
+guarda como un `Set<string>` de ids en memoria — `isFavorite(id)` es una
+consulta O(1) contra ese Set, no una llamada de red.
+
+`toggleFavorite(businessId)` es la pieza de optimistic update pedida
+explícitamente por el usuario: actualiza el `Set` de inmediato, antes de
+que el `POST`/`DELETE` real confirme, y lo revierte solo si la llamada
+falla (`!response.ok`) — el corazón se siente instantáneo sin esperar ida
+y vuelta al backend.
+
+### `FavoriteButton` (`client/src/components/business/favorite-button.tsx`)
+
+Componente único reusado en `business-profile-screen.tsx` (círculo fijo
+`top-3 right-3`, mismo lenguaje visual que `BackButton` en la esquina
+opuesta — no usa `FloatingActionStack`, sección 20, porque ese componente
+es para acciones externas tipo enlace/navegación, no para un estado
+booleano con optimistic update) y en `business-card.tsx` (así lo heredan
+Inicio, Mapa y Favoritos automáticamente, sin tocar esas tres pantallas
+por separado — las tres ya reusaban `BusinessCard`). Ícono `Heart` de
+Phosphor: `weight="regular"` sin marcar, `weight="fill"` + `text-terracota`
+marcado (mismo color que el resto de acentos del sistema de diseño, no un
+rojo aparte).
+
+**No se renderiza en dos casos, pedidos explícitamente por el usuario**:
+
+1. **Sin sesión activa** (`!user`) — los tres endpoints de favoritos
+   requieren autenticación, mismo criterio que `LocationVisibilityToggle`/
+   `OwnDeliveryToggle` (que tampoco ofrecen su acción a un anónimo). A
+   diferencia de `ReviewForm` (que sí muestra un aviso "inicia sesión para
+   calificar"), acá no se pidió ningún aviso equivalente — el corazón
+   simplemente no aparece.
+2. **El propio dueño en su propio negocio** (`ownerId === user.id`) —
+   verificado con las cinco cuentas de vendedor de
+   `scripts/seedDemoBusinesses.js`: cada dueño ve el corazón en los
+   negocios de los demás, nunca en el suyo (ni en el perfil, ni en su
+   propia tarjeta si apareciera en una búsqueda).
+
+### `business-card.tsx`: corazón como hermano del botón de expandir, no anidado
+
+El encabezado de la tarjeta ya era un único `<button>` (toda la fila
+dispara `toggleExpanded()`). Anidar `FavoriteButton` ahí adentro habría
+sido HTML inválido (`<button>` dentro de `<button>`) y, en la práctica,
+el clic en el corazón también habría disparado el expandir/colapsar por
+burbujeo. Se envolvió la fila en un `<div>` con dos hijos hermanos: el
+`<button>` original (ahora `flex-1`, conserva el comportamiento de
+expandir tocando nombre/categoría/la flecha) y `FavoriteButton` al lado
+— este último igual llama a `stopPropagation()` en su `onClick` como red
+de seguridad adicional.
+
+### `FavoritesScreen`: filtrada en vivo contra `FavoritesContext`, no solo un refetch
+
+La lista visible (`visibleBusinesses`) se filtra contra
+`FavoritesContext#isFavorite`, no directamente contra la respuesta cruda
+de su propio `GET /users/me/favorites` — así, desmarcar un favorito desde
+**la misma pantalla `/favoritos`** lo hace desaparecer de inmediato (el
+caso que pedía explícitamente el plan de pruebas: "quitarlo, y confirmar
+que desaparece"), sin depender de navegar fuera y volver para forzar un
+refetch. Antes de que `FavoritesContext` termine de cargar (`isLoaded`),
+se muestra la lista sin filtrar — filtrar contra un `Set` todavía vacío
+mostraría la lista vacía un instante y luego "aparecería" de golpe, un
+parpadeo real sin ningún beneficio (en la práctica casi nunca se nota:
+`FavoritesProvider` ya carga apenas hay sesión activa, mucho antes de que
+alguien navegue hasta `/favoritos`).
+
+### Instrumentación de eventos
+
+`logFavoriteAddedEvent` (`client/src/lib/api/events.ts`) dispara
+`tipo_evento = 'favorito_agregado'` (CLAUDE.md sección 16) solo al
+**marcar**, nunca al desmarcar — coherente con la tabla de esa sección
+("Al marcar un negocio como favorito") y con `resena_creada`/
+`registro_negocio` (eventos de una sola dirección, no de estado).
+
+### Verificado con Playwright
+
+Registro de un consumidor nuevo vía la UI real (formulario completo,
+checkbox de consentimiento) → perfil de "Arepas Doña Rosa" → corazón
+vacío → marcar (optimistic update, `aria-pressed`/`aria-label` cambian de
+inmediato) → `/favoritos` muestra la tarjeta → desmarcar **desde esa
+misma pantalla** → la tarjeta desaparece sin recargar → recarga real de
+la página → confirma que sigue sin aparecer (la fuente de verdad es el
+backend, no solo el estado optimista en memoria) → sesión aparte como la
+dueña de ese negocio → confirma que el corazón no existe en absoluto en
+su propio perfil (ni "vacío" ni "marcado" — cero elementos con ese rol).
+Capturas adicionales confirman visualmente el corazón en la tarjeta de
+"Cerca de ti" (Inicio) para los negocios ajenos, y su ausencia en la
+tarjeta del propio negocio de quien tiene la sesión iniciada.
+
+### Gaps conocidos, no ocultos
+
+- Sin animación de "explosión"/confeti al marcar — un cambio de ícono
+  instantáneo (`regular` → `fill` + color) fue lo que se pidió
+  ("instantáneo"), no un micro-interacción decorativa adicional.
+- El mapa (`/mapa`) hereda el corazón a través de `BusinessCard`/
+  `BusinessSummarySheet` sin cambios propios de esa pantalla — no se
+  verificó por separado con Playwright (el flujo completo sí se probó en
+  Inicio y en el perfil de negocio, que comparten el mismo componente),
+  pero no hay ninguna razón para que se comporte distinto ahí.

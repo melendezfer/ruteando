@@ -90,6 +90,17 @@ describe('POST /businesses', () => {
     expect(conCampo.hygieneSelfDeclared).toBe(true);
   });
 
+  it('mobility: default itinerant si no se manda, se puede declarar fixed', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+
+    const sinCampo = await crearNegocio(vendor.accessToken, categoryId);
+    expect(sinCampo.mobility).toBe('itinerant');
+
+    const conCampo = await crearNegocio(vendor.accessToken, categoryId, { mobility: 'fixed' });
+    expect(conCampo.mobility).toBe('fixed');
+  });
+
   it('rechaza con 403 cuando lo intenta un consumer', async () => {
     const categoryId = await crearCategoria();
     const consumer = await registrar('consumer');
@@ -208,6 +219,26 @@ describe('PATCH /businesses/{businessId}', () => {
       .send({ name: negocio.name, categoryId, hygieneSelfDeclared: false });
     expect(desactivado.status).toBe(200);
     expect(desactivado.body.hygieneSelfDeclared).toBe(false);
+  });
+
+  it('mobility: se conserva si el PATCH no lo menciona, y se puede cambiar explícitamente', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId, { mobility: 'fixed' });
+
+    const sinMencionar = await request(app)
+      .patch(`/businesses/${negocio.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: negocio.name, categoryId });
+    expect(sinMencionar.status).toBe(200);
+    expect(sinMencionar.body.mobility).toBe('fixed'); // no se restablece a itinerant en silencio
+
+    const cambiado = await request(app)
+      .patch(`/businesses/${negocio.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: negocio.name, categoryId, mobility: 'itinerant' });
+    expect(cambiado.status).toBe(200);
+    expect(cambiado.body.mobility).toBe('itinerant');
   });
 
   it('rechaza con 403 al dueño de OTRO negocio (no solo a un vendor sin negocio propio)', async () => {

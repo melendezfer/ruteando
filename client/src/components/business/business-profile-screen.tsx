@@ -24,6 +24,7 @@ import { BusinessFeedbackPanel } from "@/components/business/business-feedback-p
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
+import { MobilityToggle } from "@/components/business/mobility-toggle";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
@@ -331,6 +332,19 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             categoryId={profile.categoryId}
             contactPhone={profile.contactPhone ?? null}
             initialOwnDelivery={Boolean(profile.ownDelivery)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && profile.name != null && profile.categoryId != null && (
+        <div className="px-5 pb-4">
+          <MobilityToggle
+            businessId={profile.id}
+            name={profile.name}
+            description={profile.description ?? null}
+            categoryId={profile.categoryId}
+            contactPhone={profile.contactPhone ?? null}
+            initialMobility={profile.mobility ?? "itinerant"}
           />
         </div>
       )}

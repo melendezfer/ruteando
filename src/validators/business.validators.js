@@ -19,6 +19,13 @@ const businessInputSchema = z.object({
   // valor existente en vez de reactivarlo/desactivarlo en silencio. El
   // default real de creación (false) se aplica en negocios.service.js#crear.
   hygieneSelfDeclared: z.boolean().optional(),
+  // Movilidad autodeclarada (petición directa del usuario, sin RF
+  // asociado — ver CLAUDE.md, migración movilidad-negocio). Mismo
+  // criterio que ownDelivery/hygieneSelfDeclared: sin `.default()` a
+  // propósito — un PATCH que no lo menciona conserva el valor existente
+  // en vez de resetearlo en silencio. El default real de creación
+  // ('itinerant', ver negocios.service.js#crear) se aplica ahí, no acá.
+  mobility: z.enum(['itinerant', 'fixed']).optional(),
 });
 
 // Caja envolvente de Cundinamarca (regla de seguridad #6: "idealmente un

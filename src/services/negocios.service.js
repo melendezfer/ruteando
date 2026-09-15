@@ -2,7 +2,7 @@ const { z } = require('zod');
 const negociosRepo = require('../repositories/negocios.repository');
 const categoriasRepo = require('../repositories/categorias.repository');
 const cursorUtil = require('../utils/cursor');
-const { toApiBusiness } = require('./business.mapper');
+const { toApiBusiness, MOBILITY_API_TO_DB } = require('./business.mapper');
 const { NotFoundError, ForbiddenError, ValidationError } = require('../errors');
 
 const CURSOR_LISTAR_SCHEMA = z.object({
@@ -94,6 +94,7 @@ async function crear(usuarioId, input) {
     telefonoContacto: input.contactPhone,
     entregaPropia: input.ownDelivery ?? false,
     higieneAutodeclarada: input.hygieneSelfDeclared ?? false,
+    movilidad: MOBILITY_API_TO_DB[input.mobility ?? 'itinerant'],
   });
 
   return toApiBusiness(negocio);
@@ -120,6 +121,8 @@ async function actualizar(usuarioId, id, input) {
       input.hygieneSelfDeclared !== undefined
         ? input.hygieneSelfDeclared
         : negocio.higiene_autodeclarada,
+    movilidad:
+      input.mobility !== undefined ? MOBILITY_API_TO_DB[input.mobility] : negocio.movilidad,
   });
 
   return toApiBusiness(actualizado);

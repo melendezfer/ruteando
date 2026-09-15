@@ -14,6 +14,7 @@ import type { CatalogType } from "@/lib/catalog/catalog-label";
 
 type Business = components["schemas"]["Business"];
 type BusinessZone = components["schemas"]["BusinessZone"];
+type Mobility = NonNullable<Business["mobility"]>;
 
 export interface BusinessPin extends Business {
   latitude: number;
@@ -152,6 +153,7 @@ export function LeafletMap({
                 business.categoryId,
                 business.categoryId != null ? categoryTypeById.get(business.categoryId) : undefined,
               ),
+              business.mobility ?? "fixed",
             )}
             selected={business.id === selectedBusinessId}
             onSelect={onSelectBusiness}
@@ -302,15 +304,25 @@ function BusinessMarker({
 // abajo, que en cambio alterna una clase CSS sobre el mismo elemento.
 const businessIconCache = new Map<string, L.DivIcon>();
 
-function getBusinessIcon(color: string): L.DivIcon {
-  let icon = businessIconCache.get(color);
+function getBusinessIcon(color: string, mobility: Mobility): L.DivIcon {
+  const key = `${color}|${mobility}`;
+  let icon = businessIconCache.get(key);
   if (!icon) {
-    icon = createPinIcon(color);
-    businessIconCache.set(color, icon);
+    icon = mobility === "itinerant" ? createItinerantPinIcon(color) : createPinIcon(color);
+    businessIconCache.set(key, icon);
   }
   return icon;
 }
 
+// Forma clásica ("gota") — local_fijo/"fixed", un punto de venta que no
+// se mueve. Es también el respaldo del lado del cliente cuando
+// `business.mobility` no resolvió (el campo es opcional solo en el tipo
+// generado de OpenAPI — la API real siempre lo manda, con default
+// 'itinerant' en la creación, ver negocios.service.js#crear — así que
+// este respaldo es puramente defensivo, nunca el camino esperado);
+// se eligió la gota y no el círculo para ese caso porque es la forma
+// que todo pin ya tenía ANTES de esta funcionalidad, el cambio visual
+// más chico posible si algún dato llegara incompleto.
 function createPinIcon(color: string): L.DivIcon {
   const svg = `
     <div class="${PIN_INNER_CLASS}">
@@ -324,6 +336,35 @@ function createPinIcon(color: string): L.DivIcon {
     className: "f3-business-pin",
     iconSize: [30, 42],
     iconAnchor: [15, 42],
+  });
+}
+
+// Forma "ambulante"/"itinerant" (petición directa del usuario, sin RF
+// asociado — ver CLAUDE.md): un círculo (no la gota clásica, que
+// implica "acá está fijo el negocio") con un carrito dibujado a mano
+// adentro — mismo COLOR de categoría que la gota (ver
+// category-pin-colors.ts, sin tocar), solo cambia la forma. Ancla al
+// CENTRO del círculo, no a una punta inferior como la gota — mismo
+// criterio que createUserIcon() (un punto "acá estoy ahora", no "acá
+// está clavado"). `.f3-business-pin-inner--circle` en globals.css
+// pisa el `transform-origin` a 50% 50% para que el crecimiento al
+// seleccionar sea concéntrico, no desde una punta que este ícono no
+// tiene.
+function createItinerantPinIcon(color: string): L.DivIcon {
+  const svg = `
+    <div class="${PIN_INNER_CLASS} f3-business-pin-inner--circle">
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="15" fill="${color}" stroke="#fff" stroke-width="2"/>
+        <path d="M9 11h2l1.6 7.2h9.4l1.5-5.2H13.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14.2" cy="21" r="1.3" fill="#fff"/>
+        <circle cx="20.2" cy="21" r="1.3" fill="#fff"/>
+      </svg>
+    </div>`;
+  return L.divIcon({
+    html: svg,
+    className: "f3-business-pin",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
   });
 }
 

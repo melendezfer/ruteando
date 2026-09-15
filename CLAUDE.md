@@ -3445,3 +3445,103 @@ cierra el modal, sin tener que volver a subirla; "Continuar sin foto"
 también funciona para un segundo producto (no es obligatorio subir
 nada); editar sigue cerrando el modal directo, sin este paso extra
 (regresión verificada explícitamente, no solo asumida).
+
+## 36. Pines del mapa: color por familia de categoría + forma por movilidad
+
+Dos piezas relacionadas del mismo lenguaje visual del mapa, sin RF
+asociado — peticiones directas del usuario, dos ramas distintas
+(`feature/pines-color-categoria`, luego ajustada en la misma rama; y
+`feature/movilidad-negocio`, que depende de la primera).
+
+### Color por familia de categoría (`client/src/lib/map/category-pin-colors.ts`)
+
+Antes: todo pin era el mismo terracota de marca. Primera versión:
+`getCategoryPinColor(categoryId)` hasheaba sobre una paleta plana de 8
+colores (validada con la skill `dataviz` de este entorno,
+`scripts/validate_palette.js`, en modo adyacente). **Ajustada después**
+(mismo PR, petición directa del usuario): el color ahora se agrupa
+primero por `Category.type` (food/services/goods — mismo `CatalogType`
+de `catalog-label.ts`) en tres familias perceptuales, y solo dentro de
+cada familia se hashea `categoryId`:
+
+- Cálidos (`food`): `#d9a300` dorado, `#932525` vino, `#d24b4b` coral.
+- Azul/morado (`services`): `#2a78d6` azul, `#4a3aa7` violeta.
+- Verde (`goods`): `#1baf7a` verde agua, `#008300` verde.
+
+Validado con `--pairs all` (el modo que la propia skill pide para
+mapas/scatter, más estricto que el adyacente que usaba la primera
+versión): las 7 tonalidades pasan las cuatro comprobaciones medibles,
+con un único WARN (no FAIL) en la separación CVD entre aguamarina y
+coral — mitigado con el nombre de la categoría como texto al tocar un
+pin, igual que antes. **Hallazgo real construyendo esto**: la paleta
+plana original (naranja/amarillo/rojo/magenta como "cálidos"
+implícitos) falla el piso de visión normal incluso en modo adyacente,
+sin importar el orden — los cuatro caen en una banda de matiz
+demasiado angosta. La familia cálida final (3 tonos, no 4 — un cuarto
+tono cálido que pase junto a los otros tres no existe dentro de un
+rango de matiz inequívocamente cálido, buscado por fuerza bruta contra
+el validador real) requirió variar luminosidad/saturación mucho más
+agresivamente que solo el matiz.
+
+`categoryTypeById` (map-screen.tsx, construido igual que
+`categoryNameById` ya existente) se threadea hasta `LeafletMap` — el
+color ya no se puede calcular solo con `categoryId`, hace falta saber
+también el `type` de esa categoría.
+
+**Verificado con negocios de 2 tipos distintos a la vez** (food +
+services) en la misma vista — el seed de demo no tenía una combinación
+así fácil de ver sin pelear con el clustering (las 4 categorías no-food
+del seed están todas a 30-100m entre sí, se agrupan entre ellas incluso
+al zoom máximo de los tiles); se insertó un negocio temporal solo para
+la captura de verificación, y se borró después.
+
+### Forma por movilidad autodeclarada (`negocios.movilidad`)
+
+Campo nuevo en `negocios` (migración `movilidad-negocio`): el vendedor
+declara si su negocio es "ambulante" (se desplaza) o de "local fijo" —
+mismo patrón exacto que `entrega_propia`/`higiene_autodeclarada`:
+toggle en el perfil (`MobilityToggle`, segmentado — dos botones, no un
+checkbox, porque es una elección entre dos estados excluyentes, ninguno
+"apagado" por defecto), solo visible para el dueño, cambia con el mismo
+`PATCH /businesses/{businessId}` que ya usa el asistente de registro.
+
+**Nombre elegido a propósito, no `tipo_ubicacion`**: `ubicaciones` ya
+tiene una columna `tipo` sobre el ENUM `tipo_ubicacion` (fija | movil |
+puesto | local | desde_casa | temporal, ver sección 5) — reusar ese
+nombre para un ENUM/columna nuevo y distinto en `negocios` habría
+chocado con un tipo de Postgres que ya existe. Se evaluó reusar
+directamente `ubicaciones.tipo` (que ya distingue `movil` del resto) en
+vez de agregar un campo nuevo, y se descartó: esa columna se llena una
+sola vez en el registro (RF-005, un formulario más pesado que
+reenviar junto a type/latitude/longitude) — lo pedido acá es un
+interruptor independiente, editable en cualquier momento. ENUM nuevo
+`movilidad_negocio` (ambulante | local_fijo), columna
+`negocios.movilidad`, campo de API `Business.mobility`
+(itinerant/fixed) — vocabulario deliberadamente distinto del de
+`Location.type` (que también tiene un valor `mobile`), dos campos
+relacionados pero no iguales. Default `'ambulante'`/`'itinerant'`,
+coherente con el público objetivo original de la plataforma (vendedor
+informal de comida callejera, sección 0/1).
+
+**El mapa usa este campo para la FORMA del pin, nunca el color** (el
+color sigue viniendo solo de la categoría, sección de arriba):
+`local_fijo`/`fixed` mantiene la gota clásica de siempre;
+`ambulante`/`itinerant` usa un círculo con un carrito dibujado a mano
+en SVG adentro (`createItinerantPinIcon`, leaflet-map.tsx) — ancla al
+CENTRO del círculo (mismo criterio que el punto de "mi ubicación"), no
+a una punta inferior como la gota, que ese ícono no tiene.
+`.f3-business-pin-inner--circle` en globals.css pisa el
+`transform-origin` a 50%/50% para que el crecimiento al seleccionar
+(sección de la animación de pines, PR anterior) sea concéntrico.
+
+`scripts/seedDemoBusinesses.js`: los 5 negocios de comida quedan
+`ambulante`, los 3 no gastronómicos `local_fijo` — excepto Empanadas El
+Fogón, marcado `local_fijo` pese a ser comida porque ya estaba aislado
+del resto (3km), el punto más claro para comparar a ojo ambas formas
+sin pelear con el clustering.
+
+**Verificado con Playwright**: ambas formas renderizando lado a lado
+(negocio temporal insertado junto a Empanadas El Fogón, borrado
+después) con el color de familia correcto en ambas; el toggle del
+perfil cambia el valor, persiste tras recargar, y se probó también la
+animación de crecimiento sobre la forma nueva (círculo) sin regresión.

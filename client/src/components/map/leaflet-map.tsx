@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -9,6 +9,7 @@ import { Circle, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { components } from "@/lib/api/schema";
 import { describeVariety } from "@/lib/zones/zone-format";
+import { getCategoryPinColor } from "@/lib/map/category-pin-colors";
 
 type Business = components["schemas"]["Business"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -32,6 +33,15 @@ interface LeafletMapProps {
   businesses: BusinessPin[];
   /** "Zonas de aglomeración" (ver CLAUDE.md sección 32) — resaltado visual, además de los pines individuales de siempre. */
   zones: BusinessZone[];
+  /**
+   * Qué pin debe verse "crecido" (`transform: scale()`, ver
+   * `.f3-business-pin-inner--selected` en globals.css) — no es literalmente
+   * "el seleccionado": el padre (map-screen.tsx) lo pone en `true` de
+   * inmediato al tocar un pin (antes de abrir el popup de información)
+   * y lo mantiene así mientras esa información sigue abierta, para que
+   * el crecimiento no "parpadee" entre la animación de toque y la
+   * selección real.
+   */
   selectedBusinessId: string | null;
   onSelectBusiness: (business: BusinessPin) => void;
   /** Entrega la instancia real de L.Map apenas está lista — usada por el botón "Mi ubicación" para recentrar sin pasar por fitBounds. */
@@ -69,8 +79,6 @@ export function LeafletMap({
   onSelectBusiness,
   onMapReady,
 }: LeafletMapProps) {
-  const businessIcon = useMemo(() => createPinIcon("var(--color-terracota)"), []);
-  const selectedBusinessIcon = useMemo(() => createPinIcon("var(--color-mostaza)"), []);
   const userIcon = useMemo(() => createUserIcon(), []);
 
   return (
@@ -132,13 +140,12 @@ export function LeafletMap({
         }
       >
         {businesses.map((business) => (
-          <Marker
+          <BusinessMarker
             key={business.id}
-            position={[business.latitude, business.longitude]}
-            icon={business.id === selectedBusinessId ? selectedBusinessIcon : businessIcon}
-            title={business.name}
-            alt={business.name}
-            eventHandlers={{ click: () => onSelectBusiness(business) }}
+            business={business}
+            icon={getBusinessIcon(getCategoryPinColor(business.categoryId))}
+            selected={business.id === selectedBusinessId}
+            onSelect={onSelectBusiness}
           />
         ))}
       </MarkerClusterGroup>
@@ -194,12 +201,115 @@ function ExposeMapInstance({ onMapReady }: { onMapReady?: (map: L.Map) => void }
   return null;
 }
 
+// Nombre del div INTERNO del ícono (ver createPinIcon) que recibe el
+// `scale()` al seleccionar/tocar un pin — nunca el wrapper que
+// `<Marker icon=.../>` controla directamente: ese wrapper es el mismo
+// elemento que Leaflet reposiciona en cada pan/zoom con un
+// `style="transform: translate3d(...)"` inline (verificado en
+// node_modules/leaflet/dist/leaflet-src.js: `_initIcon` asigna nuestro
+// `className` al mismo `_icon` que `_setPos`/`setPosition` mueve) — una
+// regla CSS con `transform: scale()` ahí pisaría por completo esa
+// traslación en vez de combinarse con ella, y el pin "saltaría" a otra
+// posición del mapa en vez de crecer donde está.
+const PIN_INNER_CLASS = "f3-business-pin-inner";
+const SELECTED_PIN_CLASS = "f3-business-pin-inner--selected";
+
+/**
+ * Un pin individual, envuelto aparte de `businesses.map(...)` solo para
+ * poder alternar la clase de "crecido" sobre el div interno del ícono
+ * (`marker.getElement()?.querySelector(...)`) en vez de reemplazar el
+ * ícono entero vía el prop `icon` de `<Marker>` — reemplazarlo llama a
+ * `L.Marker#setIcon`, que borra el nodo e inserta uno nuevo, y una
+ * transición CSS no tiene nada que animar entre dos nodos distintos
+ * (verificado contra un navegador real: cambiar el ícono por
+ * selección, como hacía este componente antes de esta funcionalidad,
+ * pintaba el cambio de tamaño de golpe, sin transición, aunque la
+ * regla CSS ya existiera). El `icon` en sí (forma + color) sigue
+ * siendo estable mientras el negocio esté en el mapa — ver
+ * `getBusinessIcon` más abajo.
+ */
+function BusinessMarker({
+  business,
+  icon,
+  selected,
+  onSelect,
+}: {
+  business: BusinessPin;
+  icon: L.DivIcon;
+  selected: boolean;
+  onSelect: (business: BusinessPin) => void;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+  // Memoizado a propósito: `position={[lat, lng]}` inline crearía un
+  // array nuevo en CADA render de este componente — react-leaflet
+  // compara `props.position` por referencia (@react-leaflet/core), así
+  // que sin esto llamaría a `marker.setLatLng()` en cada re-render
+  // (ej. al seleccionar otro negocio, o al abrir/cerrar filtros) aunque
+  // las coordenadas no cambiaran un pixel. Encontrado depurando por qué
+  // la clase de "crecido" desaparecía sola ~200ms después de aplicarse:
+  // ese `setLatLng` redundante dispara el evento `move` del marcador,
+  // que `leaflet.markercluster` usa para reubicarlo dentro del árbol de
+  // clusters — reposicionarlo recrea su ícono desde `options.html`
+  // (`L.DivIcon#createIcon`), perdiendo cualquier clase agregada a mano
+  // sobre el DOM existente. Con la posición estable, `setLatLng` deja
+  // de llamarse sin necesidad, y el problema desaparece en la raíz.
+  const position = useMemo<[number, number]>(
+    () => [business.latitude, business.longitude],
+    [business.latitude, business.longitude],
+  );
+
+  useEffect(() => {
+    // El `scale()` va en el div INTERNO (`.f3-business-pin-inner`), no en
+    // `getElement()` directo — ver el comentario junto a createPinIcon.
+    markerRef.current
+      ?.getElement()
+      ?.querySelector(`.${PIN_INNER_CLASS}`)
+      ?.classList.toggle(SELECTED_PIN_CLASS, selected);
+  }, [selected]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={position}
+      icon={icon}
+      title={business.name}
+      alt={business.name}
+      eventHandlers={{ click: () => onSelect(business) }}
+    />
+  );
+}
+
+// Un ícono por color de categoría (ver category-pin-colors.ts), no por
+// negocio ni por estado seleccionado — el color de un pin nunca cambia
+// durante su vida en el mapa, así que cachearlos a nivel de módulo (no
+// con useMemo: mutar el Map dentro de un hook de memoización dispara la
+// regla "no reasignar después del render" del linter — acá no hace
+// falta, es una caché de un valor puramente determinístico, sin
+// relación con ningún ciclo de render) evita reconstruir el mismo SVG
+// en cada render de la lista de negocios. El "crecimiento" al
+// seleccionar/tocar un pin NO se resuelve creando un ícono distinto
+// (eso reemplazaría el nodo DOM entero vía `marker.setIcon()` y la
+// transición CSS no tendría de dónde animar) — ver BusinessMarker más
+// abajo, que en cambio alterna una clase CSS sobre el mismo elemento.
+const businessIconCache = new Map<string, L.DivIcon>();
+
+function getBusinessIcon(color: string): L.DivIcon {
+  let icon = businessIconCache.get(color);
+  if (!icon) {
+    icon = createPinIcon(color);
+    businessIconCache.set(color, icon);
+  }
+  return icon;
+}
+
 function createPinIcon(color: string): L.DivIcon {
   const svg = `
-    <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
-      <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.716 23.284 0 15 0z" fill="${color}"/>
-      <circle cx="15" cy="15" r="6" fill="#fff"/>
-    </svg>`;
+    <div class="${PIN_INNER_CLASS}">
+      <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.716 23.284 0 15 0z" fill="${color}"/>
+        <circle cx="15" cy="15" r="6" fill="#fff"/>
+      </svg>
+    </div>`;
   return L.divIcon({
     html: svg,
     className: "f3-business-pin",

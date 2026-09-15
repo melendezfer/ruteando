@@ -24,6 +24,11 @@ type BusinessZone = components["schemas"]["BusinessZone"];
 const DEFAULT_CENTER = { lat: 4.578, lng: -74.217 };
 const MAP_RESULTS_LIMIT = 50;
 const LOCATE_ME_ZOOM = 16;
+// Debe coincidir con la duración de la transición de
+// `.f3-business-pin-inner` en globals.css — el popup de información
+// (BusinessSummarySheet) se abre recién cuando el pin terminó de
+// crecer, no al tocar.
+const PIN_GROW_ANIMATION_MS = 220;
 
 const LeafletMap = dynamic(() => import("@/components/map/leaflet-map").then((mod) => mod.LeafletMap), {
   ssr: false,
@@ -53,6 +58,13 @@ export function MapScreen() {
   const [zones, setZones] = useState<BusinessZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<BusinessPin | null>(null);
+  // Negocio recién tocado, mientras el pin todavía está en la animación
+  // de crecimiento (ver PIN_GROW_ANIMATION_MS) — separado de `selected`
+  // a propósito: `selected` es lo que abre BusinessSummarySheet, y el
+  // pin debe empezar a crecer de inmediato al tocar, ANTES de que ese
+  // popup aparezca, no al mismo tiempo.
+  const [pendingSelection, setPendingSelection] = useState<BusinessPin | null>(null);
+  const pendingSelectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<MapFiltersState>({
     radiusKm: 5,
@@ -190,8 +202,23 @@ export function MapScreen() {
 
   function handleSelectBusiness(business: BusinessPin) {
     setFiltersOpen(false);
-    setSelected(business);
+    // El pin ya arranca a crecer acá (ver selectedBusinessId más abajo,
+    // que combina pendingSelection y selected) — BusinessSummarySheet
+    // recién se abre cuando esa animación termina.
+    if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
+    setPendingSelection(business);
+    pendingSelectionTimeoutRef.current = setTimeout(() => {
+      setSelected(business);
+      setPendingSelection(null);
+      pendingSelectionTimeoutRef.current = null;
+    }, PIN_GROW_ANIMATION_MS);
   }
+
+  useEffect(() => {
+    return () => {
+      if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
+    };
+  }, []);
 
   /** "Ver esa zona" en ZoneComparisonCard — recentra el mapa sobre la zona sugerida, mismo zoom que "Mi ubicación". */
   function handleJumpToZone(zone: BusinessZone) {
@@ -203,6 +230,8 @@ export function MapScreen() {
   }
 
   function handleToggleFilters() {
+    if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
+    setPendingSelection(null);
     setSelected(null);
     setFiltersOpen((open) => !open);
   }
@@ -262,7 +291,7 @@ export function MapScreen() {
               userLocation={userLocation}
               businesses={businesses}
               zones={zones}
-              selectedBusinessId={selected?.id ?? null}
+              selectedBusinessId={pendingSelection?.id ?? selected?.id ?? null}
               onSelectBusiness={handleSelectBusiness}
               onMapReady={(map) => {
                 mapInstanceRef.current = map;

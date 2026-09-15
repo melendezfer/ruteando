@@ -1,18 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { RequireAuth } from "@/components/auth/require-auth";
-import { AppHeader } from "@/components/layout/app-header";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
-import { MapScreen } from "@/components/map/map-screen";
-
+/**
+ * El mapa pasa a ser la pantalla principal (`/`) — este redirect queda
+ * por si algo externo todavía apunta a `/mapa` (link compartido, marcador
+ * guardado), en vez de borrar la ruta.
+ */
 export default function MapaPage() {
-  return (
-    <RequireAuth>
-      <main className="flex flex-1 flex-col">
-        <AppHeader />
-        <MapScreen />
-        <BottomNavBar />
-      </main>
-    </RequireAuth>
-  );
+  redirect("/");
 }

@@ -88,12 +88,12 @@ export function FavoritesScreen() {
           <p className="font-sans text-body text-text">Todavía no tienes negocios favoritos guardados.</p>
           <p className="font-sans text-body-sm text-text-muted">
             Explora el{" "}
-            <Link href="/mapa" className="font-medium text-terracota underline">
+            <Link href="/" className="font-medium text-terracota underline">
               mapa
             </Link>{" "}
             o busca en{" "}
-            <Link href="/" className="font-medium text-terracota underline">
-              Inicio
+            <Link href="/buscar" className="font-medium text-terracota underline">
+              Buscar
             </Link>{" "}
             para encontrar tus lugares preferidos.
           </p>

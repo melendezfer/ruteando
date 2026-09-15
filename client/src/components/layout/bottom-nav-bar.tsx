@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, MapTrifold, Heart, UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { MagnifyingGlass, MapTrifold, Heart, UserCircle } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
 interface Destination {
@@ -22,8 +22,8 @@ interface Destination {
  * construido todavía; ver `favorites-screen.tsx`).
  */
 const DESTINATIONS: Destination[] = [
-  { href: "/", label: "Inicio", icon: House },
-  { href: "/mapa", label: "Mapa", icon: MapTrifold },
+  { href: "/buscar", label: "Buscar", icon: MagnifyingGlass },
+  { href: "/", label: "Mapa", icon: MapTrifold },
   { href: "/favoritos", label: "Favoritos", icon: Heart },
   { href: "/perfil", label: "Perfil", icon: UserCircle },
 ];

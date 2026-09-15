@@ -13,6 +13,7 @@ import { MapFiltersSheet, type MapFiltersState } from "@/components/map/map-filt
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
 import type { BusinessPin } from "@/components/map/leaflet-map";
+import type { CatalogType } from "@/lib/catalog/catalog-label";
 
 type Category = components["schemas"]["Category"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -88,6 +89,17 @@ export function MapScreen() {
     categories.forEach((category) => {
       if (category.id !== undefined && category.name !== undefined) {
         map.set(category.id, category.name);
+      }
+    });
+    return map;
+  }, [categories]);
+
+  /** Para colorear cada pin por familia (ver category-pin-colors.ts) — el color de un negocio depende de `Category.type`, no solo de su `categoryId`. */
+  const categoryTypeById = useMemo(() => {
+    const map = new Map<number, CatalogType>();
+    categories.forEach((category) => {
+      if (category.id !== undefined && category.type !== undefined) {
+        map.set(category.id, category.type);
       }
     });
     return map;
@@ -290,6 +302,7 @@ export function MapScreen() {
               center={center}
               userLocation={userLocation}
               businesses={businesses}
+              categoryTypeById={categoryTypeById}
               zones={zones}
               selectedBusinessId={pendingSelection?.id ?? selected?.id ?? null}
               onSelectBusiness={handleSelectBusiness}

@@ -10,6 +10,7 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import type { components } from "@/lib/api/schema";
 import { describeVariety } from "@/lib/zones/zone-format";
 import { getCategoryPinColor } from "@/lib/map/category-pin-colors";
+import type { CatalogType } from "@/lib/catalog/catalog-label";
 
 type Business = components["schemas"]["Business"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -31,6 +32,8 @@ interface LeafletMapProps {
   center: { lat: number; lng: number };
   userLocation: { lat: number; lng: number } | null;
   businesses: BusinessPin[];
+  /** `Category.type` de cada `categoryId` — decide la FAMILIA de color del pin (ver category-pin-colors.ts). Un negocio cuya categoría todavía no resolvió (categorías sin cargar, o id desconocido) cae al terracota de marca de siempre. */
+  categoryTypeById: Map<number, CatalogType>;
   /** "Zonas de aglomeración" (ver CLAUDE.md sección 32) — resaltado visual, además de los pines individuales de siempre. */
   zones: BusinessZone[];
   /**
@@ -74,6 +77,7 @@ export function LeafletMap({
   center,
   userLocation,
   businesses,
+  categoryTypeById,
   zones,
   selectedBusinessId,
   onSelectBusiness,
@@ -143,7 +147,12 @@ export function LeafletMap({
           <BusinessMarker
             key={business.id}
             business={business}
-            icon={getBusinessIcon(getCategoryPinColor(business.categoryId))}
+            icon={getBusinessIcon(
+              getCategoryPinColor(
+                business.categoryId,
+                business.categoryId != null ? categoryTypeById.get(business.categoryId) : undefined,
+              ),
+            )}
             selected={business.id === selectedBusinessId}
             onSelect={onSelectBusiness}
           />

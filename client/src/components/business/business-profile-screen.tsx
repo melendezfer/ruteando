@@ -28,6 +28,7 @@ import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { ProductForm, type ProductFormValues } from "@/components/business/product-form";
+import { ProductPhotoStep } from "@/components/business/product-photo-step";
 import {
   resolveCatalogEmptyState,
   resolveCatalogSectionLabel,
@@ -47,7 +48,13 @@ import type { components } from "@/lib/api/schema";
 type BusinessProfile = components["schemas"]["BusinessProfile"];
 type Product = components["schemas"]["Product"];
 
-type ProductFormState = { mode: "create" } | { mode: "edit"; product: Product };
+type ProductFormState =
+  | { mode: "create" }
+  | { mode: "edit"; product: Product }
+  // Segundo paso tras crear (ver ProductPhotoStep) — el producto en sí
+  // ya existe de verdad en el backend en este punto, solo falta que el
+  // vendedor decida si le agrega una foto antes de cerrar el modal.
+  | { mode: "create-photo"; product: Product };
 
 interface BusinessProfileScreenProps {
   profile: BusinessProfile;
@@ -118,15 +125,21 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   const [productFormSubmitting, setProductFormSubmitting] = useState(false);
   const [productFormError, setProductFormError] = useState<string | null>(null);
   const [productFormFieldErrors, setProductFormFieldErrors] = useState<Record<string, string>>({});
+  // Foto que se sube durante el paso "create-photo" (ver ProductPhotoStep)
+  // — se guarda acá, aparte, hasta que se confirma con "Listo": recién
+  // ahí se vuelca a `productPhotos` junto con el producto nuevo a
+  // `products`, los dos a la vez (ver finishProductCreation).
+  const [pendingProductPhoto, setPendingProductPhoto] = useState<UploadedPhoto | null>(null);
 
   function closeProductForm() {
     setProductForm(null);
     setProductFormError(null);
     setProductFormFieldErrors({});
+    setPendingProductPhoto(null);
   }
 
   async function handleProductFormSubmit(values: ProductFormValues) {
-    if (!productForm || !profile.id) return;
+    if (!productForm || productForm.mode === "create-photo" || !profile.id) return;
 
     const name = values.name.trim();
     const priceNumber = Number(values.price);
@@ -160,9 +173,32 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
     }
 
     if (productForm.mode === "create") {
-      setProducts((prev) => [...prev, result.product!]);
+      // Corrige un hueco real (petición directa del usuario): antes el
+      // modal se cerraba acá mismo y había que volver a entrar al
+      // producto ya creado para poder agregarle una foto. Ahora, en vez
+      // de cerrar, el modal cambia a un segundo paso (ProductPhotoStep)
+      // — ni `products` ni `productFormError`/etc. se tocan todavía; eso
+      // pasa recién en finishProductCreation(), cuando el vendedor
+      // confirma "Listo"/"Continuar sin foto".
+      setProductForm({ mode: "create-photo", product: result.product });
     } else {
       setProducts((prev) => prev.map((p) => (p.id === result.product!.id ? result.product! : p)));
+      closeProductForm();
+    }
+  }
+
+  /**
+   * "Listo"/"Continuar sin foto" en ProductPhotoStep — el producto ya
+   * existía de verdad en el backend desde handleProductFormSubmit; acá
+   * recién se refleja en el estado local (products + productPhotos, los
+   * dos juntos) y se cierra el modal.
+   */
+  function finishProductCreation() {
+    if (!productForm || productForm.mode !== "create-photo") return;
+    const created = productForm.product;
+    setProducts((prev) => [...prev, created]);
+    if (created.id && pendingProductPhoto) {
+      setProductPhotos((prev) => ({ ...prev, [created.id!]: pendingProductPhoto }));
     }
     closeProductForm();
   }
@@ -363,7 +399,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         ))}
       </section>
 
-      {productForm && (
+      {productForm && (productForm.mode === "create" || productForm.mode === "edit") && (
         <ProductForm
           mode={productForm.mode}
           itemNoun={itemNoun}
@@ -382,6 +418,16 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           fieldErrors={productFormFieldErrors}
           onSubmit={handleProductFormSubmit}
           onCancel={closeProductForm}
+        />
+      )}
+
+      {productForm && productForm.mode === "create-photo" && productForm.product.id && (
+        <ProductPhotoStep
+          productId={productForm.product.id}
+          productName={productForm.product.name ?? itemNoun}
+          currentPhoto={pendingProductPhoto}
+          onPhotoChange={setPendingProductPhoto}
+          onDone={finishProductCreation}
         />
       )}
 

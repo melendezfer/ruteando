@@ -3404,3 +3404,44 @@ Doña Rosa, categoría `alimentos` y catálogo vacío al empezar):
   el backend lo asigna solo, pero no hay ningún endpoint para
   reordenar y no se pidió construir uno. Los productos nuevos se
   agregan al final de la lista (mismo orden que ya devuelve la API).
+
+### Corregido después: agregar la foto de una sola vez al crear
+
+Hueco real, encontrado por el usuario probando el PR ya fusionado: el
+modal se cerraba apenas se guardaba el producto nuevo, y
+`PhotoUploadControl` solo aparecía dentro de la fila del catálogo — así
+que agregarle una foto a un producto recién creado exigía cerrar el
+modal, encontrar la fila nueva en la lista, expandirla, y recién ahí
+subir la foto. Corregido en la misma rama de esta funcionalidad, no en
+una aparte.
+
+`ProductPhotoStep` (nuevo, `client/src/components/business/product-photo-step.tsx`):
+un segundo paso del mismo modal, exclusivo del modo "crear" — al
+`POST` exitoso, en vez de cerrar, `productForm` pasa a un tercer estado
+(`{ mode: "create-photo", product }`) que reemplaza el contenido del
+modal por `PhotoUploadControl` (el mismo componente que ya usa la fila
+del catálogo) más un botón que dice "Continuar sin foto" o "Listo",
+según si ya hay una foto subida en ese momento. **Editar no cambia**:
+ahí `PhotoUploadControl` ya vive dentro de la fila expandida del
+producto (sección 33), así que este paso extra no aplica ni hacía
+falta — el `onSubmit` de edición sigue cerrando el modal directo, igual
+que antes de este ajuste.
+
+**Orden deliberado, no accidental**: el producto se crea de verdad en
+el backend (`POST`) apenas se confirma el primer paso — lo que queda
+pendiente hasta "Listo" es solo reflejarlo en el estado LOCAL
+(`products`/`productPhotos`), no la creación en sí. `finishProductCreation()`
+vuelca los dos a la vez recién ahí, para que la lista nunca muestre el
+producto "a medias" (sin saber todavía si el vendedor le puso foto o
+no) mientras el modal sigue abierto encima. Por eso `ProductPhotoStep`
+no tiene botón de cerrar/X: en este paso ya no hay nada que
+"cancelar" — el producto ya existe — así que la única salida es
+"Listo"/"Continuar sin foto".
+
+**Verificado con Playwright**: crear un producto y subirle una foto sin
+salir del modal (el botón cambia de "Continuar sin foto" a "Listo" en
+cuanto la subida termina); la foto ya se ve en el catálogo apenas se
+cierra el modal, sin tener que volver a subirla; "Continuar sin foto"
+también funciona para un segundo producto (no es obligatorio subir
+nada); editar sigue cerrando el modal directo, sin este paso extra
+(regresión verificada explícitamente, no solo asumida).

@@ -1602,6 +1602,101 @@ No se automatizó ninguna de las dos — son pasos del lado de Windows, no
 de este repositorio, y dependen de la versión de Windows/WSL de cada
 quien.
 
+**Actualización (`chore/dev-lan-persistente`)**: lo de arriba ya no es
+del todo cierto — **la alternativa del reenvío de puertos sí se
+automatizó**, ver `scripts/dev-lan.sh` más abajo. El modo "mirrored"
+sigue siendo la opción recomendada a mano si alguien quiere evitar el
+reenvío por completo, pero requiere `wsl --shutdown` (mata la sesión de
+WSL2 activa, Docker Desktop incluido) — algo que un script corriendo
+DENTRO de esa misma sesión de WSL2 no puede disparar sobre sí mismo sin
+cortarse a la mitad, así que `dev-lan.sh` no lo intenta ni lo ofrece.
+
+### `scripts/dev-lan.sh` — todo el stack persistente + acceso por LAN, con un comando
+
+Petición directa del usuario: los servicios (Postgres/MinIO, backend,
+frontend) tenían que sobrevivir a cerrar la terminal, y el celular
+seguía sin poder alcanzarlos. Un solo script (`bash scripts/dev-lan.sh`,
+re-ejecutable, idempotente) resuelve las dos cosas juntas:
+
+1. **Infra** (`docker compose up -d`) — ya persiste sola como daemon,
+   sin cambios necesarios ahí.
+2. **Migraciones** (`node-pg-migrate up`, corrido dentro de un
+   subshell — ver el hallazgo de abajo sobre por qué).
+3. **Backend + frontend, vía pm2** (`ecosystem.config.cjs`, nuevo,
+   raíz del repo) — `pm2 startOrReload` + `pm2 save`. pm2 sí sobrevive
+   a que se cierre la terminal (es un daemon propio, como Docker), pero
+   **no sobrevive a un `wsl --shutdown` ni a reiniciar Windows** — este
+   entorno corre systemd (`/etc/wsl.conf`, `[boot] systemd=true`), lo
+   que en teoría permitiría `pm2 startup` para que arranque solo al
+   iniciar WSL2, pero requiere `sudo` y este entorno no tiene sudo sin
+   contraseña (mismo límite ya documentado en la sección 30) — así que
+   quedó fuera: después de un reinicio real, hay que volver a correr
+   este script.
+4. **Detección de IPs en vivo** (no hardcodeadas): la IP interna de
+   WSL2 (`hostname -I`) y la IP LAN real de Windows, vía
+   `powershell.exe` (`Get-NetIPConfiguration`, filtrando la interfaz
+   que tiene puerta de enlace por defecto y está activa — así elige el
+   adaptador Wi-Fi/Ethernet real y no alguno de los vEthernet internos
+   de WSL/Docker/Hyper-V). Confirmado en este entorno: **modo NAT**,
+   sin `.wslconfig` en ningún perfil de usuario de Windows (se
+   revisaron todos) — IP interna de WSL2 en el rango `172.28.x.x`,
+   sobre un adaptador `vEthernet (WSL (Hyper-V firewall))`, IP LAN real
+   `192.168.1.8` sobre `Wi-Fi`.
+5. **`client/.env.local` y `CORS_ORIGIN`** (`.env.development`, raíz) se
+   reescriben en cada corrida con la IP LAN detectada — a diferencia de
+   la sección de arriba (que decidió no tocar los archivos reales por
+   ser personales), acá sí tiene sentido: es justamente lo que este
+   script existe para automatizar, y se re-detecta la IP cada vez por
+   si cambió (DHCP).
+6. **Reenvío de puertos + Firewall, con elevación disparada por el
+   propio script**: genera `C:\Users\<usuario>\ruteando-lan-setup.ps1`
+   (con `netsh interface portproxy add ...` hacia la IP interna de WSL2
+   vigente + `New-NetFirewallRule` para 3000/3001) y lo corre con
+   `Start-Process powershell -Verb RunAs`, que dispara el diálogo de
+   UAC de Windows — el script (corriendo como usuario normal dentro de
+   WSL2) **no tiene privilegios de Administrador y no puede
+   concedérselos a sí mismo**; lo máximo que puede hacer es pedirle el
+   permiso a quien esté sentado frente al computador con un clic. Es
+   idempotente y se salta el diálogo por completo si el reenvío ya
+   apunta a la IP interna de WSL2 vigente (comparando contra
+   `netsh interface portproxy show v4tov4`) — solo pide permiso de
+   nuevo si esa IP cambió (ej. después de un `wsl --shutdown`).
+
+**Hallazgo real, encontrado en vivo, no anticipado al escribir el
+script**: la primera versión sourceaba `.env.development` con
+`set -a; source .env.development; set +a` **en el proceso principal
+del script** (para tener `DATABASE_URL` disponible al correr las
+migraciones) — eso dejaba `CORS_ORIGIN` **exportado en el entorno del
+propio script** con el valor de ANTES de reescribir el archivo en el
+paso 5. Como `dotenv` (que usa `src/config/env.js`) nunca sobrescribe
+una variable que ya existe en `process.env`, el backend que `pm2`
+lanzaba a continuación heredaba ese `CORS_ORIGIN` viejo por el entorno
+del propio pm2, e ignoraba por completo el valor ya actualizado del
+archivo — verificado leyendo `/proc/<pid>/environ` del proceso real y
+confirmando con una llamada `Invoke-WebRequest` desde Windows con
+`Origin: http://192.168.1.8:3001` que el header
+`Access-Control-Allow-Origin` no volvía. Se corrigió envolviendo el
+`source` + las migraciones en un subshell (`( set -a; source ...; set
++a; npm run migrate:up )`) — así esas variables nunca se filtran al
+resto del script ni a lo que arranca después.
+
+**Verificado de punta a punta, no solo "el script no tiró error"**:
+corrida real completa (`bash scripts/dev-lan.sh`) con los servicios
+apagados de antes → Postgres/MinIO/backend/frontend arriba, diálogo de
+UAC disparado y aprobado, reglas de `portproxy`/Firewall confirmadas
+con `netsh interface portproxy show v4tov4` y `Get-NetFirewallRule`
+desde PowerShell → **desde el propio Windows host** (no desde WSL —
+es la aproximación más cercana a "otro dispositivo de la LAN" que se
+puede probar sin un celular físico a mano) contra `http://192.168.1.8:3001`
+y `http://192.168.1.8:3000`: `GET /` de la pantalla de login (200, HTML
+real), `GET /health` (200), y un `POST /auth/login` real con una cuenta
+de demo sembrada (`demo-arepas-dona-rosa@ruteando.test`) con el header
+`Origin: http://192.168.1.8:3001` — 200, con el `Access-Control-Allow-Origin`
+correcto y un token real de vuelta. **Límite reconocido**: esto no es
+lo mismo que probar desde un celular físico — confirma que la ruta de
+red completa (IP LAN → Firewall de Windows → portproxy → WSL2) funciona
+igual que la usaría un celular, pero no prueba el dispositivo en sí.
+
 ### Pruebas
 
 - `tests/unit/env.cors.test.js`: el parseo de `CORS_ORIGIN` (un origen,

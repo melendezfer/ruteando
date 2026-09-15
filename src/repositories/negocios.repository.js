@@ -30,10 +30,11 @@ async function crear({
   telefonoContacto,
   entregaPropia,
   higieneAutodeclarada,
+  movilidad,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto, entrega_propia, higiene_autodeclarada)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto, entrega_propia, higiene_autodeclarada, movilidad)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       usuarioId,
@@ -43,6 +44,7 @@ async function crear({
       telefonoContacto ?? null,
       entregaPropia,
       higieneAutodeclarada,
+      movilidad,
     ],
   );
   return rows[0];
@@ -64,7 +66,15 @@ async function buscarPorId(id) {
  */
 async function actualizar(
   id,
-  { categoriaId, nombre, descripcion, telefonoContacto, entregaPropia, higieneAutodeclarada },
+  {
+    categoriaId,
+    nombre,
+    descripcion,
+    telefonoContacto,
+    entregaPropia,
+    higieneAutodeclarada,
+    movilidad,
+  },
 ) {
   const { rows } = await pool.query(
     `UPDATE negocios
@@ -72,6 +82,7 @@ async function actualizar(
          telefono_verificado = (telefono_verificado AND telefono_contacto IS NOT DISTINCT FROM $5::varchar),
          entrega_propia = $6,
          higiene_autodeclarada = $7,
+         movilidad = $8,
          fecha_actualizacion = now()
      WHERE id = $1
      RETURNING *`,
@@ -83,6 +94,7 @@ async function actualizar(
       telefonoContacto ?? null,
       entregaPropia,
       higieneAutodeclarada,
+      movilidad,
     ],
   );
   return rows[0];

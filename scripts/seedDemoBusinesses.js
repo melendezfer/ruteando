@@ -105,6 +105,19 @@
  * `ST_ClusterDBSCAN` contra la base de desarrollo antes de escribir este
  * comentario — no solo calculado en teoría.
  *
+ * `movilidad` (ambulante/local_fijo, ver CLAUDE.md — sin RF asociado):
+ * los 5 negocios de comida quedan 'ambulante' (coherente con el público
+ * objetivo original, Documento 08 "Don Alirio" — vendedor de comida
+ * callejera) y los 3 no gastronómicos (Costuras, Asesoría Legal,
+ * Artesanías) quedan 'local_fijo' (un taller/oficina/puesto de
+ * artesanías es plausiblemente un punto fijo en la vida real, a
+ * diferencia de un carrito de comida) — excepto Empanadas El Fogón,
+ * marcado 'local_fijo' a propósito pese a ser comida: ya estaba
+ * aislado del resto (3km, sin nada cerca con qué confundirse en el
+ * mapa), así que es el punto más claro para comparar a ojo la forma
+ * "gota" (fija) contra el "círculo con carrito" (ambulante) del resto,
+ * sin depender de acercar el zoom para separar un cluster.
+ *
  * Datos claramente de prueba, fáciles de borrar antes de un piloto real:
  *   node scripts/seedDemoBusinesses.js --clean
  *
@@ -159,6 +172,7 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: true,
     higieneAutodeclarada: true,
+    movilidad: 'ambulante',
   },
   {
     slug: 'perros-el-parche',
@@ -173,6 +187,7 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: true,
+    movilidad: 'ambulante',
   },
   {
     // Nuevo, sin RF asociado (ver CLAUDE.md sección 32) — mismo rumbo y
@@ -195,6 +210,7 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: false,
+    movilidad: 'ambulante',
   },
   {
     slug: 'dulces-la-abuela',
@@ -209,6 +225,7 @@ const NEGOCIOS = [
     cerradoHoy: true,
     entregaPropia: true,
     higieneAutodeclarada: false,
+    movilidad: 'ambulante',
   },
   {
     slug: 'jugos-frutti-verde',
@@ -227,6 +244,7 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: false,
+    movilidad: 'ambulante',
   },
   {
     slug: 'empanadas-el-fogon',
@@ -248,6 +266,13 @@ const NEGOCIOS = [
     cerradoHoy: true,
     entregaPropia: true,
     higieneAutodeclarada: true,
+    // El único negocio de comida sembrado como 'local_fijo' (los demás
+    // son 'ambulante', mismo criterio que el resto del seed — mezclado
+    // a propósito, no todo uno u otro) — ya estaba aislado del resto
+    // (3km, sin nada cerca con qué confundirse en el mapa), así que es
+    // el punto más claro para ver a ojo la forma "gota" (fija) junto a
+    // las "círculo con carrito" (ambulante) del resto.
+    movilidad: 'local_fijo',
   },
   // --- Negocios NO gastronómicos (expansión de alcance, CLAUDE.md sección 31) ---
   {
@@ -268,6 +293,13 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false, // no aplica: es un servicio, no hay producto que entregar a domicilio
     higieneAutodeclarada: false, // no aplica: no es manejo de alimentos
+    // Los 3 negocios no gastronómicos quedan como 'local_fijo' a
+    // propósito (taller de costura, oficina de asesoría, puesto de
+    // artesanías — los tres plausibles como un punto fijo en la vida
+    // real, a diferencia de los de comida callejera) — mismo criterio
+    // que entregaPropia/higieneAutodeclarada acá: "no aplica" tanto
+    // como una elección real.
+    movilidad: 'local_fijo',
     // Catálogo de "Servicios" (ver catalog-label.ts) — sin fotos a
     // propósito, para demostrar que el catálogo no fuerza una foto por
     // ítem cuando la categoría es de servicios.
@@ -295,6 +327,7 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: false,
+    movilidad: 'local_fijo',
     productos: [
       { nombre: 'Consulta legal básica (30 min)', precio: 25000, disponible: true },
       { nombre: 'Redacción de derecho de petición', precio: 40000, disponible: true },
@@ -319,6 +352,7 @@ const NEGOCIOS = [
     cerradoHoy: true,
     entregaPropia: false,
     higieneAutodeclarada: false,
+    movilidad: 'local_fijo',
     // Catálogo de "Productos" (ver catalog-label.ts) — con foto en cada
     // ítem, como pidió el usuario explícitamente de ejemplo ("productos
     // con foto y precio para un artesano").
@@ -390,8 +424,8 @@ async function sembrar() {
     const categoriaId = categoria.rows[0].id;
 
     const negocio = await pool.query(
-      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia, higiene_autodeclarada)
-       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6, $7)
+      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia, higiene_autodeclarada, movilidad)
+       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6, $7, $8)
        RETURNING id`,
       [
         usuarioId,
@@ -401,6 +435,7 @@ async function sembrar() {
         n.telefono,
         n.entregaPropia,
         n.higieneAutodeclarada,
+        n.movilidad ?? 'ambulante',
       ],
     );
     const negocioId = negocio.rows[0].id;
@@ -475,6 +510,7 @@ async function sembrar() {
       estadoAhora: n.cerradoHoy ? 'cerrado hoy' : 'abierto ahora',
       entregaPropia: n.entregaPropia,
       higieneAutodeclarada: n.higieneAutodeclarada,
+      movilidad: n.movilidad ?? 'ambulante',
       catalogoItems: (n.productos ?? []).length,
       correo: n.correo,
       whatsapp: n.telefono,
@@ -490,6 +526,7 @@ async function sembrar() {
       `- ${r.nombre} [${r.categoria} · ${r.categoriaTipo}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
         `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}, ` +
         `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}, ` +
+        `${r.movilidad === 'local_fijo' ? 'local fijo' : 'ambulante'}, ` +
         `${r.catalogoItems} ítem(s) de catálogo\n` +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,
     );

@@ -27,6 +27,21 @@ const LOCATION_TYPE_API_TO_DB = Object.fromEntries(
   Object.entries(LOCATION_TYPE_DB_TO_API).map(([db, api]) => [api, db]),
 );
 
+// Movilidad autodeclarada del negocio (petición directa del usuario, sin
+// RF asociado — ver CLAUDE.md, migración movilidad-negocio): deliberadamente
+// un vocabulario distinto de LOCATION_TYPE_DB_TO_API (que sí incluye
+// 'mobile' como uno de sus 6 valores) — son dos campos separados con
+// significados relacionados pero no iguales, ver la migración para el
+// razonamiento completo de por qué no se reusó `ubicaciones.tipo`.
+const MOBILITY_DB_TO_API = {
+  ambulante: 'itinerant',
+  local_fijo: 'fixed',
+};
+
+const MOBILITY_API_TO_DB = Object.fromEntries(
+  Object.entries(MOBILITY_DB_TO_API).map(([db, api]) => [api, db]),
+);
+
 const DAY_DB_TO_API = {
   lunes: 'monday',
   martes: 'tuesday',
@@ -100,6 +115,13 @@ function toApiBusiness(row) {
     // campo es solo el booleano crudo. No es un dato sensible: visible
     // para cualquiera, igual que status/phoneVerified/ownDelivery.
     hygieneSelfDeclared: Boolean(row.higiene_autodeclarada),
+    // Movilidad autodeclarada — "ambulante" (se desplaza) vs. "local
+    // fijo" (punto de venta fijo). Sin RF asociado, ver CLAUDE.md
+    // (migración movilidad-negocio). Igual que ownDelivery/
+    // hygieneSelfDeclared: no es un dato sensible, visible para
+    // cualquiera. El mapa la usa para elegir la FORMA del pin (gota vs.
+    // ícono distinto), nunca el color (eso sigue siendo por categoría).
+    mobility: MOBILITY_DB_TO_API[row.movilidad],
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
     // Presentes solo cuando la consulta que produjo esta fila hizo el
@@ -340,6 +362,8 @@ module.exports = {
   STATUS_DB_TO_API,
   LOCATION_TYPE_DB_TO_API,
   LOCATION_TYPE_API_TO_DB,
+  MOBILITY_DB_TO_API,
+  MOBILITY_API_TO_DB,
   DAY_DB_TO_API,
   DAY_API_TO_DB,
   ORDEN_DIAS_DB,

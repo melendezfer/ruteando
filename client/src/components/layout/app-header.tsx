@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CookingPot } from "@phosphor-icons/react/dist/ssr";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@/components/ui/button";
+import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 
 /**
  * Encabezado compartido entre pantallas autenticadas — solo branding y
@@ -28,7 +28,7 @@ export function AppHeader() {
   return (
     <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
       <span className="flex items-center gap-2 font-heading text-title-2 font-bold text-text">
-        <CookingPot size={24} weight="duotone" className="text-terracota" />
+        <RuteandoLogo size={28} />
         Ruteando
       </span>
       <div className="flex items-center gap-4">

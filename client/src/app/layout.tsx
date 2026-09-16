@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans, Syne } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { FavoritesProvider } from "@/lib/favorites/favorites-context";
@@ -17,6 +17,15 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+// Solo para la "R" del logo (RuteandoLogo, rediseño de marca — ver
+// globals.css) — un solo peso (800), el único que usa esa letra.
+const syne = Syne({
+  variable: "--font-syne",
+  subsets: ["latin"],
+  weight: ["800"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Ruteando",
   description:
@@ -28,14 +37,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#c1502e",
+  themeColor: "#5B3DF5",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
-      className={`${inter.variable} ${plusJakartaSans.variable} h-full antialiased`}
+      className={`${inter.variable} ${plusJakartaSans.variable} ${syne.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>

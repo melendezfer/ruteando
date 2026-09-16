@@ -182,3 +182,18 @@ export function getAvailabilityRequestErrorMessage(status: number | undefined): 
   if (status === 429) return "Ya preguntaste varias veces hace poco — espera un momento antes de volver a intentar.";
   return GENERIC_ERROR;
 }
+
+/**
+ * PATCH /availability-requests/{requestId}/respond (Fase 3, panel del
+ * vendedor — VendorAvailabilityRequestsPanel). El 409 más común es que
+ * la solicitud ya expiró o ya se respondió (ej. desde otra pestaña) para
+ * cuando el vendedor toca el botón — el panel igual la saca de la lista
+ * en ese caso, este mensaje es solo el aviso.
+ */
+export function getRespondAvailabilityRequestErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "Esa solicitud ya no existe.";
+  if (status === 409) return "Esa solicitud ya expiró o ya fue respondida.";
+  return GENERIC_ERROR;
+}

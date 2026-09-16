@@ -151,6 +151,15 @@ async function requestAvailability(req, res) {
   res.status(201).json(result);
 }
 
+async function listAvailabilityRequests(req, res) {
+  const resultado = await solicitudesDisponibilidadService.listarPorNegocio(
+    req.params.businessId,
+    req.user.id,
+    req.validatedQuery,
+  );
+  res.status(200).json(resultado);
+}
+
 module.exports = {
   create,
   list,
@@ -175,4 +184,5 @@ module.exports = {
   sendPhoneVerification,
   confirmPhoneVerification,
   requestAvailability,
+  listAvailabilityRequests,
 };

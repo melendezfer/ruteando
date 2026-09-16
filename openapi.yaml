@@ -1865,6 +1865,44 @@ paths:
         '429':
           description: Límite de solicitudes recientes excedido (por negocio o por usuario)
           $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags: [Disponibilidad]
+      summary: Listar las solicitudes de disponibilidad de un negocio — solo el dueño
+      description: >-
+        Fase 3 de "vendiendo ahora" (sin RF asociado, ver CLAUDE.md
+        sección 37): el panel del vendedor para responder sin depender
+        de que un push le haya llegado. Solo el dueño del negocio
+        (autorización a nivel de objeto, 403 para cualquier otro). Sin
+        `status`, devuelve las solicitudes de cualquier estado (más
+        recientes primero salvo que se pida `status=pending`, que usa
+        FIFO — la más próxima a expirar primero, la que más urge
+        responder).
+      parameters:
+        - { $ref: '#/components/parameters/BusinessId' }
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, confirmed, declined, expired]
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Solicitudes de disponibilidad del negocio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AvailabilityRequest' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/{businessId}/promotions:
     post:

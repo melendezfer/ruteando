@@ -80,6 +80,51 @@ async function obtenerConfirmacionFresca(negocioId, freshnessMinutes) {
   return rows[0]?.respondida_en ?? null;
 }
 
+// GET /businesses/{businessId}/availability-requests (Fase 3, sin RF
+// asociado — ver CLAUDE.md sección 37). "pending"/"expired" no son
+// valores guardados (expiración perezosa, ver cabecera del archivo) —
+// se calculan acá contra el reloj, igual que toApiRequest() en
+// solicitudesDisponibilidad.service.js hace por fila individual.
+const CLAUSULA_POR_ESTADO = {
+  pending: `decision IS NULL AND expira_en > now()`,
+  confirmed: `decision = 'confirmada'`,
+  declined: `decision = 'rechazada'`,
+  expired: `decision IS NULL AND expira_en <= now()`,
+};
+
+/**
+ * FIFO (más antigua primero) — a diferencia de la mayoría de las listas
+ * del proyecto (más recientes primero): estas solicitudes expiran a los
+ * 10 minutos (AVAILABILITY_REQUEST_TTL_MINUTES), así que la más antigua
+ * es la más urgente de responder, no la menos relevante.
+ */
+async function listarPorNegocio({ negocioId, status, cursor, limit }) {
+  const clausulas = ['negocio_id = $1'];
+  const params = [negocioId];
+
+  if (status) {
+    clausulas.push(CLAUSULA_POR_ESTADO[status]);
+  }
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) > ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM solicitudes_disponibilidad
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
 module.exports = {
   crear,
   buscarPorId,
@@ -87,4 +132,5 @@ module.exports = {
   contarRecientesPorNegocio,
   contarRecientesPorUsuario,
   obtenerConfirmacionFresca,
+  listarPorNegocio,
 };

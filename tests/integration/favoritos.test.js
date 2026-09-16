@@ -226,4 +226,33 @@ describe('GET /users/me/favorites', () => {
       .set('Authorization', `Bearer ${consumer.accessToken}`);
     expect(res.status).toBe(422);
   });
+
+  it('availabilityConfirmedAt (sección 37 de CLAUDE.md, decisión B) viaja también acá, no solo en /businesses y /businesses/nearby', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const confirmado = await crearNegocio(vendor.accessToken, categoryId, 'Confirmado');
+    const sinConfirmar = await crearNegocio(vendor.accessToken, categoryId, 'Sin Confirmar');
+
+    await request(app)
+      .post(`/businesses/${confirmado.id}/favorite`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+    await request(app)
+      .post(`/businesses/${sinConfirmar.id}/favorite`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    await pool.query(
+      `INSERT INTO solicitudes_disponibilidad (negocio_id, usuario_id, expira_en, decision, respondida_en)
+       VALUES ($1, $2, now() + interval '10 minutes', 'confirmada', now() - interval '5 minutes')`,
+      [confirmado.id, consumer.user.id],
+    );
+
+    const res = await request(app)
+      .get('/users/me/favorites')
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    const porId = Object.fromEntries(res.body.data.map((b) => [b.id, b]));
+    expect(porId[confirmado.id].availabilityConfirmedAt).not.toBeNull();
+    expect(porId[sinConfirmar.id].availabilityConfirmedAt).toBeNull();
+  });
 });

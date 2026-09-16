@@ -3868,3 +3868,59 @@ recargar. Verificado además que esto desbloquea el flujo real: un
 consumidor preguntando por un negocio de ese mismo vendedor, que antes
 del consentimiento hubiera dado 409, da **201** después de otorgarlo.
 Datos de prueba borrados después.
+
+### Fase 7 (saltando la 6, push/Firebase — pendiente de credenciales): decisión B, la regla de visibilidad
+
+Se saltó a propósito la Fase 6 (push real, requiere que el usuario
+aporte credenciales de un proyecto Firebase — Web app config + clave
+VAPID, todavía sin conseguir) para cerrar primero esta, que no depende
+de eso.
+
+**La "regla" en sí ya estaba resuelta desde la Fase 1, sin que hiciera
+falta escribir nada nuevo**: se auditó `negocios.repository.js`
+(`listar`/`construirConsultaCercanos`/`clusterizar`) buscando
+`movilidad` en cualquier cláusula `WHERE` — no aparece en ninguna,
+solo en `INSERT`/`UPDATE` (creación/edición del negocio). Nunca hubo
+un filtro que quitar: la decisión B (ambulante y local fijo se ven
+siempre igual, `availabilityConfirmedAt` es solo una insignia,
+"nunca oculta ni filtra ningún negocio") ya era el comportamiento real
+del código, no algo pendiente de implementar. Lo que sí faltaba,
+y es lo que entra en esta fase:
+
+1. **Prueba de regresión que fija la decisión** (`discovery.test.js`,
+   nueva `describe`): 4 negocios (ambulante/local fijo × confirmado/sin
+   confirmar) — confirma que los 4 aparecen en `GET /businesses` y que
+   el orden (`fecha_creacion DESC`) no cambia por tener una
+   confirmación fresca. Sin esta prueba, un cambio futuro que agregara
+   sin querer un filtro o un `ORDER BY` que privilegie lo confirmado
+   pasaría desapercibido — ahora hay algo que lo detiene.
+2. **`AvailabilityConfirmedBadge` (Fase 2) ahora también en
+   `BusinessCard`** — hasta esta fase, la insignia solo vivía en el
+   perfil completo del negocio (`business-profile-screen.tsx`). Como
+   `BusinessCard` es el componente que ya comparten Inicio/Buscar, el
+   mapa (`BusinessSummarySheet`) y Favoritos, agregarla ahí una sola
+   vez la muestra en los tres listados a la vez — exactamente lo que
+   pedía la decisión B ("se muestra el dato... en todos los listados y
+   en el mapa"), sin tocar esas tres pantallas por separado.
+3. **Hallazgo real al verificar Favoritos**: `favoritos.repository.js#listar`
+   nunca tuvo el `LEFT JOIN LATERAL` contra `solicitudes_disponibilidad`
+   que sí tenían `listar()`/`cercanos()` desde la Fase 1 —
+   `GET /users/me/favorites` seguía devolviendo `availabilityConfirmedAt: null`
+   siempre, aunque el negocio sí tuviera una confirmación fresca (verificado
+   primero con un curl real que lo mostró en `null`, antes de escribir el
+   fix). Agregado el mismo LATERAL (duplicado a propósito, no
+   importado de `negocios.repository.js` — cada repositorio de este
+   proyecto es autosuficiente) + una prueba de integración nueva en
+   `favoritos.test.js`. `GET /businesses/zones` sigue sin este campo,
+   sin cambios — decisión ya tomada en la Fase 1 (agregado por cluster,
+   sin negocios individuales).
+
+**Verificado**: 2 pruebas de integración nuevas — suite completa
+514/514. En vivo contra el servidor de desarrollo real: la insignia
+"Confirmado hace X min" aparece en la lista "Cerca de ti" de `/buscar`
+para el negocio de demo con una confirmación insertada a mano, y ningún
+otro negocio se oculta ni cambia de posición. `GET /users/me/favorites`
+confirmado por curl devolviendo el timestamp real después del fix (antes
+del fix, con el backend ya reiniciado, daba `null` — se verificó el bug
+real antes de corregirlo, no se asumió). Datos de prueba borrados
+después.

@@ -416,3 +416,56 @@ describe('Business.availabilityConfirmedAt en los listados (sección 11 de CLAUD
     expect(enCercanos[sinConfirmar.id].availabilityConfirmedAt).toBeNull();
   });
 });
+
+describe('Decisión B — mobility nunca oculta ni reordena nada (sección 37 de CLAUDE.md, Fase 7)', () => {
+  it('ambulante/local fijo, confirmados o no, aparecen los 4 y en el mismo orden que sin la funcionalidad', async () => {
+    const categoryId = await crearCategoria();
+
+    // Creados en este orden — GET /businesses ordena por fecha_creacion
+    // DESC, así que sin ninguna interferencia el orden esperado es el
+    // reverso exacto: [d, c, b, a].
+    const a = await crearNegocioActivo({ categoryId, name: 'A Ambulante Sin Confirmar' });
+    const b = await crearNegocioActivo({ categoryId, name: 'B Ambulante Confirmado' });
+    const c = await crearNegocioActivo({ categoryId, name: 'C Fijo Sin Confirmar' });
+    const d = await crearNegocioActivo({ categoryId, name: 'D Fijo Confirmado' });
+
+    await request(app)
+      .patch(`/businesses/${c.id}`)
+      .set('Authorization', `Bearer ${c.accessToken}`)
+      .send({ name: 'C Fijo Sin Confirmar', categoryId, mobility: 'fixed' });
+    await request(app)
+      .patch(`/businesses/${d.id}`)
+      .set('Authorization', `Bearer ${d.accessToken}`)
+      .send({ name: 'D Fijo Confirmado', categoryId, mobility: 'fixed' });
+
+    const consumidor = await request(app)
+      .post('/auth/register')
+      .send({ fullName: 'Consumidor', email: correoDePrueba(), password: 'password123', role: 'consumer' });
+    usuarioIdsCreados.push(consumidor.body.user.id);
+
+    for (const confirmado of [b, d]) {
+      await pool.query(
+        `INSERT INTO solicitudes_disponibilidad (negocio_id, usuario_id, expira_en, decision, respondida_en)
+         VALUES ($1, $2, now() + interval '10 minutes', 'confirmada', now() - interval '5 minutes')`,
+        [confirmado.id, consumidor.body.user.id],
+      );
+    }
+
+    const lista = await request(app).get(`/businesses?categoryId=${categoryId}`);
+    const idsEnLista = lista.body.data.map((n) => n.id);
+
+    // Las 4 combinaciones (ambulante/fijo × confirmado/sin confirmar)
+    // aparecen — ninguna se oculta.
+    expect(new Set(idsEnLista)).toEqual(new Set([a.id, b.id, c.id, d.id]));
+
+    // El orden no cambia por tener (o no) una confirmación fresca — b y
+    // d no se adelantan frente a a y c solo por estar confirmados.
+    expect(idsEnLista).toEqual([d.id, c.id, b.id, a.id]);
+
+    const porId = Object.fromEntries(lista.body.data.map((n) => [n.id, n]));
+    expect(porId[a.id].mobility).toBe('itinerant');
+    expect(porId[b.id].mobility).toBe('itinerant');
+    expect(porId[c.id].mobility).toBe('fixed');
+    expect(porId[d.id].mobility).toBe('fixed');
+  });
+});

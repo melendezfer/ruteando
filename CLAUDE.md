@@ -3825,3 +3825,46 @@ sigues vendiendo" (el panel apareció solo con el polling, sin recargar
 la página), toca "Confirmar" — el panel desaparece y el badge
 "Confirmado hace instantes" aparece en el mismo instante. Datos de
 prueba borrados después.
+
+### Fase 4 de 7: UI de consentimiento de notificaciones
+
+Sin backend nuevo — `POST /consents` ya existía completo desde la
+Épica 8 (RF-018), pero nada en el frontend lo llamaba para
+`tipo_consentimiento='notifications'` (solo los dos obligatorios, al
+registrarse/loguearse, y `assisted_registration`, del lado del
+servidor). Sin esto, ningún vendedor real podía completar la Fase 1
+de esta mejora futura — `solicitar()` (sección 11) rechaza con 409 sin
+este consentimiento, así que un vendedor recién registrado nunca podía
+recibir una pregunta real, aunque las Fases 1-3 ya funcionaran de
+punta a punta.
+
+**Dónde vive, y por qué ahí**: `SettingsTab` (`/perfil`, pestaña
+Configuración) — no en el perfil de negocio. El consentimiento es
+`usuario_id`-scoped, no por negocio (`solicitar()` lo verifica contra
+`negocio.usuario_id`, sin filtrar por `businessId`), así que cubre
+todos los negocios de un mismo vendedor a la vez — corresponde a un
+ajuste de cuenta, no a un negocio en particular. Esto **rompe a
+propósito** el criterio "de solo lectura" que `SettingsTab` traía
+documentado desde la Épica F6 (`GET /users/me/consents`, sin ninguna
+acción): hasta ahora no existía ningún consentimiento opcional con una
+acción real que tuviera sentido ofrecer desde ahí; `notifications` es
+el primero.
+
+`grantNotificationsConsent()` (nuevo, `lib/api/consents.ts`) — a
+diferencia de `grantMandatoryConsents()` (best-effort, silencioso, ya
+existente), esta sí muestra el resultado: es una acción explícita del
+vendedor, no un paso automático después de un formulario. El botón
+"Activar notificaciones" solo se muestra si `notifications` todavía no
+está en la lista de consentimientos ya otorgados — al confirmar, se
+agrega al estado local (mismo criterio que el resto de esta sección:
+sin recargar la página, sin volver a pedir `GET /users/me/consents`).
+
+**Verificado con Playwright + curl contra el servidor de desarrollo
+real**: vendedor de prueba con solo los dos consentimientos
+obligatorios (sin `notifications`) → `/perfil` → Configuración muestra
+"Preguntas de disponibilidad" con el botón → al tocarlo, el botón
+desaparece y "Notificaciones" aparece en la lista de otorgados, sin
+recargar. Verificado además que esto desbloquea el flujo real: un
+consumidor preguntando por un negocio de ese mismo vendedor, que antes
+del consentimiento hubiera dado 409, da **201** después de otorgarlo.
+Datos de prueba borrados después.

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle, Warning } from "@phosphor-icons/react/dist/ssr";
+import { Bell, CheckCircle, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { Button } from "@/components/ui/button";
 import { AccountDeletionRequestModal } from "@/components/profile/account-deletion-request-modal";
+import { grantNotificationsConsent } from "@/lib/api/consents";
+import { getGrantNotificationsConsentErrorMessage } from "@/lib/api/error-messages";
 
 type User = components["schemas"]["User"];
 type Consent = components["schemas"]["Consent"];
@@ -58,6 +60,15 @@ export function SettingsTab({ user }: SettingsTabProps) {
   // una segunda solicitud, solo pierde esta confirmación en pantalla.
   const [deletionRequest, setDeletionRequest] = useState<AccountDeletionRequest | null>(null);
 
+  // Fase 4 de "vendiendo ahora" (sin RF asociado — ver CLAUDE.md sección
+  // 11/37): a diferencia del resto de esta pantalla (de solo lectura),
+  // 'notifications' es el único consentimiento que hoy tiene una acción
+  // real para otorgar desde acá — es lo que le faltaba a un vendedor
+  // real para que un consumidor pueda preguntarle "¿sigue vendiendo?"
+  // (solicitar(), backend, ya lo exigía desde la sección 11).
+  const [grantingNotifications, setGrantingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+
   useEffect(() => {
     let ignore = false;
     api.GET("/users/me/consents").then(({ data }) => {
@@ -67,6 +78,22 @@ export function SettingsTab({ user }: SettingsTabProps) {
       ignore = true;
     };
   }, []);
+
+  const hasNotificationsConsent = consents?.some((c) => c.type === "notifications") ?? false;
+
+  async function handleGrantNotifications() {
+    setGrantingNotifications(true);
+    setNotificationsError(null);
+    const result = await grantNotificationsConsent();
+    setGrantingNotifications(false);
+
+    if (!result.ok || !result.consent) {
+      setNotificationsError(getGrantNotificationsConsentErrorMessage(result.status));
+      return;
+    }
+
+    setConsents((prev) => [...(prev ?? []), result.consent!]);
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -126,6 +153,33 @@ export function SettingsTab({ user }: SettingsTabProps) {
           </ul>
         )}
       </section>
+
+      {consents !== null && !hasNotificationsConsent && (
+        <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">
+          <h2 className="flex items-center gap-2 font-heading text-title-2 font-semibold text-text">
+            <Bell size={20} weight="bold" className="text-terracota" />
+            Preguntas de disponibilidad
+          </h2>
+          <p className="font-sans text-body-sm text-text-muted">
+            Si tienes un negocio, activa esto para que tus clientes puedan preguntarte
+            &quot;¿sigue vendiendo?&quot; desde tu perfil — te llegará un aviso y podrás confirmar o
+            declinar desde ahí. Requiere aceptar recibir notificaciones (Ley 1581 de 2012).
+          </p>
+          {notificationsError && (
+            <p className="font-sans text-body-sm text-rojo">{notificationsError}</p>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleGrantNotifications}
+            loading={grantingNotifications}
+            className="w-full justify-center gap-2"
+          >
+            <Bell size={18} weight="bold" />
+            Activar notificaciones
+          </Button>
+        </section>
+      )}
 
       <section className="flex flex-col gap-3 rounded-card border border-rojo/30 bg-rojo/5 px-4 py-4">
         <h2 className="font-heading text-title-2 font-semibold text-text">Eliminar cuenta</h2>

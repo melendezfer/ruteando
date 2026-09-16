@@ -197,3 +197,9 @@ export function getRespondAvailabilityRequestErrorMessage(status: number | undef
   if (status === 409) return "Esa solicitud ya expiró o ya fue respondida.";
   return GENERIC_ERROR;
 }
+
+/** POST /consents (Fase 4 de "vendiendo ahora" — activar notificaciones desde Configuración). */
+export function getGrantNotificationsConsentErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  return GENERIC_ERROR;
+}

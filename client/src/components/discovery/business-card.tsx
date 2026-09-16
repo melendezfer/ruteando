@@ -7,6 +7,7 @@ import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { FavoriteButton } from "@/components/business/favorite-button";
+import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
 
 type Business = components["schemas"]["Business"];
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -99,12 +100,17 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
           aria-expanded={expanded}
           className="flex flex-1 items-center justify-between gap-3 text-left"
         >
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <span className="font-heading text-title-2 font-semibold text-text">{business.name}</span>
             <span className="font-sans text-body-sm text-text-muted">
               {categoryName ?? "Comercio informal"}
               {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
             </span>
+            {/* "Vendiendo ahora" (sin RF asociado, CLAUDE.md sección 37) —
+                decisión B: puramente informativo, se muestra igual sin
+                importar `mobility` (ambulante/local fijo) ni nada más —
+                nunca oculta ni reordena esta tarjeta ni ninguna otra. */}
+            <AvailabilityConfirmedBadge confirmedAt={business.availabilityConfirmedAt} />
           </div>
           {expanded ? (
             <CaretUp size={20} className="shrink-0 text-text-muted" />

@@ -219,6 +219,25 @@ components:
             cualquier texto o insignia que lo muestre, nunca presentarlo
             como una certificación o verificación de la plataforma.
             Default `false` cuando no se manda en BusinessInput.
+        mobility:
+          type: string
+          enum: [itinerant, fixed]
+          description: >-
+            Movilidad autodeclarada del negocio (petición directa del
+            usuario, sin RF asociado — ver CLAUDE.md): `itinerant`
+            (ambulante — se desplaza, ej. carrito o moto) vs. `fixed`
+            (un punto de venta que no cambia). Distinto de
+            `Location.type` (que también distingue `mobile` de los
+            demás valores): ese campo se declara una sola vez al
+            registrar la ubicación (RF-005); `mobility` es un
+            interruptor aparte, editable en cualquier momento desde el
+            perfil del negocio sin reabrir el formulario de ubicación —
+            mismo patrón que `ownDelivery`/`hygieneSelfDeclared`. El
+            mapa usa este campo para la FORMA del pin (gota vs. un
+            ícono distinto), nunca el color (el color sigue viniendo
+            de la categoría). No es un dato sensible: visible para
+            cualquiera. Default `itinerant` cuando no se manda en
+            BusinessInput.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         latitude:
@@ -320,6 +339,14 @@ components:
             una verificación de la plataforma. Opcional, sin `default`
             declarado a propósito, mismo criterio que `ownDelivery`: en
             POST, omitirlo equivale a `false`; en PATCH, omitirlo
+            conserva el valor existente.
+        mobility:
+          type: string
+          enum: [itinerant, fixed]
+          description: >-
+            Ver Business.mobility. Opcional, sin `default` declarado a
+            propósito, mismo criterio que `ownDelivery`: en POST,
+            omitirlo equivale a `itinerant`; en PATCH, omitirlo
             conserva el valor existente.
 
     AssistedRegistrationInput:

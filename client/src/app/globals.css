@@ -173,3 +173,14 @@ body {
 .f3-business-pin-inner--selected {
   transform: scale(1.35);
 }
+
+/*
+ * Forma "ambulante" (createItinerantPinIcon en leaflet-map.tsx) — un
+ * círculo centrado en su propio `iconAnchor` (mitad/mitad), no una gota
+ * anclada por la punta inferior — el crecimiento al seleccionar tiene
+ * que salir del CENTRO del círculo, no de su base, o el ícono se vería
+ * empujado hacia abajo al crecer.
+ */
+.f3-business-pin-inner--circle {
+  transform-origin: 50% 50%;
+}

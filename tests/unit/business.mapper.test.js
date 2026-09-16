@@ -44,7 +44,25 @@ describe('toApiBusiness', () => {
       longitude: null,
       distanceMeters: null,
       rejectionReason: null,
+      availabilityConfirmedAt: null,
     });
+  });
+
+  it('availabilityConfirmedAt viaja cuando la fila trae disponibilidad_confirmada_en (listar/cercanos con LEFT JOIN LATERAL fresco)', () => {
+    const row = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Salchipapas Doña Ana',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+      disponibilidad_confirmada_en: '2026-01-01T12:00:00.000Z',
+    };
+
+    expect(toApiBusiness(row).availabilityConfirmedAt).toBe('2026-01-01T12:00:00.000Z');
   });
 
   it('embebe latitude/longitude/distanceMeters exactos cuando la fila viene de un join con mostrar_ubicacion_exacta=true (listar/cercanos)', () => {

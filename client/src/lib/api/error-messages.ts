@@ -165,3 +165,20 @@ export function getProductDeleteErrorMessage(status: number | undefined): string
   if (status === 404) return "Ese ítem ya no existe.";
   return GENERIC_ERROR;
 }
+
+/**
+ * POST /businesses/{businessId}/availability-requests (Fase 2 de
+ * "vendiendo ahora", sin RF asociado — ver CLAUDE.md sección 37). El 409
+ * cubre dos casos distintos del backend (negocio no activo, o el
+ * vendedor no habilitó notificaciones) — un solo mensaje genérico para
+ * los dos, sin leer el `detail` del servidor (mismo criterio que el
+ * resto de este archivo).
+ */
+export function getAvailabilityRequestErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No puedes preguntar por tu propio negocio.";
+  if (status === 404) return "No encontramos este negocio. Puede que ya no exista.";
+  if (status === 409) return "No se puede preguntar por este negocio en este momento.";
+  if (status === 429) return "Ya preguntaste varias veces hace poco — espera un momento antes de volver a intentar.";
+  return GENERIC_ERROR;
+}

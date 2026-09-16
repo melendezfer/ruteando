@@ -3736,3 +3736,44 @@ para ese negocio y `null` para el resto) y en vivo contra el servidor
 de desarrollo real con un negocio de demo — el campo aparece con el
 timestamp real solo en el negocio confirmado, `null` en los demás,
 ningún negocio deja de aparecer.
+
+### Fase 2 de 7: el consumidor pregunta
+
+`AvailabilityRequestButton` (nuevo, `business-profile-screen.tsx`,
+visible solo para un consumidor autenticado que no es el dueño) reusa
+enteramente el backend de la sección 11 — nada nuevo del lado del
+servidor en esta fase. Máquina de estados simple (idle → asking →
+pending → confirmed/declined/expired, más un estado de error con
+reintento) — mientras está "pending", hace polling cada 5s contra
+`GET /availability-requests/{id}` (sin push todavía, Fase 6, pendiente
+de credenciales de Firebase — esto es lo único que puede decirle al
+consumidor si el vendedor ya respondió). El 409 del backend cubre dos
+casos distintos (negocio no activo / vendedor sin notificaciones
+habilitadas) con un solo mensaje genérico del lado del cliente, sin
+leer el `detail` del servidor — mismo criterio que el resto de
+`error-messages.ts`.
+
+`AvailabilityConfirmedBadge` (nuevo, pill verde "Confirmado hace X") es
+un componente **separado** del botón — se muestra para cualquiera
+(dueño incluido), sin depender de que quien mira haya sido quien
+preguntó, porque `availabilityConfirmedAt` ya es público desde la Fase
+1. El botón, al confirmar, actualiza este badge en el momento
+(`onConfirmed`, mismo patrón `useState` local que `phoneVerified`) sin
+depender de recargar la página.
+
+**Verificado con Playwright + curl de punta a punta contra el servidor
+de desarrollo real** (no solo con lo que ya prueba la Fase 1): vendedor
+y consumidor de prueba registrados por API, negocio activado y con
+teléfono verificado por SQL, consentimiento `notificaciones` otorgado
+por SQL — el consumidor pide confirmación desde la UI real (botón →
+"esperando respuesta…"), el vendedor responde `confirmed` vía
+`PATCH .../respond` (simulando lo que la Fase 4 hará desde su propia
+UI), y la pantalla del consumidor, sin recargar, pasa a "¡Confirmó que
+sigue vendiendo!" más el badge "Confirmado hace instantes" dentro de un
+ciclo de polling. Datos de prueba borrados después.
+
+**Gap conocido, no oculto**: solo se verificó en vivo el camino
+`pending → confirmed` — `declined`/`expired`/los distintos 409 se
+verificaron por lectura de código (misma máquina de estados, mismo
+`getAvailabilityRequestErrorMessage`), no con su propia corrida de
+Playwright aparte.

@@ -18,6 +18,8 @@ import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { BackButton } from "@/components/ui/back-button";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
+import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
+import { AvailabilityRequestButton } from "@/components/business/availability-request-button";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
@@ -95,6 +97,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // inmediato sin depender de recargar la página o volver a pedir el
   // perfil completo solo por este campo.
   const [phoneVerified, setPhoneVerified] = useState(Boolean(profile.phoneVerified));
+
+  // "Vendiendo ahora" (Fase 2, sin RF asociado — ver CLAUDE.md sección
+  // 11/37): mismo criterio que phoneVerified arriba — así, cuando el
+  // vendedor confirma mientras el consumidor sigue mirando la pantalla
+  // (AvailabilityRequestButton#onConfirmed), el badge aparece de
+  // inmediato sin depender de recargar la página.
+  const [availabilityConfirmedAt, setAvailabilityConfirmedAt] = useState<string | null>(
+    profile.availabilityConfirmedAt ?? null,
+  );
 
   // Carga de fotos desde el frontend (sin épica asignada hasta ahora —
   // ver CLAUDE.md): estado local aparte de `profile` (inmutable), mismo
@@ -295,7 +306,13 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             </span>
           )}
           {profile.hygieneSelfDeclared && <HygieneBadge />}
+          <AvailabilityConfirmedBadge confirmedAt={availabilityConfirmedAt} />
         </div>
+        {profile.id && !isOwner && user && (
+          <div className="mt-2">
+            <AvailabilityRequestButton businessId={profile.id} onConfirmed={setAvailabilityConfirmedAt} />
+          </div>
+        )}
       </div>
 
       {isOwner && profile.id && (

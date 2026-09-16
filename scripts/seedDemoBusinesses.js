@@ -118,6 +118,27 @@
  * "gota" (fija) contra el "círculo con carrito" (ambulante) del resto,
  * sin depender de acercar el zoom para separar un cluster.
  *
+ * Datos de demo completos, sin valores genéricos ni vacíos (petición
+ * directa del usuario, sin RF asociado): hasta acá, los 6 negocios de
+ * comida (Arepas, Perros, Salchipapas, Dulces, Jugos, Empanadas)
+ * quedaban con 0 ítems de catálogo — solo los 3 no gastronómicos
+ * (Costuras/Asesoría/Artesanías) tenían menú, y ninguno de los 9
+ * negocios tenía `descripcion` en sus productos ni una
+ * `direccion_referencia` específica (todos compartían el mismo texto
+ * calculado "Cerca de Ciudad Verde, Soacha (~X m del centro)"). Se
+ * agregó un menú real de 3-4 ítems a cada negocio de comida (recetas y
+ * precios distintos incluso entre los dos de "Perros calientes y
+ * salchipapas", que comparten categoría pero no catálogo — a propósito,
+ * dos vendedores reales no tienen exactamente el mismo menú), una
+ * `descripcion` a cada producto de los 9 negocios (antes ninguno la
+ * tenía — mostraban "Este ítem todavía no tiene descripción"), y una
+ * `direccionReferencia` propia por negocio (calle/carrera + un punto de
+ * referencia plausible en Ciudad Verde) en vez del texto genérico. Sigue
+ * habiendo una mezcla deliberada de `disponible: true/false` y de
+ * productos con/sin foto en cada negocio — eso ya estaba bien pensado
+ * desde antes (ver comentarios de `entregaPropia`/`higieneAutodeclarada`
+ * arriba) y no hacía falta tocarlo.
+ *
  * Datos claramente de prueba, fáciles de borrar antes de un piloto real:
  *   node scripts/seedDemoBusinesses.js --clean
  *
@@ -173,6 +194,34 @@ const NEGOCIOS = [
     entregaPropia: true,
     higieneAutodeclarada: true,
     movilidad: 'ambulante',
+    direccionReferencia: 'Carrera 38 con Calle 33, frente al parque de Ciudad Verde',
+    productos: [
+      {
+        nombre: 'Arepa de queso',
+        descripcion: 'Arepa asada en parrilla de carbón, rellena de queso campesino derretido.',
+        precio: 4000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Arepa de choclo con queso',
+        descripcion: 'Arepa dulce de choclo tierno, con queso por dentro y por encima.',
+        precio: 5000,
+        disponible: true,
+      },
+      {
+        nombre: 'Arepa boyacense',
+        descripcion: 'Arepa dulce con queso, receta típica de la región boyacense.',
+        precio: 4500,
+        disponible: true,
+      },
+      {
+        nombre: 'Arepa con chicharrón',
+        descripcion: 'Arepa rellena de chicharrón crocante y queso derretido.',
+        precio: 7000,
+        disponible: false,
+      },
+    ],
   },
   {
     slug: 'perros-el-parche',
@@ -188,6 +237,34 @@ const NEGOCIOS = [
     entregaPropia: false,
     higieneAutodeclarada: true,
     movilidad: 'ambulante',
+    direccionReferencia: 'Calle 34 Sur, al lado de la cancha sintética',
+    productos: [
+      {
+        nombre: 'Perro clásico',
+        descripcion: 'Salchicha, papitas, salsas de la casa y queso rallado.',
+        precio: 6000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Perro especial',
+        descripcion: 'Con todo: salchicha doble, tocineta, queso fundido y maíz tierno.',
+        precio: 8500,
+        disponible: true,
+      },
+      {
+        nombre: 'Salchipapa sencilla',
+        descripcion: 'Papas fritas con trozos de salchicha y salsas al gusto.',
+        precio: 7000,
+        disponible: true,
+      },
+      {
+        nombre: 'Combo perro + salchipapa',
+        descripcion: 'Un perro clásico más una salchipapa sencilla, para compartir.',
+        precio: 12000,
+        disponible: false,
+      },
+    ],
   },
   {
     // Nuevo, sin RF asociado (ver CLAUDE.md sección 32) — mismo rumbo y
@@ -211,6 +288,32 @@ const NEGOCIOS = [
     entregaPropia: false,
     higieneAutodeclarada: false,
     movilidad: 'ambulante',
+    direccionReferencia: 'Carrera 37 con Calle 34, frente al centro comercial',
+    // Menú distinto al de Perros El Parche (misma categoría, pero cada
+    // vendedora tiene sus propias recetas/precios) — a propósito, para
+    // no repetir el mismo catálogo entre los dos negocios de la "zona
+    // este" (ver CLAUDE.md sección 32).
+    productos: [
+      {
+        nombre: 'Salchipapa sencilla',
+        descripcion: 'Papa criolla frita con salchicha y salsas de la casa.',
+        precio: 6500,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Salchipapa mixta',
+        descripcion: 'Con carne desmechada, salchicha y tocineta.',
+        precio: 9000,
+        disponible: true,
+      },
+      {
+        nombre: 'Perro caliente sencillo',
+        descripcion: 'Salchicha, papitas y salsas clásicas.',
+        precio: 5500,
+        disponible: true,
+      },
+    ],
   },
   {
     slug: 'dulces-la-abuela',
@@ -226,6 +329,34 @@ const NEGOCIOS = [
     entregaPropia: true,
     higieneAutodeclarada: false,
     movilidad: 'ambulante',
+    direccionReferencia: 'Diagonal 40, cerca al colegio de Ciudad Verde',
+    productos: [
+      {
+        nombre: 'Oblea sencilla',
+        descripcion: 'Con arequipe y queso rallado.',
+        precio: 3000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Oblea especial',
+        descripcion: 'Arequipe, queso, mermelada de mora y crema de leche.',
+        precio: 6000,
+        disponible: true,
+      },
+      {
+        nombre: 'Cocadas (unidad)',
+        descripcion: 'Cocada de coco rallado, receta de toda la vida.',
+        precio: 2500,
+        disponible: true,
+      },
+      {
+        nombre: 'Brevas con arequipe (x3)',
+        descripcion: 'Brevas caladas, rellenas de arequipe casero.',
+        precio: 5000,
+        disponible: false,
+      },
+    ],
   },
   {
     slug: 'jugos-frutti-verde',
@@ -245,6 +376,34 @@ const NEGOCIOS = [
     entregaPropia: false,
     higieneAutodeclarada: false,
     movilidad: 'ambulante',
+    direccionReferencia: 'Carrera 37B, junto al supermercado',
+    productos: [
+      {
+        nombre: 'Jugo de mora en agua',
+        descripcion: 'Mora fresca licuada, sin conservantes.',
+        precio: 4000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Jugo de lulo en leche',
+        descripcion: 'Lulo maduro con leche entera, bien frío.',
+        precio: 5500,
+        disponible: true,
+      },
+      {
+        nombre: 'Jugo de mango biche',
+        descripcion: 'Mango verde con limón y una pizca de sal.',
+        precio: 4500,
+        disponible: true,
+      },
+      {
+        nombre: 'Limonada de coco',
+        descripcion: 'Limonada natural con crema de coco.',
+        precio: 6000,
+        disponible: false,
+      },
+    ],
   },
   {
     slug: 'empanadas-el-fogon',
@@ -273,6 +432,34 @@ const NEGOCIOS = [
     // el punto más claro para ver a ojo la forma "gota" (fija) junto a
     // las "círculo con carrito" (ambulante) del resto.
     movilidad: 'local_fijo',
+    direccionReferencia: 'Calle 24A Bis, barrio Camilo Torres II',
+    productos: [
+      {
+        nombre: 'Empanada de carne',
+        descripcion: 'Masa de maíz frita, rellena de carne guisada con papa.',
+        precio: 2500,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Empanada de pollo',
+        descripcion: 'Pollo desmechado guisado, masa dorada y crocante.',
+        precio: 2500,
+        disponible: true,
+      },
+      {
+        nombre: 'Empanada mixta',
+        descripcion: 'Carne y pollo en la misma empanada, para los indecisos.',
+        precio: 3000,
+        disponible: true,
+      },
+      {
+        nombre: 'Empanada de papa (vegetariana)',
+        descripcion: 'Rellena de papa criolla guisada con hogao.',
+        precio: 2000,
+        disponible: false,
+      },
+    ],
   },
   // --- Negocios NO gastronómicos (expansión de alcance, CLAUDE.md sección 31) ---
   {
@@ -300,13 +487,29 @@ const NEGOCIOS = [
     // que entregaPropia/higieneAutodeclarada acá: "no aplica" tanto
     // como una elección real.
     movilidad: 'local_fijo',
+    direccionReferencia: 'Carrera 38 #33-12, local 2',
     // Catálogo de "Servicios" (ver catalog-label.ts) — sin fotos a
     // propósito, para demostrar que el catálogo no fuerza una foto por
     // ítem cuando la categoría es de servicios.
     productos: [
-      { nombre: 'Arreglo de bastilla o dobladillo', precio: 8000, disponible: true },
-      { nombre: 'Ajuste de prenda (entalle)', precio: 15000, disponible: true },
-      { nombre: 'Confección a la medida', precio: 60000, disponible: false },
+      {
+        nombre: 'Arreglo de bastilla o dobladillo',
+        descripcion: 'Ajuste de largo en pantalones, faldas o vestidos, listo el mismo día.',
+        precio: 8000,
+        disponible: true,
+      },
+      {
+        nombre: 'Ajuste de prenda (entalle)',
+        descripcion: 'Entalle de camisas, pantalones o vestidos a tu medida exacta.',
+        precio: 15000,
+        disponible: true,
+      },
+      {
+        nombre: 'Confección a la medida',
+        descripcion: 'Prenda hecha desde cero, según tus medidas y el diseño que quieras.',
+        precio: 60000,
+        disponible: false,
+      },
     ],
   },
   {
@@ -328,10 +531,26 @@ const NEGOCIOS = [
     entregaPropia: false,
     higieneAutodeclarada: false,
     movilidad: 'local_fijo',
+    direccionReferencia: 'Calle 33 con Carrera 38, segundo piso',
     productos: [
-      { nombre: 'Consulta legal básica (30 min)', precio: 25000, disponible: true },
-      { nombre: 'Redacción de derecho de petición', precio: 40000, disponible: true },
-      { nombre: 'Revisión de contrato de arrendamiento', precio: 35000, disponible: true },
+      {
+        nombre: 'Consulta legal básica (30 min)',
+        descripcion: 'Orientación inicial sobre tu caso, en lenguaje claro y sin tecnicismos.',
+        precio: 25000,
+        disponible: true,
+      },
+      {
+        nombre: 'Redacción de derecho de petición',
+        descripcion: 'Redacción y revisión de un derecho de petición formal.',
+        precio: 40000,
+        disponible: true,
+      },
+      {
+        nombre: 'Revisión de contrato de arrendamiento',
+        descripcion: 'Revisión de cláusulas antes de firmar, para evitar sorpresas.',
+        precio: 35000,
+        disponible: true,
+      },
     ],
   },
   {
@@ -353,13 +572,32 @@ const NEGOCIOS = [
     entregaPropia: false,
     higieneAutodeclarada: false,
     movilidad: 'local_fijo',
+    direccionReferencia: 'Carrera 38, frente a la iglesia de Ciudad Verde',
     // Catálogo de "Productos" (ver catalog-label.ts) — con foto en cada
     // ítem, como pidió el usuario explícitamente de ejemplo ("productos
     // con foto y precio para un artesano").
     productos: [
-      { nombre: 'Mochila tejida en telar', precio: 55000, disponible: true, foto: true },
-      { nombre: 'Manilla de macramé', precio: 12000, disponible: true, foto: true },
-      { nombre: 'Cuadro decorativo tejido', precio: 38000, disponible: false, foto: true },
+      {
+        nombre: 'Mochila tejida en telar',
+        descripcion: 'Mochila wayúu tradicional, tejida a mano en telar vertical.',
+        precio: 55000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Manilla de macramé',
+        descripcion: 'Manilla ajustable, tejida en hilo encerado de colores.',
+        precio: 12000,
+        disponible: true,
+        foto: true,
+      },
+      {
+        nombre: 'Cuadro decorativo tejido',
+        descripcion: 'Tapiz decorativo con diseños andinos, ideal para pared.',
+        precio: 38000,
+        disponible: false,
+        foto: true,
+      },
     ],
   },
 ];
@@ -443,7 +681,17 @@ async function sembrar() {
     await pool.query(
       `INSERT INTO ubicaciones (negocio_id, tipo, direccion_referencia, punto, es_actual, mostrar_ubicacion_exacta)
        VALUES ($1, 'puesto', $2, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, true, true)`,
-      [negocioId, `Cerca de Ciudad Verde, Soacha (~${n.distanciaM} m del centro)`, punto.lng, punto.lat],
+      [
+        negocioId,
+        // Referencia específica por negocio (no el genérico "~X m del
+        // centro" de antes) — pedido explícito del usuario ("nada
+        // genérico"): son solo texto libre mostrado al usuario, no
+        // afectan la coordenada real (`punto`, ya verificada por rumbo/
+        // distancia, ver comentario de cabecera) ni ninguna consulta.
+        n.direccionReferencia ?? `Cerca de Ciudad Verde, Soacha (~${n.distanciaM} m del centro)`,
+        punto.lng,
+        punto.lat,
+      ],
     );
 
     // Horario: hoy (hoyDb) según si el negocio debe verse "cerrado ahora";
@@ -477,19 +725,24 @@ async function sembrar() {
       [negocioId, `https://picsum.photos/seed/${n.slug}/900/600`],
     );
 
-    // Ítems de catálogo (expansión de alcance, CLAUDE.md sección 31) —
-    // `productos` es opcional (los 5 negocios gastronómicos originales
-    // no llevan ninguno, mismo comportamiento de antes de esta
-    // funcionalidad); cada ítem con `foto: true` suma también una fila
-    // en `fotos` (tipo='producto'), mismo placeholder externo que ya usa
-    // la foto de negocio de arriba, con una semilla distinta por
-    // producto para que no sea la misma imagen repetida.
+    // Ítems de catálogo (expansión de alcance, CLAUDE.md sección 31;
+    // menús completos para los 6 negocios de comida agregados después —
+    // ver CLAUDE.md, "datos de demo completos" — antes de eso, los 6
+    // negocios gastronómicos originales no llevaban ningún ítem).
+    // `productos` sigue siendo opcional en la forma del objeto (no todo
+    // negocio necesita llevarlo), pero ya no hay ninguno en `NEGOCIOS`
+    // sin su propio catálogo. `descripcion` (nueva) evita el estado
+    // "Este ítem todavía no tiene descripción" que mostraba cada
+    // producto sembrado hasta ahora. Cada ítem con `foto: true` suma
+    // también una fila en `fotos` (tipo='producto'), mismo placeholder
+    // externo que ya usa la foto de negocio de arriba, con una semilla
+    // distinta por producto para que no sea la misma imagen repetida.
     for (const [indice, p] of (n.productos ?? []).entries()) {
       const producto = await pool.query(
-        `INSERT INTO productos (negocio_id, nombre, precio, disponible)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO productos (negocio_id, nombre, descripcion, precio, disponible)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [negocioId, p.nombre, p.precio, p.disponible],
+        [negocioId, p.nombre, p.descripcion ?? null, p.precio, p.disponible],
       );
       const productoId = producto.rows[0].id;
 

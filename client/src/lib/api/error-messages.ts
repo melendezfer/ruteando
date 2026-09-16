@@ -203,3 +203,16 @@ export function getGrantNotificationsConsentErrorMessage(status: number | undefi
   if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
   return GENERIC_ERROR;
 }
+
+/** POST /auth/forgot-password. */
+export function getForgotPasswordErrorMessage(status: number | undefined): string {
+  if (status === 422) return "Revisa el correo ingresado.";
+  return GENERIC_ERROR;
+}
+
+/** POST /auth/reset-password. */
+export function getResetPasswordErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Este enlace ya no es válido — puede que haya vencido o que ya lo hayas usado. Pide uno nuevo.";
+  if (status === 422) return "Revisa la contraseña nueva — debe tener al menos 8 caracteres.";
+  return GENERIC_ERROR;
+}

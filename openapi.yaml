@@ -256,6 +256,23 @@ components:
           format: double
           nullable: true
           description: Distancia en metros al punto de búsqueda. Solo en GET /businesses/nearby.
+        availabilityConfirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Confirmación de disponibilidad en tiempo real (sección 11 de
+            CLAUDE.md). Null salvo que el vendedor haya confirmado
+            "vendiendo ahora" (POST .../availability-requests, PATCH
+            .../respond) dentro de la ventana de frescura configurada —
+            no es un estado permanente, deja de mostrarse solo con el
+            tiempo, sin que nada lo borre explícitamente. Se llena en
+            GET /businesses, GET /businesses/nearby y
+            GET /businesses/{businessId} — puramente informativo (una
+            insignia, "confirmado hace X"), nunca oculta ni reordena
+            ningún resultado: un negocio `itinerant`/ambulante sin
+            confirmación fresca se ve exactamente igual que uno con ella,
+            decisión explícita del usuario al diseñar esta funcionalidad.
         rejectionReason:
           type: string
           nullable: true
@@ -530,17 +547,6 @@ components:
                 por reseña (etiquetas + comentario) es privada, solo para
                 el dueño del negocio (GET /businesses/{businessId}/feedback)
                 y el equipo administrador.
-            availabilityConfirmedAt:
-              type: string
-              format: date-time
-              nullable: true
-              description: >-
-                Confirmación de disponibilidad en tiempo real (sección 11
-                de CLAUDE.md). Null salvo que el vendedor haya confirmado
-                "vendiendo ahora" (POST /availability-requests, PATCH
-                .../respond) dentro de la ventana de frescura configurada
-                — no es un estado permanente, deja de mostrarse solo con
-                el tiempo, sin que nada lo borre explícitamente.
             isOpenNow:
               type: boolean
               description: >-

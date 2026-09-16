@@ -148,6 +148,17 @@ function toApiBusiness(row) {
         : null,
     // Solo lo llena la consulta de /businesses/nearby.
     distanceMeters: row.distancia_m != null ? Number(row.distancia_m) : null,
+    // Confirmación de disponibilidad en tiempo real (sección 11 de
+    // CLAUDE.md) — mismo criterio que latitude/longitude/distanceMeters
+    // arriba: solo viene lleno cuando la consulta que produjo esta fila
+    // hizo el LEFT JOIN LATERAL contra solicitudes_disponibilidad
+    // (listar/cercanos en negocios.repository.js); en el resto de los
+    // callers (crear/actualizar/buscarPorId sin ese join) queda null.
+    // toApiBusinessProfile la sobrescribe después del spread con el valor
+    // que ya calculaba aparte (obtenerConfirmacionFresca) — sin cambios
+    // ahí. Decisión B (petición directa del usuario): esto es solo una
+    // insignia informativa, nunca filtra ni oculta ningún resultado.
+    availabilityConfirmedAt: row.disponibilidad_confirmada_en ?? null,
     // RF-020 (Épica 9): motivo que un administrador escribió al rechazar
     // el negocio (columna motivo_rechazo, ver migración
     // estado-negocio-rechazado) — es la única forma de que el vendedor

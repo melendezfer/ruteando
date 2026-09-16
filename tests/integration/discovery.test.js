@@ -382,3 +382,37 @@ describe('GET /businesses (lista con filtros, sin coordenada)', () => {
     expect(idsVistos).toEqual([negocio1.body.id, negocio2.body.id].sort());
   });
 });
+
+describe('Business.availabilityConfirmedAt en los listados (sección 11 de CLAUDE.md)', () => {
+  it('viaja en GET /businesses y GET /businesses/nearby cuando hay una confirmación fresca, y null si no hay ninguna', async () => {
+    const categoryId = await crearCategoria();
+    const confirmado = await crearNegocioActivo({ categoryId, lat: 4.6, lng: -74.2, name: 'Confirmado Ahora' });
+    const sinConfirmar = await crearNegocioActivo({
+      categoryId,
+      lat: 4.6001,
+      lng: -74.2001,
+      name: 'Sin Confirmar',
+    });
+
+    const consumidor = await request(app)
+      .post('/auth/register')
+      .send({ fullName: 'Consumidor', email: correoDePrueba(), password: 'password123', role: 'consumer' });
+    usuarioIdsCreados.push(consumidor.body.user.id);
+
+    await pool.query(
+      `INSERT INTO solicitudes_disponibilidad (negocio_id, usuario_id, expira_en, decision, respondida_en)
+       VALUES ($1, $2, now() + interval '10 minutes', 'confirmada', now() - interval '5 minutes')`,
+      [confirmado.id, consumidor.body.user.id],
+    );
+
+    const lista = await request(app).get(`/businesses?categoryId=${categoryId}`);
+    const enLista = Object.fromEntries(lista.body.data.map((b) => [b.id, b]));
+    expect(enLista[confirmado.id].availabilityConfirmedAt).not.toBeNull();
+    expect(enLista[sinConfirmar.id].availabilityConfirmedAt).toBeNull();
+
+    const cercanos = await request(app).get('/businesses/nearby?lat=4.6&lng=-74.2&radiusKm=2');
+    const enCercanos = Object.fromEntries(cercanos.body.data.map((b) => [b.id, b]));
+    expect(enCercanos[confirmado.id].availabilityConfirmedAt).not.toBeNull();
+    expect(enCercanos[sinConfirmar.id].availabilityConfirmedAt).toBeNull();
+  });
+});

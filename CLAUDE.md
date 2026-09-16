@@ -3679,3 +3679,60 @@ sin pelear con el clustering.
 después) con el color de familia correcto en ambas; el toggle del
 perfil cambia el valor, persiste tras recargar, y se probó también la
 animación de crecimiento sobre la forma nueva (círculo) sin regresión.
+
+## 37. "Vendiendo ahora" — Fase 1 de 7: `availabilityConfirmedAt` en los listados
+
+Con `negocios.movilidad` ya en `develop` (PR #49), se retoma la mejora
+futura de la sección 11 (confirmación de disponibilidad en tiempo
+real): reutilizar el backend que ya existía sin usar
+(`availability-requests`, `tokens_dispositivo`) más una regla de
+visibilidad en el mapa según movilidad. Plan aprobado por el usuario en
+7 fases, cada una su propio PR — esta sección documenta la Fase 1.
+**Decisión B, explícita del usuario, para la Fase 7 (todavía no
+implementada)**: `mobility` nunca oculta ni filtra ningún negocio en
+ningún listado — `availabilityConfirmedAt` es puramente informativo
+("confirmado hace X"), sin importar si el negocio es `itinerant` o
+`fixed`. Esta decisión ya condiciona cómo se implementó esta fase: el
+campo se agrega a los listados sin ningún filtro nuevo asociado.
+
+**Qué cambia**: `Business.availabilityConfirmedAt` (antes solo en
+`BusinessProfile`, es decir solo en `GET /businesses/{businessId}`)
+ahora también viaja en `GET /businesses` y `GET /businesses/nearby` —
+`BusinessProfile` ya no redeclara el campo en `openapi.yaml` (allOf
+sobre `Business`, quedaría duplicado). `negocios.repository.js#listar`/
+`construirConsultaCercanos` agregan un `LEFT JOIN LATERAL` compartido
+(`lateralDisponibilidadFresca`) contra `solicitudes_disponibilidad`,
+mismo criterio de "fresca" que ya usaba
+`solicitudesDisponibilidad.repository.js#obtenerConfirmacionFresca`
+para el perfil individual (`AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES`,
+60 min). `GET /businesses/zones` queda **sin tocar** en esta fase — es
+un agregado por cluster (`businessCount`/`categoryCount`), no tiene
+negocios individuales a los que colgarle el campo; se confirmó
+explícitamente con el usuario antes de escribir código, no se asumió.
+
+**Hallazgo real al escribir la prueba de plan de ejecución** (mismo
+rigor que ya exige `nearbyIndexPlan.test.js` desde la Épica 4): sin
+sembrar volumen también en `solicitudes_disponibilidad`, el
+planificador resolvía el nuevo `LEFT JOIN LATERAL` con un `Seq Scan`
+sobre esa tabla (vacía en la prueba) en vez de
+`idx_solicitudes_disponibilidad_confirmadas` — mismo problema, ya
+documentado, que ubicaciones/horarios con pocas filas. Se agregó
+siembra ahí también. Segundo hallazgo, más sutil: con el volumen ya
+sembrado, Postgres eligió correctamente el índice, pero como un
+**"Index Only Scan"** (todas las columnas pedidas —`negocio_id`,
+`respondida_en`— ya están en el índice, ni toca el heap) — un camino de
+acceso por índice más eficiente todavía que `Index Scan`/
+`Bitmap Index Scan`, pero que `NODOS_INDEX_SCAN` (el `Set` que la
+prueba usa para reconocer "esto es un índice, no un seq scan") no
+incluía. Se agregó `'Index Only Scan'` a ese `Set` — no es una
+relajación de la prueba, es reconocer un camino de acceso por índice
+que ya existía en Postgres y que esta prueba no había necesitado
+distinguir hasta ahora.
+
+**Verificado**: suite completa (503/503, incluida una prueba de
+integración nueva que crea una confirmación real vía SQL directo y
+confirma que `GET /businesses` y `GET /businesses/nearby` la exponen
+para ese negocio y `null` para el resto) y en vivo contra el servidor
+de desarrollo real con un negocio de demo — el campo aparece con el
+timestamp real solo en el negocio confirmado, `null` en los demás,
+ningún negocio deja de aparecer.

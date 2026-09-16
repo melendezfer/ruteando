@@ -1,6 +1,10 @@
 const pool = require('../config/db');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
-const { ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES } = require('../config/constants');
+const {
+  ZONE_RADIUS_METERS,
+  ZONE_MIN_BUSINESSES,
+  AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES,
+} = require('../config/constants');
 const env = require('../config/env');
 
 // TEMPORAL, SOLO DESARROLLO — ver CLAUDE.md sección 21 y el comentario
@@ -214,6 +218,34 @@ function escaparComodinesLike(texto) {
 }
 
 /**
+ * LEFT JOIN LATERAL compartido por listar() y cercanos() para traer
+ * `disponibilidad_confirmada_en` (Business.availabilityConfirmedAt,
+ * sección 11 de CLAUDE.md) — la confirmación "vendiendo ahora" más
+ * reciente de cada negocio, solo si sigue fresca. Usa
+ * idx_solicitudes_disponibilidad_confirmadas (mismo índice que ya usa
+ * solicitudesDisponibilidad.repository.js#obtenerConfirmacionFresca para
+ * el perfil individual) — necesario acá también, no solo en el perfil:
+ * sin él, esta consulta por negocio terminaría en un seq scan sobre
+ * solicitudes_disponibilidad en vez de un index scan a esta escala (ver
+ * la prueba de plan de ejecución que lo confirma).
+ *
+ * `idxFrescura` es el índice ($N) donde el caller ya empujó
+ * AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES a `params` — separado de
+ * `agregarFiltrosComunes` (que calcula sus propios índices dinámicamente)
+ * porque este JOIN va en el FROM, antes que cualquier filtro de WHERE.
+ */
+function lateralDisponibilidadFresca(idxFrescura) {
+  return `LEFT JOIN LATERAL (
+       SELECT sd.respondida_en
+       FROM solicitudes_disponibilidad sd
+       WHERE sd.negocio_id = n.id AND sd.decision = 'confirmada'
+         AND sd.respondida_en > now() - ($${idxFrescura} || ' minutes')::interval
+       ORDER BY sd.respondida_en DESC
+       LIMIT 1
+     ) disp ON true`;
+}
+
+/**
  * Filtros combinables compartidos por listar() y cercanos() (RF-010/011):
  * categoría, texto libre (nombre del negocio o de alguno de sus
  * productos), rango de precio (existe al menos un producto disponible en
@@ -287,7 +319,8 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
   // clausulaTelefonoVerificado() la saltea con SKIP_PHONE_VERIFICATION_CHECK
   // (solo development, ver cabecera de este archivo).
   const clausulas = [`n.estado = 'activo'`, clausulaTelefonoVerificado()];
-  const params = [];
+  const params = [AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
+  const idxFrescura = params.length;
 
   agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
 
@@ -307,13 +340,15 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
     // en el mismo milisegundo (carga masiva, sembrado, ráfaga de
     // registros concurrentes) podían quedar fuera de cualquier página al
     // paginar, porque el cursor comparaba contra un valor ya truncado.
-    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta
+    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta,
+            disp.respondida_en AS disponibilidad_confirmada_en
      FROM negocios n
      LEFT JOIN LATERAL (
        SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud, u.mostrar_ubicacion_exacta
        FROM ubicaciones u WHERE u.negocio_id = n.id AND u.es_actual = true
        LIMIT 1
      ) ub ON true
+     ${lateralDisponibilidadFresca(idxFrescura)}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY n.fecha_creacion DESC, n.id DESC
      LIMIT $${params.length}`,
@@ -355,6 +390,9 @@ function construirConsultaCercanos({
   params.push(radiusKm * 1000); // $3 — radio en metros
   clausulas.push(`ST_DWithin(u.punto, objetivo.punto, $3)`);
 
+  params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
+  const idxFrescura = params.length; // $4
+
   agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
 
   if (cursor) {
@@ -372,10 +410,12 @@ function construirConsultaCercanos({
             ST_Y(u.punto::geometry) AS latitud,
             ST_X(u.punto::geometry) AS longitud,
             u.mostrar_ubicacion_exacta,
-            ST_Distance(u.punto, objetivo.punto) AS distancia_m
+            ST_Distance(u.punto, objetivo.punto) AS distancia_m,
+            disp.respondida_en AS disponibilidad_confirmada_en
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
      CROSS JOIN objetivo
+     ${lateralDisponibilidadFresca(idxFrescura)}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY u.punto <-> objetivo.punto, n.id
      LIMIT $${params.length}`;

@@ -2,9 +2,9 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CookingPot } from "@phosphor-icons/react/dist/ssr";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@/components/ui/button";
+import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 
 /**
  * Guarda de sesión compartida entre pantallas autenticadas (Inicio de la
@@ -19,7 +19,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (status === "loading") {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-3 bg-background px-6 text-center">
-        <CookingPot size={48} weight="duotone" className="text-terracota" />
+        <RuteandoLogo size={48} />
         <h1 className="font-heading text-display font-bold text-text">Ruteando</h1>
         <p className="font-sans text-body text-text-muted">Cargando sesión…</p>
       </main>
@@ -29,7 +29,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (status === "unauthenticated") {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-3 bg-background px-6 text-center">
-        <CookingPot size={48} weight="duotone" className="text-terracota" />
+        <RuteandoLogo size={48} />
         <h1 className="font-heading text-display font-bold text-text">Ruteando</h1>
         <p className="max-w-sm font-sans text-body text-text-muted">
           Encuentra comercio informal cerca de ti y contacta al vendedor directo por WhatsApp.

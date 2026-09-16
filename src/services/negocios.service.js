@@ -134,6 +134,23 @@ async function cerrar(usuarioId, id) {
   await negociosRepo.cerrar(id);
 }
 
+/**
+ * GET /users/me/businesses (sin RF asociado — pantalla de inicio por
+ * rol, ver CLAUDE.md): a diferencia de listar()/cercanos(), sin filtros
+ * de descubrimiento — es el propio usuario pidiendo sus negocios,
+ * cualquier estado.
+ */
+async function listarPorUsuario(usuarioId, filtros) {
+  const cursor = decodificarCursor(filtros.cursor, CURSOR_LISTAR_SCHEMA);
+
+  const filas = await negociosRepo.listarPorUsuario({ usuarioId, cursor, limit: filtros.limit });
+
+  return armarPagina(filas, filtros.limit, (ultima) => ({
+    fechaCreacion: ultima.fecha_creacion_cursor,
+    id: ultima.id,
+  }));
+}
+
 async function listar(filtros) {
   const cursor = decodificarCursor(filtros.cursor, CURSOR_LISTAR_SCHEMA);
 
@@ -165,6 +182,7 @@ module.exports = {
   crear,
   actualizar,
   cerrar,
+  listarPorUsuario,
   listar,
   cercanos,
   obtenerCrudoOFallar,

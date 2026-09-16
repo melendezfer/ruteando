@@ -5,6 +5,7 @@ const { validateBody, validateQuery } = require('../middlewares/validate');
 const { favoritesListQuerySchema } = require('../validators/favoritos.validators');
 const { reviewListQuerySchema } = require('../validators/resenas.validators');
 const { deviceTokenInputSchema } = require('../validators/deviceTokens.validators');
+const { myBusinessesListQuerySchema } = require('../validators/business.validators');
 const {
   accountDeletionRequestInputSchema,
 } = require('../validators/solicitudEliminacionCuenta.validators');
@@ -17,6 +18,15 @@ router.get(
   authenticate,
   validateQuery(favoritesListQuerySchema),
   usersController.listFavorites,
+);
+// Pantalla de inicio por rol (sin RF asociado, ver CLAUDE.md) — un
+// vendedor necesita saber si ya tiene un negocio (y cuál/cuáles) para
+// decidir a dónde lo manda "/" en vez del mapa.
+router.get(
+  '/me/businesses',
+  authenticate,
+  validateQuery(myBusinessesListQuerySchema),
+  usersController.listBusinesses,
 );
 router.get('/me/consents', authenticate, usersController.listConsents);
 router.get(

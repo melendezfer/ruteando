@@ -1,4 +1,5 @@
 const usuariosRepo = require('../repositories/usuarios.repository');
+const negociosService = require('../services/negocios.service');
 const favoritosService = require('../services/favoritos.service');
 const consentimientosService = require('../services/consentimientos.service');
 const resenasService = require('../services/resenas.service');
@@ -19,6 +20,11 @@ async function me(req, res) {
 
 async function listFavorites(req, res) {
   const resultado = await favoritosService.listar(req.user.id, req.validatedQuery);
+  res.status(200).json(resultado);
+}
+
+async function listBusinesses(req, res) {
+  const resultado = await negociosService.listarPorUsuario(req.user.id, req.validatedQuery);
   res.status(200).json(resultado);
 }
 
@@ -45,6 +51,7 @@ async function requestAccountDeletion(req, res) {
 module.exports = {
   me,
   listFavorites,
+  listBusinesses,
   listConsents,
   listReviews,
   registerDeviceToken,

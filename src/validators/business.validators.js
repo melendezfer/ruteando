@@ -183,6 +183,14 @@ const businessZonesQuerySchema = z
     { message: 'Las coordenadas están fuera del rango esperado para Cundinamarca', path: ['lat'] },
   );
 
+// GET /users/me/businesses (pantalla de inicio por rol, sin RF asociado
+// — ver CLAUDE.md) — mismos cursor/limit que el resto de las listas
+// paginadas, sin filtros de descubrimiento propios.
+const myBusinessesListQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 module.exports = {
   businessInputSchema,
   locationInputSchema,
@@ -193,4 +201,5 @@ module.exports = {
   businessListQuerySchema,
   businessNearbyQuerySchema,
   businessZonesQuerySchema,
+  myBusinessesListQuerySchema,
 };

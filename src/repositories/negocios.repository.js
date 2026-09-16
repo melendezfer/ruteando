@@ -304,6 +304,38 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
 }
 
 /**
+ * GET /users/me/businesses (sin RF asociado — pantalla de inicio por rol,
+ * ver CLAUDE.md): los negocios del propio usuario, cualquier estado
+ * (a diferencia de listar()/cercanos(), esto NO filtra por
+ * `estado = 'activo'` ni por teléfono verificado — es el propio dueño
+ * mirando lo suyo, mismo criterio que GET /businesses/{businessId} con
+ * el dueño real). Más recientes primero, mismo criterio de orden que
+ * listar().
+ */
+async function listarPorUsuario({ usuarioId, cursor, limit }) {
+  const clausulas = ['usuario_id = $1'];
+  const params = [usuarioId];
+
+  if (cursor) {
+    params.push(cursor.fechaCreacion, cursor.id);
+    clausulas.push(
+      `(fecha_creacion, id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+    );
+  }
+
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT *, fecha_creacion::text AS fecha_creacion_cursor
+     FROM negocios
+     WHERE ${clausulas.join(' AND ')}
+     ORDER BY fecha_creacion DESC, id DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+/**
  * GET /businesses (RF-010/011): listado con filtros, sin coordenada de
  * referencia. Orden por fecha de creación descendente (más recientes
  * primero) con `id` como desempate — paginación keyset, no OFFSET (ver
@@ -496,6 +528,7 @@ module.exports = {
   actualizar,
   marcarTelefonoVerificado,
   cerrar,
+  listarPorUsuario,
   listar,
   cercanos,
   explicarCercanos,

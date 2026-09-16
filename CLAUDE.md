@@ -4022,3 +4022,57 @@ borrados después.
 - `AppHeader` sigue mostrando "Registrar negocio" a cualquier vendedor
   sin importar si ya tiene uno activo — no se pidió cambiar ese link en
   esta funcionalidad.
+
+## 40. Cambiar contraseña estando logueado
+
+Segunda pieza de la funcionalidad de contraseña (ver sección 39) —
+planeadas juntas, implementadas en PRs separados porque esta necesita
+backend nuevo y la otra no. Decisión tomada con el usuario antes de
+escribir código: **no reusar** el flujo de recuperación por correo
+(`/auth/forgot-password`/`reset-password`) para esto — pedir un
+enlace por correo para algo que ya se puede probar con la contraseña
+actual sería peor experiencia, y sin proveedor de correo elegido
+todavía, obligaría a revisar el log del servidor en vez de cambiarla
+al instante.
+
+### Backend (nuevo)
+
+`POST /users/me/change-password` (`currentPassword`+`newPassword`) —
+`authService.changePassword()`, junto a `login()`/`register()`/
+`refresh()` (no en `passwordReset.service.js`: esa es la lógica del
+flujo con token, esta verifica la contraseña actual con
+`argon2.verify`, mismo patrón exacto que `login()` pero sin el
+`DUMMY_HASH` anti-enumeración — acá el usuario ya está autenticado, no
+hay nada que enumerar). Cambiar la contraseña revoca todas las
+sesiones existentes (`tokensRefrescoRepo.revocarTodosDeUsuario`, mismo
+criterio que `restablecerContrasena()`) — **incluida la que hizo la
+propia petición** — por eso la respuesta (`200`) trae un `AuthTokens`
+nuevo (`emitirTokens()`, reusada tal cual), para que ese mismo
+dispositivo no tenga que volver a iniciar sesión.
+
+### Frontend
+
+`SettingsTab` gana una sección "Contraseña" (nueva, entre "Tu cuenta"
+y "Consentimientos otorgados") — actual/nueva/repetir, validación de
+longitud/coincidencia del lado del cliente antes de llamar al backend.
+`AuthContextValue` gana `applyNewTokens` (nuevo, wrapper público sobre
+el `applySessionAndFetchUser` que ya usan `login()`/`register()`
+internamente) — sin esto, la sesión de la propia pestaña habría
+quedado "cerrada" (access token viejo, sin refresh token válido)
+justo después de la acción que la cerró, aunque el usuario nunca
+tocó "Cerrar sesión".
+
+### Verificado con Playwright + curl contra el servidor de desarrollo real
+
+No solo el mensaje de éxito en pantalla: cambié la contraseña desde
+Configuración con una cuenta de prueba real, **recargué la página** (la
+sesión siguió viva, sin redirigir a `/login`) y confirmé por `curl`
+directo contra el backend que la contraseña nueva da `200` en
+`POST /auth/login` y la vieja da `401` — el cambio real ocurrió, no
+solo la UI lo dijo. 8 pruebas de integración nuevas (`passwordReset.test.js`,
+junto al flujo de recuperación): cambio exitoso + login con la nueva,
+revocación de la sesión vieja (`refreshToken` anterior ya no sirve
+para `/auth/refresh`), 401 con la contraseña actual incorrecta (y que
+ese intento fallido no toca la contraseña real), 401 sin token, 422
+con una contraseña nueva corta. Suite completa del backend: 522/522.
+Cuenta de prueba borrada después.

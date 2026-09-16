@@ -99,6 +99,42 @@ async function login({ email, password, consents }) {
   return emitirTokens(usuario);
 }
 
+/**
+ * POST /users/me/change-password (sin RF asociado, ver CLAUDE.md
+ * sección 39/40) — a diferencia de restablecerContrasena()
+ * (passwordReset.service.js, con un token de un solo uso porque no hay
+ * sesión), acá el usuario ya está autenticado: la prueba de identidad
+ * es la contraseña ACTUAL, no un enlace de correo. No reusa ese flujo a
+ * propósito — pedir un correo para algo que ya se puede probar con la
+ * contraseña actual sería peor experiencia, y sin proveedor de correo
+ * elegido, obligaría a revisar el log del servidor.
+ */
+async function changePassword(usuarioId, { currentPassword, newPassword }) {
+  const usuario = await usuariosRepo.buscarPorId(usuarioId);
+
+  // No debería pasar (el JWT ya lo autenticó), salvo que la cuenta se
+  // haya desactivado entre que se emitió el token y esta petición.
+  if (!usuario || !usuario.activo) {
+    throw new UnauthorizedError('Token de acceso faltante o inválido');
+  }
+
+  const passwordOk = await argon2.verify(usuario.contrasena_hash, currentPassword);
+  if (!passwordOk) {
+    throw new UnauthorizedError('La contraseña actual no es correcta');
+  }
+
+  const contrasenaHash = await argon2.hash(newPassword);
+  await usuariosRepo.actualizarContrasena(usuarioId, contrasenaHash);
+
+  // Mismo criterio que restablecerContrasena(): cambiar la contraseña
+  // revoca todas las sesiones existentes, incluida la que hizo esta
+  // misma petición — emitirTokens() de vuelta le da un par nuevo para
+  // que no tenga que volver a loguearse en este mismo dispositivo.
+  await tokensRefrescoRepo.revocarTodosDeUsuario(usuarioId);
+
+  return emitirTokens(usuario);
+}
+
 async function refresh({ refreshToken }) {
   const tokenHash = hashToken(refreshToken);
   const registro = await tokensRefrescoRepo.buscarPorHash(tokenHash);
@@ -164,4 +200,4 @@ async function logout({ refreshToken, usuarioId }) {
 // sin el chequeo de consentimiento (exigirConsentimientoCompleto), porque
 // como register(), es el primer momento en que la cuenta existe de verdad
 // para su titular.
-module.exports = { register, login, refresh, logout, emitirTokens };
+module.exports = { register, login, refresh, logout, changePassword, emitirTokens };

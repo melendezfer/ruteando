@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Bell, CheckCircle, Warning } from "@phosphor-icons/react/dist/ssr";
+import { useEffect, useState, type FormEvent } from "react";
+import { Bell, CheckCircle, LockKey, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
 import { AccountDeletionRequestModal } from "@/components/profile/account-deletion-request-modal";
 import { grantNotificationsConsent } from "@/lib/api/consents";
-import { getGrantNotificationsConsentErrorMessage } from "@/lib/api/error-messages";
+import { changePassword } from "@/lib/api/change-password";
+import {
+  getGrantNotificationsConsentErrorMessage,
+  getChangePasswordErrorMessage,
+} from "@/lib/api/error-messages";
+import { useAuth } from "@/lib/auth/auth-context";
 
 type User = components["schemas"]["User"];
 type Consent = components["schemas"]["Consent"];
@@ -50,6 +56,7 @@ interface SettingsTabProps {
  * se pidiera sería sobre-construir la pantalla.
  */
 export function SettingsTab({ user }: SettingsTabProps) {
+  const { applyNewTokens } = useAuth();
   const [consents, setConsents] = useState<Consent[] | null>(null);
   const [showDeletionModal, setShowDeletionModal] = useState(false);
   // Estado puramente local, no se vuelve a pedir al servidor al recargar
@@ -68,6 +75,18 @@ export function SettingsTab({ user }: SettingsTabProps) {
   // (solicitar(), backend, ya lo exigía desde la sección 11).
   const [grantingNotifications, setGrantingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+
+  // Cambiar contraseña estando logueado (sin RF asociado — ver
+  // CLAUDE.md sección 39/40): distinto del flujo de recuperación por
+  // correo (ese vive en /recuperar-contrasena, para cuando no se puede
+  // iniciar sesión). Estado puramente local del formulario — sin nada
+  // que precargar desde el servidor.
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -95,6 +114,38 @@ export function SettingsTab({ user }: SettingsTabProps) {
     setConsents((prev) => [...(prev ?? []), result.consent!]);
   }
 
+  async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError("La contraseña nueva debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Las dos contraseñas nuevas no coinciden.");
+      return;
+    }
+
+    setChangingPassword(true);
+    const result = await changePassword(currentPassword, newPassword);
+    setChangingPassword(false);
+
+    if (!result.ok || !result.tokens) {
+      setPasswordError(getChangePasswordErrorMessage(result.status));
+      return;
+    }
+
+    // Cambiar la contraseña revoca todas las sesiones (backend) —
+    // aplicar el par nuevo acá evita que esta misma pestaña quede
+    // "sesión cerrada" justo después de la acción que la cerró.
+    await applyNewTokens(result.tokens);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordChanged(true);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">
@@ -115,6 +166,55 @@ export function SettingsTab({ user }: SettingsTabProps) {
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">
+        <h2 className="flex items-center gap-2 font-heading text-title-2 font-semibold text-text">
+          <LockKey size={20} weight="bold" className="text-terracota" />
+          Contraseña
+        </h2>
+
+        {passwordChanged && (
+          <p className="flex items-center gap-2 font-sans text-body-sm text-verde">
+            <CheckCircle size={16} weight="fill" />
+            Tu contraseña se actualizó correctamente.
+          </p>
+        )}
+
+        <form onSubmit={handleChangePassword} className="flex flex-col gap-3" noValidate>
+          <TextField
+            label="Contraseña actual"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
+          <TextField
+            label="Contraseña nueva"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+          <TextField
+            label="Repite la contraseña nueva"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+
+          {passwordError && <p className="font-sans text-body-sm text-rojo">{passwordError}</p>}
+
+          <Button type="submit" variant="secondary" loading={changingPassword}>
+            Cambiar contraseña
+          </Button>
+        </form>
       </section>
 
       <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">

@@ -1,4 +1,5 @@
 const usuariosRepo = require('../repositories/usuarios.repository');
+const authService = require('../services/auth.service');
 const negociosService = require('../services/negocios.service');
 const favoritosService = require('../services/favoritos.service');
 const consentimientosService = require('../services/consentimientos.service');
@@ -28,6 +29,11 @@ async function listBusinesses(req, res) {
   res.status(200).json(resultado);
 }
 
+async function changePassword(req, res) {
+  const resultado = await authService.changePassword(req.user.id, req.body);
+  res.status(200).json(resultado);
+}
+
 async function listConsents(req, res) {
   const consents = await consentimientosService.listar(req.user.id);
   res.status(200).json(consents);
@@ -52,6 +58,7 @@ module.exports = {
   me,
   listFavorites,
   listBusinesses,
+  changePassword,
   listConsents,
   listReviews,
   registerDeviceToken,

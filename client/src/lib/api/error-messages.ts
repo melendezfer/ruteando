@@ -203,3 +203,17 @@ export function getGrantNotificationsConsentErrorMessage(status: number | undefi
   if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
   return GENERIC_ERROR;
 }
+
+/**
+ * POST /users/me/change-password (sin RF asociado — ver CLAUDE.md
+ * sección 39/40). El 401 más común no es "sesión vencida" (ya se
+ * autenticó para llegar a Configuración) sino que `currentPassword` no
+ * coincide con la real — el backend no distingue los dos casos en el
+ * status code, así que este mensaje cubre ambos sin sonar alarmante de
+ * más para el caso común.
+ */
+export function getChangePasswordErrorMessage(status: number | undefined): string {
+  if (status === 401) return "La contraseña actual no es correcta.";
+  if (status === 422) return "La contraseña nueva debe tener al menos 8 caracteres.";
+  return GENERIC_ERROR;
+}

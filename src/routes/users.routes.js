@@ -6,6 +6,7 @@ const { favoritesListQuerySchema } = require('../validators/favoritos.validators
 const { reviewListQuerySchema } = require('../validators/resenas.validators');
 const { deviceTokenInputSchema } = require('../validators/deviceTokens.validators');
 const { myBusinessesListQuerySchema } = require('../validators/business.validators');
+const { changePasswordSchema } = require('../validators/auth.validators');
 const {
   accountDeletionRequestInputSchema,
 } = require('../validators/solicitudEliminacionCuenta.validators');
@@ -27,6 +28,16 @@ router.get(
   authenticate,
   validateQuery(myBusinessesListQuerySchema),
   usersController.listBusinesses,
+);
+// Cambiar contraseña estando logueado (sin RF asociado — ver CLAUDE.md
+// sección 39/40): distinto del flujo de recuperación por correo
+// (POST /auth/reset-password) — acá la prueba de identidad es la
+// contraseña actual, no un token de un solo uso.
+router.post(
+  '/me/change-password',
+  authenticate,
+  validateBody(changePasswordSchema),
+  usersController.changePassword,
 );
 router.get('/me/consents', authenticate, usersController.listConsents);
 router.get(

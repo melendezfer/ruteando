@@ -1864,6 +1864,49 @@ lejos de un río/humedal o de otro municipio (Bogotá, Mosquera — este
 último también descartado al probar rumbos hacia el noroeste antes de
 elegir 160°), no que quepan dentro del barrio.
 
+### Datos completos, sin valores genéricos ni vacíos (petición directa del usuario)
+
+Hallazgo real al revisar el script antes de tocarlo: los 6 negocios de
+comida (Arepas, Perros, Salchipapas, Dulces, Jugos, Empanadas) tenían
+**0 ítems de catálogo** — solo los 3 no gastronómicos (sección 31)
+llevaban menú, y de los 9 negocios, **ninguno** tenía `descripcion` en
+sus productos (mostraban "Este ítem todavía no tiene descripción",
+gestión-catálogo, sección 35) ni una `direccion_referencia` propia —
+los 9 compartían el mismo texto calculado "Cerca de Ciudad Verde,
+Soacha (~X m del centro)".
+
+Se agregó un menú real de 3-4 ítems a cada negocio de comida, con
+recetas y precios distintos incluso entre los dos de "Perros calientes
+y salchipapas" (Perros El Parche/Salchipapas Doña Nury) — comparten
+categoría, no catálogo, a propósito: dos vendedores reales no venden
+exactamente lo mismo. `descripcion` (columna que ya existía en
+`productos`, sin usar en este script) a cada uno de los ítems de los 9
+negocios, y una `direccionReferencia` específica por negocio
+(calle/carrera + un punto de referencia plausible en Ciudad Verde) —
+solo texto libre mostrado al usuario, no afecta la coordenada real
+(`punto`) ni ninguna consulta geoespacial, así que no hizo falta
+re-verificar nada de lo ya confirmado por geocodificación inversa más
+arriba en esta sección.
+
+Se mantuvo la mezcla ya existente de `disponible: true/false` y de
+ítems con/sin foto en cada negocio (ver comentarios de
+`entregaPropia`/`higieneAutodeclarada` más arriba en esta sección) —
+eso ya estaba bien pensado para poder verificar a ojo ambos estados, no
+hacía falta tocarlo.
+
+**Verificado, no solo corrido sin error**: `npm run seed:demo` contra
+la base de desarrollo real, confirmado por `GET /businesses/{id}` (los
+4 ítems de Arepas Doña Rosa, con precio/disponibilidad/descripción
+correctos) y con Playwright — expandir "Arepa de queso" en el perfil
+real muestra la foto, el precio y la descripción nueva juntos, tal
+como los vería cualquiera navegando el mapa. Suite completa del
+backend sin cambios (522/522) — este script no tiene pruebas propias
+(es una herramienta de datos de desarrollo, no código de producto),
+pero comparte la tabla `productos` con el resto del backend, así que
+correr la suite completa después de tocarlo confirma que el `INSERT`
+nuevo (con `descripcion`) no rompió nada que ya dependiera de esa
+tabla.
+
 ## 26. Rediseño de reseñas: señal pública vs. retroalimentación privada
 
 Fuera del alcance original de los Documentos 05-15 (RF-015/016 no

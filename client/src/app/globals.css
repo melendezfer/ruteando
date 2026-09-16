@@ -9,9 +9,20 @@
  * habilita bg-terracota/text-terracota/border-terracota, etc.).
  */
 :root {
-  /* Marca */
-  --color-terracota: #c1502e;
-  --color-terracota-dark: #9c3f24;
+  /*
+   * Marca — rediseño (petición directa del usuario, sin RF asociado):
+   * el acento pasa de terracota/naranja a violeta/índigo (#5B3DF5). El
+   * nombre del token se deja igual (`terracota`) a propósito — renombrar
+   * la variable obligaría a tocar cada `bg-terracota`/`text-terracota`/
+   * `border-terracota` del proyecto (decenas de archivos) solo para que
+   * el nombre siga describiendo el color; el pedido fue cambiar el
+   * color, no el vocabulario. `-dark` (hover/estados presionados) es
+   * ~79% del brillo del tono claro, misma proporción que ya tenía el
+   * par terracota/terracota-dark anterior (9c3f24 es ~79% de c1502e por
+   * canal) — no un valor inventado aparte.
+   */
+  --color-terracota: #5b3df5;
+  --color-terracota-dark: #4830c2;
   --color-mostaza: #e3a857;
 
   /* Semánticos */
@@ -127,6 +138,10 @@
      cambiar acá si el documento dice lo contrario. */
   --font-sans: var(--font-inter);
   --font-heading: var(--font-plus-jakarta-sans);
+  /* Syne, solo para la "R" del logo (RuteandoLogo) — next/font ya expone
+     esta variable (ver layout.tsx); esta línea la habilita como utilidad
+     `font-syne` de Tailwind, mismo patrón que font-sans/font-heading. */
+  --font-syne: var(--font-syne);
 }
 
 body {

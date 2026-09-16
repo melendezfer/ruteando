@@ -1121,6 +1121,35 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  # Pantalla de inicio por rol (sin RF asociado — ver CLAUDE.md): un
+  # vendedor necesita saber si ya tiene un negocio propio (y a cuál/
+  # cuáles) para que "/" lo mande a su perfil en vez del mapa. No existía
+  # ninguna forma de listar "los negocios de este usuario" — ni siquiera
+  # GET /businesses acepta un filtro ownerId, y esa ruta de todas formas
+  # solo devuelve negocios "active" — acá, a diferencia de esa, cualquier
+  # estado cuenta (es el propio dueño mirando lo suyo).
+  /users/me/businesses:
+    get:
+      tags: [Usuarios]
+      summary: Listar los negocios propios (cualquier estado)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Negocios del usuario autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Business' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # Épica F6 (frontend): "mis reseñas" no tenía ninguna ruta — solo
   # existía GET /businesses/{businessId}/reviews (por negocio, solo
   # aprobadas — eliminada en el rediseño de reseñas, ver CLAUDE.md) y

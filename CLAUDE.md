@@ -3924,3 +3924,101 @@ confirmado por curl devolviendo el timestamp real después del fix (antes
 del fix, con el backend ya reiniciado, daba `null` — se verificó el bug
 real antes de corregirlo, no se asumió). Datos de prueba borrados
 después.
+
+## 38. Pantalla de inicio (`/`) por rol
+
+Petición directa del usuario, sin RF asociado — un consumidor (o
+administrador) sigue viendo el mapa en `/` exactamente igual que desde
+el PR #41. Un vendedor con exactamente un negocio **activo** aterriza
+directo en su propio perfil (`/negocios/{id}`) en vez del mapa.
+
+### Decisiones tomadas con el usuario antes de escribir código
+
+Tres preguntas reales, no asumidas — CLAUDE.md/el código no tenían
+ninguna respuesta ya dada para ellas:
+
+1. **Vendedor con más de un negocio** (caso real, no hipotético — ver
+   sección 34, la cuenta con "Arepas j"/"arepas j" duplicados): se
+   muestra un selector simple ("¿Cuál de tus negocios quieres ver?"),
+   no se adivina cuál mostrar.
+2. **Solo cuenta `status = 'active'`** para decidir "el vendedor tiene
+   negocio" — uno `pending`/`rejected`/`suspended`/`closed` no redirige
+   ni cuenta para el selector. Mandarlo a `/negocios/nuevo` en ese caso
+   habría empujado a crear un segundo negocio sobre uno que ya existe
+   (justo el problema ya documentado en la sección 34) — en vez de eso,
+   sin ningún negocio activo, se queda en el mapa, igual que un
+   consumidor. El link "Registrar negocio" de `AppHeader` sigue ahí sin
+   cambios para quien todavía no tiene ninguno.
+3. **Efecto secundario real, encontrado al planear, no al implementar**:
+   `BottomNavBar` tenía el destino "Mapa" apuntando a `href: "/"` — si
+   `/` deja de ser el mapa para un vendedor, tocar "Mapa" en la barra lo
+   devolvía a su propio perfil de negocio, sin ninguna forma de llegar
+   al mapa desde la navegación principal. Se resolvió devolviéndole a
+   `/mapa` su propósito original (antes del PR #41, ese archivo era
+   `redirect("/")` "por si algo externo apuntaba ahí" — ahora vuelve a
+   renderizar `MapScreen` de verdad) y apuntando "Mapa" ahí en vez de
+   `/`.
+
+### Qué faltaba para poder construir esto: no existía ninguna forma de listar "mis negocios"
+
+Hallazgo real al investigar, antes de escribir código: ni `GET
+/businesses` acepta un filtro `ownerId` (solo `categoryId`/`q`/
+`priceMin`/`priceMax`/`openNow`), ni existía ningún `/users/me/*`
+equivalente — el único lugar que "sabía" el id de un negocio recién
+creado era el propio asistente de registro, que lo tiene en la mano
+justo después del `POST /businesses` y nunca necesitó volver a
+buscarlo.
+
+`GET /users/me/businesses` (nuevo): autenticado, cualquier estado (a
+diferencia de `listar()`/`cercanos()`, que solo devuelven `'activo'` y
+con teléfono verificado — acá es el propio dueño mirando lo suyo,
+mismo criterio que `GET /businesses/{businessId}` con el dueño real).
+Mismo patrón exacto que `/users/me/favorites`: repositorio
+(`negocios.repository.js#listarPorUsuario`, sin el `LEFT JOIN LATERAL`
+de disponibilidad — no hace falta para decidir a dónde redirigir),
+servicio (reusa `armarPagina`/`decodificarCursor` ya existentes en
+`negocios.service.js`), controlador, ruta, `openapi.yaml`.
+
+### Frontend
+
+`HomeScreenRouter` (nuevo, `client/src/components/discovery/`) — vive
+detrás de `RequireAuth`, reemplaza el contenido que tenía `page.tsx`.
+Sin vendedor, o vendedor con cero negocios activos: el mismo `<main>`
+con `AppHeader`/`MapScreen`/`BottomNavBar` de siempre — ni un
+milisegundo de fetch de más para un consumidor. Con exactamente uno:
+`router.replace()` a su perfil (con un estado "Buscando tu negocio…"
+mientras se resuelve, mismo lenguaje visual que `RequireAuth`). Con más
+de uno: `VendorBusinessPicker`, una lista simple sin paginación (los
+casos reales son 1-2 negocios, nunca cientos) — sin mostrar el estado
+en cada fila, porque ya están filtrados a `active`, siempre sería el
+mismo texto.
+
+`client/src/app/mapa/page.tsx` recupera el contenido que tenía
+`page.tsx` antes de este cambio. `BottomNavBar`: "Mapa" pasa a apuntar
+a `/mapa`; el chequeo de "pestaña activa" trata `/` y `/mapa` como el
+mismo destino (así un consumidor viendo el mapa en `/` sigue viendo
+"Mapa" resaltado en la barra, sin importar cuál de las dos rutas sirvió
+la página).
+
+### Verificado con Playwright + curl contra el servidor de desarrollo real
+
+Cuatro escenarios reales, no solo el camino feliz obvio: vendedor de
+demo con un negocio activo → aterriza en su perfil; vendedor de prueba
+con dos negocios activos (creados por API para esto) → selector con
+los dos nombres; consumidor recién registrado por la UI real →
+`/` sigue siendo el mapa; y navegar a `/mapa` directamente (equivalente
+a tocar "Mapa" en la barra) desde la sesión de un vendedor ya redirigido
+a su perfil → el mapa real, confirmando que no perdió acceso. Suite
+completa del backend: 517/517 (3 pruebas nuevas). Datos de prueba
+borrados después.
+
+### Gaps conocidos, no ocultos
+
+- El selector (`VendorBusinessPicker`) no muestra categoría ni foto de
+  cada negocio, solo el nombre — no se pidió, y en la práctica el caso
+  de 2+ negocios activos es raro (un vendedor real normalmente tiene
+  uno). Agregar más contexto ahí es una mejora razonable a futuro, no
+  construida acá.
+- `AppHeader` sigue mostrando "Registrar negocio" a cualquier vendedor
+  sin importar si ya tiene uno activo — no se pidió cambiar ese link en
+  esta funcionalidad.

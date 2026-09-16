@@ -588,3 +588,40 @@ describe('GET/PUT /businesses/{businessId}/schedule', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('GET /users/me/businesses (pantalla de inicio por rol, sin RF asociado)', () => {
+  it('lista los negocios propios, cualquier estado, sin importar teléfono verificado', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const pendiente = await crearNegocio(vendor.accessToken, categoryId, { name: 'Pendiente' });
+    const rechazado = await crearNegocio(vendor.accessToken, categoryId, { name: 'Rechazado' });
+    await pool.query("UPDATE negocios SET estado = 'rechazado' WHERE id = $1", [rechazado.id]);
+
+    const res = await request(app)
+      .get('/users/me/businesses')
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((n) => n.id);
+    expect(new Set(ids)).toEqual(new Set([pendiente.id, rechazado.id]));
+  });
+
+  it('no incluye negocios de otro usuario', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const otro = await registrar('vendor');
+    await crearNegocio(otro.accessToken, categoryId, { name: 'Ajeno' });
+    const propio = await crearNegocio(vendor.accessToken, categoryId, { name: 'Propio' });
+
+    const res = await request(app)
+      .get('/users/me/businesses')
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+
+    expect(res.body.data.map((n) => n.id)).toEqual([propio.id]);
+  });
+
+  it('rechaza sin access token (401)', async () => {
+    const res = await request(app).get('/users/me/businesses');
+    expect(res.status).toBe(401);
+  });
+});

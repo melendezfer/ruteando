@@ -23,7 +23,7 @@ interface Destination {
  */
 const DESTINATIONS: Destination[] = [
   { href: "/buscar", label: "Buscar", icon: MagnifyingGlass },
-  { href: "/", label: "Mapa", icon: MapTrifold },
+  { href: "/mapa", label: "Mapa", icon: MapTrifold },
   { href: "/favoritos", label: "Favoritos", icon: Heart },
   { href: "/perfil", label: "Perfil", icon: UserCircle },
 ];
@@ -57,7 +57,12 @@ export function BottomNavBar() {
       className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
     >
       {DESTINATIONS.map(({ href, label, icon: IconComponent }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        // "/" también cuenta como "Mapa" activo: desde la pantalla de
+        // inicio por rol (sin RF asociado, ver CLAUDE.md), un consumidor
+        // o administrador sigue viendo el mapa exactamente en "/" — solo
+        // un vendedor con un negocio activo aterriza en otro lado.
+        const active =
+          href === "/mapa" ? pathname === "/" || pathname === "/mapa" : pathname.startsWith(href);
         return (
           <Link
             key={href}

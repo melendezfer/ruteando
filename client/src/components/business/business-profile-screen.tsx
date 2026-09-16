@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { BackButton } from "@/components/ui/back-button";
 import { FavoriteButton } from "@/components/business/favorite-button";
+import { BusinessStatusBanner } from "@/components/business/business-status-banner";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
@@ -295,6 +296,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           {profile.hygieneSelfDeclared && <HygieneBadge />}
         </div>
       </div>
+
+      {isOwner && profile.id && (
+        <div className="px-5 pb-4">
+          <BusinessStatusBanner businessId={profile.id} status={profile.status} />
+        </div>
+      )}
 
       {isOwner && !phoneVerified && profile.id && (
         <div className="px-5 pb-4">

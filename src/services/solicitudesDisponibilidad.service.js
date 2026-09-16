@@ -1,8 +1,16 @@
+const { z } = require('zod');
 const negociosService = require('./negocios.service');
 const solicitudesRepo = require('../repositories/solicitudesDisponibilidad.repository');
 const consentimientosRepo = require('../repositories/consentimientos.repository');
 const pushService = require('./push.service');
-const { NotFoundError, ForbiddenError, ConflictError, TooManyRequestsError } = require('../errors');
+const cursorUtil = require('../utils/cursor');
+const {
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+  TooManyRequestsError,
+  ValidationError,
+} = require('../errors');
 const {
   AVAILABILITY_REQUEST_TTL_MINUTES,
   AVAILABILITY_REQUEST_RATE_LIMIT_PER_BUSINESS_MAX,
@@ -157,4 +165,64 @@ async function responder(id, vendedorId, decisionApi) {
   return toApiRequest(actualizada);
 }
 
-module.exports = { solicitar, obtener, responder };
+// Mismo criterio que resenas.service.js#CURSOR_SCHEMA: no exige ISO
+// estricto porque el valor viaja tal cual lo devolvió Postgres
+// (fecha_creacion::text) — protege contra un cursor manipulado con un
+// valor no parseable llegando al ::timestamptz.
+const CURSOR_SCHEMA = z.object({
+  fechaCreacion: z
+    .string()
+    .min(1)
+    .refine((v) => !Number.isNaN(Date.parse(v)), {
+      message: 'fechaCreacion no es una fecha válida',
+    }),
+  id: z.string().uuid(),
+});
+
+function decodificarCursor(cursorTexto) {
+  if (!cursorTexto) return null;
+  const payload = cursorUtil.decodificar(cursorTexto);
+  const resultado = CURSOR_SCHEMA.safeParse(payload);
+  if (!resultado.success) {
+    throw new ValidationError('El cursor de paginación no es válido', {
+      errors: [{ field: 'cursor', message: 'Formato de cursor inválido o corrupto' }],
+    });
+  }
+  return resultado.data;
+}
+
+/**
+ * GET /businesses/{businessId}/availability-requests (Fase 3 de
+ * "vendiendo ahora", sin RF asociado — ver CLAUDE.md sección 37): el
+ * panel del vendedor para ver y responder sus solicitudes sin depender
+ * de que le haya llegado un push. Autorización a nivel de objeto, mismo
+ * criterio que responder()/toda la Épica 9.
+ */
+async function listarPorNegocio(negocioId, vendedorId, { status, cursor, limit }) {
+  const negocio = await negociosService.obtenerCrudoOFallar(negocioId);
+  negociosService.verificarPropietario(negocio, vendedorId);
+
+  const cursorDecodificado = decodificarCursor(cursor);
+  const filas = await solicitudesRepo.listarPorNegocio({
+    negocioId,
+    status,
+    cursor: cursorDecodificado,
+    limit,
+  });
+  const hasMore = filas.length > limit;
+  const pagina = hasMore ? filas.slice(0, limit) : filas;
+  const ultima = pagina[pagina.length - 1];
+
+  return {
+    data: pagina.map(toApiRequest),
+    pagination: {
+      nextCursor:
+        hasMore && ultima
+          ? cursorUtil.codificar({ fechaCreacion: ultima.fecha_creacion_cursor, id: ultima.id })
+          : null,
+      hasMore,
+    },
+  };
+}
+
+module.exports = { solicitar, obtener, responder, listarPorNegocio };

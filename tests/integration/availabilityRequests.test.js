@@ -404,3 +404,129 @@ describe('PATCH /availability-requests/{requestId}/respond', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('GET /businesses/{businessId}/availability-requests (Fase 3 — panel del vendedor)', () => {
+  async function preguntar(negocioId, consumerToken) {
+    const res = await request(app)
+      .post(`/businesses/${negocioId}/availability-requests`)
+      .set('Authorization', `Bearer ${consumerToken}`);
+    return res.body;
+  }
+
+  it('el dueño ve sus solicitudes pendientes, FIFO (más antigua primero)', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const consumerA = await registrar('consumer');
+    const consumerB = await registrar('consumer');
+
+    const primera = await preguntar(negocio.id, consumerA.accessToken);
+    const segunda = await preguntar(negocio.id, consumerB.accessToken);
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?status=pending`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((s) => s.id)).toEqual([primera.id, segunda.id]);
+    expect(res.body.data.every((s) => s.status === 'pending')).toBe(true);
+  });
+
+  it('status=pending excluye una solicitud ya confirmada', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const consumer = await registrar('consumer');
+    const solicitud = await preguntar(negocio.id, consumer.accessToken);
+
+    await request(app)
+      .patch(`/availability-requests/${solicitud.id}/respond`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ decision: 'confirmed' });
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?status=pending`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.body.data).toEqual([]);
+
+    const confirmadas = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?status=confirmed`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(confirmadas.body.data.map((s) => s.id)).toEqual([solicitud.id]);
+  });
+
+  it('status=expired refleja la expiración perezosa, sin que nada la haya escrito', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const consumer = await registrar('consumer');
+    const solicitud = await preguntar(negocio.id, consumer.accessToken);
+    await pool.query(
+      "UPDATE solicitudes_disponibilidad SET expira_en = now() - interval '1 minute' WHERE id = $1",
+      [solicitud.id],
+    );
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?status=expired`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.body.data.map((s) => s.id)).toEqual([solicitud.id]);
+  });
+
+  it('sin status, devuelve solicitudes de cualquier estado', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const consumer = await registrar('consumer');
+    await preguntar(negocio.id, consumer.accessToken);
+
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.body.data).toHaveLength(1);
+  });
+
+  it('paginación keyset: con limit=1, la segunda página trae la solicitud restante', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const consumerA = await registrar('consumer');
+    const consumerB = await registrar('consumer');
+    const primera = await preguntar(negocio.id, consumerA.accessToken);
+    const segunda = await preguntar(negocio.id, consumerB.accessToken);
+
+    const pagina1 = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?limit=1`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(pagina1.body.data.map((s) => s.id)).toEqual([primera.id]);
+    expect(pagina1.body.pagination.hasMore).toBe(true);
+
+    const pagina2 = await request(app)
+      .get(
+        `/businesses/${negocio.id}/availability-requests?limit=1&cursor=${encodeURIComponent(pagina1.body.pagination.nextCursor)}`,
+      )
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(pagina2.body.data.map((s) => s.id)).toEqual([segunda.id]);
+    expect(pagina2.body.pagination.hasMore).toBe(false);
+  });
+
+  it('rechaza con 403 a quien no es el dueño del negocio', async () => {
+    const { negocio } = await crearVendorListo();
+    const otro = await registrar('vendor');
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests`)
+      .set('Authorization', `Bearer ${otro.accessToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('responde 404 con un negocio inexistente', async () => {
+    const vendor = await registrar('vendor');
+    const res = await request(app)
+      .get('/businesses/00000000-0000-0000-0000-000000000000/availability-requests')
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('rechaza un status fuera del enum (422)', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const res = await request(app)
+      .get(`/businesses/${negocio.id}/availability-requests?status=maybe`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+    expect(res.status).toBe(422);
+  });
+
+  it('rechaza sin access token (401)', async () => {
+    const { negocio } = await crearVendorListo();
+    const res = await request(app).get(`/businesses/${negocio.id}/availability-requests`);
+    expect(res.status).toBe(401);
+  });
+});

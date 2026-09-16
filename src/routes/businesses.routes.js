@@ -18,6 +18,9 @@ const {
 } = require('../validators/business.validators');
 const { productInputSchema } = require('../validators/product.validators');
 const { reviewInputSchema, reviewListQuerySchema } = require('../validators/resenas.validators');
+const {
+  listAvailabilityRequestsQuerySchema,
+} = require('../validators/availabilityRequests.validators');
 
 const router = Router();
 
@@ -162,6 +165,17 @@ router.post(
   validarBusinessId,
   authenticate,
   controller.requestAvailability,
+);
+
+// Fase 3 de "vendiendo ahora" (CLAUDE.md sección 37) — panel del
+// vendedor, solo el dueño (autorización a nivel de objeto verificada en
+// solicitudesDisponibilidad.service.js#listarPorNegocio).
+router.get(
+  '/:businessId/availability-requests',
+  validarBusinessId,
+  authenticate,
+  validateQuery(listAvailabilityRequestsQuerySchema),
+  controller.listAvailabilityRequests,
 );
 
 module.exports = router;

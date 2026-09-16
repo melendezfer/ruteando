@@ -3777,3 +3777,51 @@ ciclo de polling. Datos de prueba borrados después.
 verificaron por lectura de código (misma máquina de estados, mismo
 `getAvailabilityRequestErrorMessage`), no con su propia corrida de
 Playwright aparte.
+
+### Fase 3 de 7: el vendedor ve y responde (sin push todavía)
+
+**Backend nuevo** (a diferencia de las Fases 1 y 2, que solo reusaban lo
+que ya existía): `GET /businesses/{businessId}/availability-requests`
+— solo el dueño (autorización a nivel de objeto,
+`solicitudesDisponibilidad.service.js#listarPorNegocio`), paginación
+keyset (mismo patrón `fechaCreacion+id` que el resto del proyecto).
+`status` es un filtro opcional sobre las 4 variantes calculadas de
+`AvailabilityRequest.status` — `solicitudesDisponibilidad.repository.js#CLAUSULA_POR_ESTADO`
+traduce cada una a SQL: `pending`/`expired` son expiración perezosa
+(`decision IS NULL` + comparar `expira_en` contra el reloj, igual que
+`toApiRequest()`), `confirmed`/`declined` son `decision` guardada. FIFO
+(más antigua primero) — a propósito, al revés del resto de las listas
+del proyecto: con solo 10 minutos de vida
+(`AVAILABILITY_REQUEST_TTL_MINUTES`), la más antigua es la más urgente
+de responder, no la menos relevante.
+
+`VendorAvailabilityRequestsPanel` (nuevo, frontend): pide
+`status=pending` cada 8s (más espaciado que el polling del consumidor
+de la Fase 2, 5s — acá nadie está esperando en el momento, es solo
+"avisarme si llegó algo nuevo mientras tengo mi perfil abierto") y
+ofrece Confirmar/Declinar por fila (`PATCH .../respond`, ya existía
+desde la sección 11). **Anonimizado a propósito**, mismo criterio que
+`BusinessFeedbackPanel`: el backend no expone quién preguntó a través
+de ningún endpoint público, así que cada fila solo puede decir "hace
+cuánto" (`formatAskedAgo`), nunca quién. Al confirmar, actualiza el
+mismo estado local `availabilityConfirmedAt` que ya usa el badge de la
+Fase 2 (`onConfirmed`) — el dueño ve su propio badge actualizarse en el
+acto, sin recargar.
+
+Esto **cierra el círculo completo sin depender de Firebase**: antes de
+esta fase, "vendiendo ahora" solo podía completarse simulando la
+respuesta del vendedor por API a mano (como se hizo para verificar la
+Fase 2). Desde ahora, un vendedor real puede responder abriendo su
+propio perfil — el push (Fase 6) queda como mejora de conveniencia
+(avisar sin tener que abrir la app), no como requisito para que la
+función funcione de punta a punta.
+
+**Verificado**: 9 pruebas de integración nuevas (FIFO, filtro por cada
+uno de los 4 `status`, sin filtro, paginación keyset, 403/404/422/401)
+— suite completa 512/512. En vivo con Playwright contra el servidor de
+desarrollo real: vendedor y consumidor de prueba por API, el consumidor
+pregunta, el vendedor abre su propio perfil y ve "Te preguntan si
+sigues vendiendo" (el panel apareció solo con el polling, sin recargar
+la página), toca "Confirmar" — el panel desaparece y el badge
+"Confirmado hace instantes" aparece en el mismo instante. Datos de
+prueba borrados después.

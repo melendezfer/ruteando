@@ -20,6 +20,7 @@ import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
 import { AvailabilityRequestButton } from "@/components/business/availability-request-button";
+import { VendorAvailabilityRequestsPanel } from "@/components/business/vendor-availability-requests-panel";
 import { ProductRow } from "@/components/business/product-row";
 import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
@@ -318,6 +319,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       {isOwner && profile.id && (
         <div className="px-5 pb-4">
           <BusinessStatusBanner businessId={profile.id} status={profile.status} />
+        </div>
+      )}
+
+      {isOwner && profile.id && (
+        <div className="px-5 pb-4">
+          <VendorAvailabilityRequestsPanel
+            businessId={profile.id}
+            onConfirmed={setAvailabilityConfirmedAt}
+          />
         </div>
       )}
 

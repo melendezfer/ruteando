@@ -111,6 +111,13 @@ export default function LoginPage() {
           error={fieldErrors.password}
         />
 
+        <Link
+          href="/recuperar-contrasena"
+          className="self-end font-sans text-body-sm font-medium text-terracota underline"
+        >
+          ¿Olvidaste tu contraseña?
+        </Link>
+
         {formError && <p className="font-sans text-body-sm text-rojo">{formError}</p>}
 
         <Button type="submit" loading={submitting}>

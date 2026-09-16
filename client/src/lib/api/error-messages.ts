@@ -204,6 +204,19 @@ export function getGrantNotificationsConsentErrorMessage(status: number | undefi
   return GENERIC_ERROR;
 }
 
+/** POST /auth/forgot-password. */
+export function getForgotPasswordErrorMessage(status: number | undefined): string {
+  if (status === 422) return "Revisa el correo ingresado.";
+  return GENERIC_ERROR;
+}
+
+/** POST /auth/reset-password. */
+export function getResetPasswordErrorMessage(status: number | undefined): string {
+  if (status === 401) return "Este enlace ya no es válido — puede que haya vencido o que ya lo hayas usado. Pide uno nuevo.";
+  if (status === 422) return "Revisa la contraseña nueva — debe tener al menos 8 caracteres.";
+  return GENERIC_ERROR;
+}
+
 /**
  * POST /users/me/change-password (sin RF asociado — ver CLAUDE.md
  * sección 39/40). El 401 más común no es "sesión vencida" (ya se

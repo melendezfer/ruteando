@@ -4022,3 +4022,46 @@ borrados después.
 - `AppHeader` sigue mostrando "Registrar negocio" a cualquier vendedor
   sin importar si ya tiene uno activo — no se pidió cambiar ese link en
   esta funcionalidad.
+
+## 39. Recuperación de contraseña — UI (RF-003)
+
+Sin backend nuevo — `POST /auth/forgot-password`/`POST /auth/reset-password`
+ya existían completos desde la Épica 1 (CLAUDE.md sección 10), sin
+ningún consumidor en el frontend hasta ahora. Petición directa del
+usuario, junto con el punto de la sección 40 (cambio de contraseña
+logueado) — planeados juntos, implementados en PRs separados porque uno
+es puro frontend y el otro necesita un endpoint nuevo.
+
+`/recuperar-contrasena` (pide el enlace) y `/restablecer-contrasena`
+(lo completa, leyendo `?token=` de la URL — mismo nombre de parámetro
+que espera el backend) — las dos bajo el grupo `(auth)`, mismo layout
+centrado que login/registro. Enlace "¿Olvidaste tu contraseña?" nuevo
+en `/login`, debajo del campo de contraseña.
+
+**Mismo mensaje de éxito exista o no la cuenta** (RF-003, no permite
+enumerar usuarios) — `requestPasswordReset()` nunca distingue "correo
+no encontrado" de "listo", y la pantalla tampoco: si la petición
+responde `202`, siempre muestra "revisa tu correo".
+
+**Sin proveedor de correo elegido todavía** (gap ya documentado) — el
+token se registra en el log estructurado del backend en vez de
+enviarse por correo real. Se verificó el flujo completo igual,
+sacando el token del log de `pm2` a mano: pedir el enlace → confirmar
+el mensaje de éxito → completar con el token real → **iniciar sesión
+con la contraseña nueva de verdad funcionó** (no solo "la pantalla dijo
+que funcionó"). También se verificó `/restablecer-contrasena` sin
+`?token=` en la URL (enlace abierto mal, o copiado incompleto): aviso
+claro, sin llegar a mostrar el formulario. Cuenta de prueba borrada
+después.
+
+`useSearchParams()` (para leer el token) exige un límite `Suspense` en
+Next.js — el formulario real vive en un componente separado
+(`RestablecerForm`) solo por eso, envuelto en `<Suspense>` desde la
+página; verificado que `npm run build` prerenderiza la ruta sin avisos.
+
+### Pendiente, sin resolver en esta rama (ver sección 40)
+
+Cambiar la contraseña **estando logueado** no reusa este flujo — pedir
+un enlace por correo para algo que ya se puede probar con la
+contraseña actual sería peor experiencia, y en desarrollo obligaría a
+revisar el log del servidor. Queda como un endpoint nuevo aparte.

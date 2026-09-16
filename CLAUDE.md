@@ -1020,13 +1020,17 @@ correspondiente antes de darse por cerrada:
 
 | `tipo_evento` | Se dispara en |
 |---|---|
-| `busqueda` | Al ejecutar una búsqueda por texto o categoría (Épica F2) |
+| `busqueda` | Al ejecutar una búsqueda por texto o categoría (Épica F2, hoy en `/buscar` — ver sección 18) |
 | `vista_negocio` | Al abrir el perfil completo de un negocio (Épica F4) |
 | `vista_producto` | Al expandir el detalle de un producto en el menú (Épica F4) |
 | `clic_contacto` | Al tocar el botón de WhatsApp en el perfil (Épica F4) |
 | `favorito_agregado` | Al marcar un negocio como favorito (Épica F8) |
 | `resena_creada` | Al publicar una reseña (Épica F7) |
 | `registro_negocio` | Al completar el registro de un negocio (Épica F5) |
+
+`logSearchEvent` (`home-screen.tsx`) no se movió ni se duplicó al mudar
+esa pantalla a `/buscar` (PR #41, sección 18) — sigue siendo el mismo
+componente, solo cambió la ruta que lo monta.
 
 ## 17. Patrón de interacción — mínimo scroll, expandir en el mismo lugar
 
@@ -1038,9 +1042,10 @@ esto en la tarjeta resumen del mapa (sección 5.4.2); se extiende a:
 
 - **Menú del negocio**: cada plato se expande al tocarlo (foto grande,
   descripción completa) sin navegar a otra pantalla.
-- **Inicio**: una tarjeta de negocio se despliega in-place para mostrar
-  horario/reseñas rápidas, en vez de abrir el perfil completo salvo que el
-  usuario pida "ver perfil completo".
+- **Buscar** (antes "Inicio" — la pantalla no cambió, solo su ruta y su
+  lugar en la barra inferior, ver sección 18): una tarjeta de negocio se
+  despliega in-place para mostrar horario/reseñas rápidas, en vez de abrir
+  el perfil completo salvo que el usuario pida "ver perfil completo".
 - **Reseña rápida y reporte**: un "bottom sheet" que sube desde abajo, no
   una pantalla nueva.
 - Este patrón no reemplaza la navegación de primer nivel ya fijada en la
@@ -1063,9 +1068,12 @@ de la siguiente.
   (sección 14).
 - **Épica F2 — Inicio y búsqueda** (RF-009 a RF-011): pantalla de inicio sin
   scroll infinito, categorías rápidas, lista corta "cerca de ti", barra de
-  búsqueda, skeleton screens mientras carga.
+  búsqueda, skeleton screens mientras carga. **Ruta actual: `/buscar`, no
+  `/`** — ver "El mapa pasa a ser la pantalla principal" más abajo.
 - **Épica F3 — Mapa**: pines agrupados, tarjeta resumen expandible in-place,
-  filtros combinables (distancia, precio, abierto ahora).
+  filtros combinables (distancia, precio, abierto ahora). **Ruta actual:
+  `/`, no `/mapa`** — ver "El mapa pasa a ser la pantalla principal" más
+  abajo.
 - **Épica F4 — Perfil de negocio y menú** (RF-006 a RF-008, RF-012 a
   RF-014): foto a color completo, estado "abierto ahora", botones WhatsApp
   y "cómo llegar" fijos, menú con productos expandibles, reseñas.
@@ -1084,6 +1092,27 @@ de la siguiente.
 - **Épica F10 — PWA y Web Push**: registro de token de dispositivo contra
   `POST /users/me/device-tokens`, manejo de la notificación de confirmación
   de disponibilidad en tiempo real (PR #13) en el navegador.
+
+### El mapa pasa a ser la pantalla principal (PR #41, `feature/mapa-pantalla-principal`)
+
+Cambio de ruteo, sin RF asociado — decisión de producto tomada después de
+que las Épicas F2-F9 ya estuvieran construidas y documentadas arriba con
+las rutas originales (`/` = Inicio/búsqueda, `/mapa` = mapa). Esas
+descripciones de épica no se reescribieron (siguen siendo el registro de
+qué se construyó y por qué), pero las rutas que citan ya no son las
+vigentes:
+
+- `/` ahora renderiza `MapScreen` (lo que antes era la Épica F3).
+- La pantalla de la Épica F2 (categorías rápidas, "cerca de ti", barra de
+  búsqueda — `HomeScreen`, sin cambios internos) se mudó a `/buscar`.
+- `/mapa` queda como un `redirect("/")` (`client/src/app/mapa/page.tsx`),
+  no se borró, por si algún link/marcador externo todavía apunta ahí.
+- `BottomNavBar` (sección 28) cambia su destino "Inicio" por "Buscar"
+  (`/buscar`, ícono `MagnifyingGlass`) y "Mapa" pasa a apuntar a `/` en
+  vez de `/mapa` — el resto de la barra (Favoritos, Perfil) no cambia.
+
+Ningún evento de la tabla de la sección 16 cambió de disparador, solo de
+ruta — ver la nota bajo esa tabla.
 
 ## 19. Gaps conocidos para el frontend
 
@@ -2093,6 +2122,16 @@ aserciones del script.
 Cierra el gap que había quedado documentado en la sección 27 ("la barra
 de navegación inferior... nunca se construyó") — propia rama
 (`feature/barra-navegacion-inferior`).
+
+**Actualización (PR #41, sección 18 — "el mapa pasa a ser la pantalla
+principal")**: los 4 destinos y las rutas exactas de esta sección se
+describen tal como quedaron en `feature/barra-navegacion-inferior`, que
+es anterior a ese cambio de ruteo. Vigente hoy: el destino "Inicio" se
+renombró a **"Buscar"** y apunta a `/buscar` (antes `/`); "Mapa" apunta a
+`/` (antes `/mapa`, que ahora es solo un redirect). "Favoritos" (`/favoritos`)
+y "Perfil" (`/perfil`) no cambiaron. Cualquier ruta `/mapa` citada más
+abajo en esta sección (histórica, de cuando se construyó la barra) debe
+leerse como `/` hoy.
 
 ### Los 4 destinos — de dónde salieron, honestamente
 

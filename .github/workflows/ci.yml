@@ -92,3 +92,49 @@ jobs:
             quay.io/minio/mc:latest mb --ignore-existing local/ruteando-media-ci
 
       - run: npm test
+
+  # Frontend (client/) — hasta ahora sin ningún job propio: tsc/lint/build
+  # solo se corrían a mano en local antes de cada PR. No necesita Postgres
+  # ni MinIO (el build no hace ninguna llamada de red — la única ruta
+  # dinámica, /negocios/[businessId], no tiene generateStaticParams, así
+  # que Next no la prerenderiza en build) ni el backend levantado.
+  client:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      # src/lib/api/schema.ts está en .gitignore (se regenera desde
+      # ../openapi.yaml, ver client/package.json#generate:api) — build ya
+      # lo dispara solo (hook "prebuild"), pero tsc/lint necesitan que
+      # exista antes, así que corre explícito acá.
+      - run: npm run generate:api
+
+      # `next typegen` genera .next/types/**/*.ts (los tipos ambientales
+      # PageProps/LayoutProps que usan las páginas/layouts reales, ej.
+      # `LayoutProps<"/">` en src/app/layout.tsx) sin correr un build
+      # completo. tsconfig.json ya los incluye (`include`), pero solo
+      # existen después de `build`/`dev`/`typegen` — sin este paso,
+      # `tsc --noEmit` en un checkout limpio falla con
+      # "Cannot find name 'LayoutProps'", un falso positivo de orden, no
+      # un error de tipos real (verificado: con `.next/` borrado, falla;
+      # con `next typegen` corrido antes, pasa igual que `next build`).
+      - run: npx next typegen
+
+      - run: npx tsc --noEmit
+
+      - run: npm run lint
+
+      - run: npm run build

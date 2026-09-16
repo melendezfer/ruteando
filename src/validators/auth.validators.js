@@ -40,6 +40,12 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8),
 });
 
+// POST /users/me/change-password (sin RF asociado, ver CLAUDE.md).
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -47,4 +53,5 @@ module.exports = {
   logoutSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 };

@@ -1150,6 +1150,42 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  # Cambiar contraseña estando logueado (sin RF asociado, ver
+  # CLAUDE.md sección 39/40) — distinto de POST /auth/reset-password
+  # (recuperación con token de correo, sin sesión): acá la prueba de
+  # identidad es la contraseña ACTUAL, no un enlace. Cambiar la
+  # contraseña revoca todas las sesiones existentes, incluida la que
+  # hizo esta petición — por eso devuelve un AuthTokens nuevo, mismo
+  # criterio que POST /auth/claim-assisted-account.
+  /users/me/change-password:
+    post:
+      tags: [Usuarios]
+      summary: Cambiar la contraseña propia (requiere la contraseña actual)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: >-
+            Contraseña actualizada — todas las sesiones existentes quedan
+            revocadas, incluida la que hizo esta petición; el cuerpo trae
+            un par de tokens nuevo para que no haga falta volver a
+            iniciar sesión en este mismo dispositivo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401':
+          description: Sesión inválida, o currentPassword no coincide con la real
+          $ref: '#/components/responses/Unauthorized'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # Épica F6 (frontend): "mis reseñas" no tenía ninguna ruta — solo
   # existía GET /businesses/{businessId}/reviews (por negocio, solo
   # aprobadas — eliminada en el rediseño de reseñas, ver CLAUDE.md) y

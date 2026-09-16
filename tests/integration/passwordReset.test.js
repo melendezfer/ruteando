@@ -174,3 +174,89 @@ describe('POST /auth/reset-password', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('POST /users/me/change-password (sin RF asociado — distinto del flujo de correo)', () => {
+  async function registrarLogueado() {
+    const registro = await registrar();
+    await otorgarConsentimientosObligatorios(registro.body.user.id);
+    const login = await request(app)
+      .post('/auth/login')
+      .send({ email: registro.body.user.email, password: 'password123' });
+    return { userId: registro.body.user.id, email: registro.body.user.email, ...login.body };
+  }
+
+  it('cambia la contraseña con la actual correcta (200) y el par de tokens nuevo funciona', async () => {
+    const sesion = await registrarLogueado();
+
+    const res = await request(app)
+      .post('/users/me/change-password')
+      .set('Authorization', `Bearer ${sesion.accessToken}`)
+      .send({ currentPassword: 'password123', newPassword: 'nuevaClaveSegura456' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toBeTruthy();
+    expect(res.body.refreshToken).toBeTruthy();
+
+    // El accessToken nuevo sirve de verdad.
+    const me = await request(app)
+      .get('/users/me')
+      .set('Authorization', `Bearer ${res.body.accessToken}`);
+    expect(me.status).toBe(200);
+
+    // La contraseña nueva sirve para loguearse.
+    const loginNuevo = await request(app)
+      .post('/auth/login')
+      .send({ email: sesion.email, password: 'nuevaClaveSegura456' });
+    expect(loginNuevo.status).toBe(200);
+  });
+
+  it('revoca las demás sesiones — el refreshToken viejo ya no sirve después de cambiar', async () => {
+    const sesion = await registrarLogueado();
+    const refreshTokenViejo = sesion.refreshToken;
+
+    await request(app)
+      .post('/users/me/change-password')
+      .set('Authorization', `Bearer ${sesion.accessToken}`)
+      .send({ currentPassword: 'password123', newPassword: 'nuevaClaveSegura456' });
+
+    const refresh = await request(app)
+      .post('/auth/refresh')
+      .send({ refreshToken: refreshTokenViejo });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('rechaza con 401 si currentPassword no es la actual', async () => {
+    const sesion = await registrarLogueado();
+
+    const res = await request(app)
+      .post('/users/me/change-password')
+      .set('Authorization', `Bearer ${sesion.accessToken}`)
+      .send({ currentPassword: 'claveIncorrecta', newPassword: 'nuevaClaveSegura456' });
+
+    expect(res.status).toBe(401);
+
+    // La contraseña original sigue sirviendo — el intento fallido no la tocó.
+    const loginOriginal = await request(app)
+      .post('/auth/login')
+      .send({ email: sesion.email, password: 'password123' });
+    expect(loginOriginal.status).toBe(200);
+  });
+
+  it('rechaza sin access token (401)', async () => {
+    const res = await request(app)
+      .post('/users/me/change-password')
+      .send({ currentPassword: 'password123', newPassword: 'nuevaClaveSegura456' });
+    expect(res.status).toBe(401);
+  });
+
+  it('rechaza una newPassword menor a 8 caracteres (422)', async () => {
+    const sesion = await registrarLogueado();
+
+    const res = await request(app)
+      .post('/users/me/change-password')
+      .set('Authorization', `Bearer ${sesion.accessToken}`)
+      .send({ currentPassword: 'password123', newPassword: 'corta' });
+
+    expect(res.status).toBe(422);
+  });
+});

@@ -64,6 +64,15 @@ interface AuthContextValue {
   login: (email: string, password: string, consents?: LoginConsentInput[]) => Promise<AuthResult>;
   register: (input: RegisterInput) => Promise<AuthResult>;
   logout: () => Promise<void>;
+  /**
+   * Aplica un par de tokens ya emitido por el backend (ej.
+   * POST /users/me/change-password, sin RF asociado — ver CLAUDE.md
+   * sección 39/40) sin pasar por login()/register() — mismo
+   * applySessionAndFetchUser interno que ya usan esos dos, para que el
+   * usuario nunca vuelva a "loading"/"unauthenticated" a mitad de la
+   * sesión solo porque otro endpoint también emitió tokens nuevos.
+   */
+  applyNewTokens: (tokens: { accessToken?: string; refreshToken?: string }) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -235,7 +244,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, user, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ status, user, login, register, logout, applyNewTokens: applySessionAndFetchUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

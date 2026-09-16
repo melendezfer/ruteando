@@ -1,4 +1,7 @@
 import { api } from "@/lib/api/client";
+import type { components } from "@/lib/api/schema";
+
+type Consent = components["schemas"]["Consent"];
 
 export type MandatoryConsentType = "data_processing" | "terms_conditions";
 
@@ -34,4 +37,25 @@ export async function grantMandatoryConsents(): Promise<void> {
       }),
     ),
   );
+}
+
+/**
+ * Fase 4 de "vendiendo ahora" (sin RF asociado — ver CLAUDE.md sección
+ * 11/37): `tipo_consentimiento='notifications'` es el único requisito
+ * que le faltaba a un vendedor real para que un consumidor pueda
+ * preguntarle "¿sigue vendiendo?" (`solicitar()`, backend, ya lo exige
+ * desde la sección 11 — 409 sin él). A diferencia de
+ * `grantMandatoryConsents`, esto NO es best-effort silencioso: es una
+ * acción explícita del vendedor desde Configuración, así que el
+ * resultado (éxito o error) sí se le muestra.
+ */
+export async function grantNotificationsConsent(): Promise<{
+  ok: boolean;
+  status: number | undefined;
+  consent: Consent | null;
+}> {
+  const { data, response } = await api.POST("/consents", {
+    body: { type: "notifications", textVersion: MANDATORY_CONSENT_TEXT_VERSION, grantedByThirdParty: false },
+  });
+  return { ok: response.ok, status: response.status, consent: data ?? null };
 }

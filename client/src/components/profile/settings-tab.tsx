@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Bell, CheckCircle, LockKey, Warning } from "@phosphor-icons/react/dist/ssr";
+import { Bell, CheckCircle, LockKey, UserCircle, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
@@ -10,9 +10,11 @@ import { TextField } from "@/components/ui/text-field";
 import { AccountDeletionRequestModal } from "@/components/profile/account-deletion-request-modal";
 import { grantNotificationsConsent } from "@/lib/api/consents";
 import { changePassword } from "@/lib/api/change-password";
+import { updateProfile } from "@/lib/api/update-profile";
 import {
   getGrantNotificationsConsentErrorMessage,
   getChangePasswordErrorMessage,
+  getUpdateProfileErrorMessage,
 } from "@/lib/api/error-messages";
 import { useAuth } from "@/lib/auth/auth-context";
 
@@ -46,17 +48,18 @@ interface SettingsTabProps {
 }
 
 /**
- * Datos básicos de la cuenta + estado de los consentimientos ya
- * otorgados (GET /users/me/consents, Épica 8) — de solo lectura: el PR
- * #22 ya resolvió el flujo de OTORGARLOS (registro + ConsentRequiredModal
- * en login), acá solo se muestra el resultado, sin repetir ese modal
- * bloqueante ni ofrecer revocarlos (append-only por diseño, sin
- * endpoint de revocación — CLAUDE.md, Épica 6/8). Tampoco hay edición de
- * nombre/correo/rol todavía: no la pidió esta épica, y agregarla sin que
- * se pidiera sería sobre-construir la pantalla.
+ * Datos básicos de la cuenta (nombre/celular editables vía
+ * PATCH /users/me, sin RF asociado — ver CLAUDE.md; correo/rol siguen
+ * siendo de solo lectura, sin endpoint para cambiarlos) + estado de los
+ * consentimientos ya otorgados (GET /users/me/consents, Épica 8) — esa
+ * parte sigue de solo lectura: el PR #22 ya resolvió el flujo de
+ * OTORGARLOS (registro + ConsentRequiredModal en login), acá solo se
+ * muestra el resultado, sin repetir ese modal bloqueante ni ofrecer
+ * revocarlos (append-only por diseño, sin endpoint de revocación —
+ * CLAUDE.md, Épica 6/8).
  */
 export function SettingsTab({ user }: SettingsTabProps) {
-  const { applyNewTokens } = useAuth();
+  const { applyNewTokens, updateUser } = useAuth();
   const [consents, setConsents] = useState<Consent[] | null>(null);
   const [showDeletionModal, setShowDeletionModal] = useState(false);
   // Estado puramente local, no se vuelve a pedir al servidor al recargar
@@ -66,6 +69,16 @@ export function SettingsTab({ user }: SettingsTabProps) {
   // que volver a tocar el botón después de recargar la página no crea
   // una segunda solicitud, solo pierde esta confirmación en pantalla.
   const [deletionRequest, setDeletionRequest] = useState<AccountDeletionRequest | null>(null);
+
+  // PATCH /users/me (sin RF asociado — ver CLAUDE.md): edición de
+  // nombre/celular. Estado local inicializado desde `user` — igual que
+  // el resto de esta pantalla (ver comentario del componente), sin
+  // ningún GET propio: los datos ya llegan por props.
+  const [fullName, setFullName] = useState(user.fullName ?? "");
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   // Fase 4 de "vendiendo ahora" (sin RF asociado — ver CLAUDE.md sección
   // 11/37): a diferencia del resto de esta pantalla (de solo lectura),
@@ -114,6 +127,32 @@ export function SettingsTab({ user }: SettingsTabProps) {
     setConsents((prev) => [...(prev ?? []), result.consent!]);
   }
 
+  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileError(null);
+    setProfileSaved(false);
+
+    const trimmedName = fullName.trim();
+    if (trimmedName.length === 0) {
+      setProfileError("El nombre no puede quedar vacío.");
+      return;
+    }
+
+    setSavingProfile(true);
+    const result = await updateProfile({ fullName: trimmedName, phone: phone.trim() });
+    setSavingProfile(false);
+
+    if (!result.ok || !result.user) {
+      setProfileError(getUpdateProfileErrorMessage(result.status));
+      return;
+    }
+
+    updateUser(result.user);
+    setFullName(result.user.fullName ?? "");
+    setPhone(result.user.phone ?? "");
+    setProfileSaved(true);
+  }
+
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordError(null);
@@ -149,12 +188,43 @@ export function SettingsTab({ user }: SettingsTabProps) {
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">
-        <h2 className="font-heading text-title-2 font-semibold text-text">Tu cuenta</h2>
-        <dl className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="font-sans text-body-sm text-text-muted">Nombre</dt>
-            <dd className="font-sans text-body text-text">{user.fullName}</dd>
-          </div>
+        <h2 className="flex items-center gap-2 font-heading text-title-2 font-semibold text-text">
+          <UserCircle size={20} weight="bold" className="text-terracota" />
+          Tu cuenta
+        </h2>
+
+        {profileSaved && (
+          <p className="flex items-center gap-2 font-sans text-body-sm text-verde">
+            <CheckCircle size={16} weight="fill" />
+            Tus datos se actualizaron correctamente.
+          </p>
+        )}
+
+        <form onSubmit={handleSaveProfile} className="flex flex-col gap-3" noValidate>
+          <TextField
+            label="Nombre"
+            autoComplete="name"
+            required
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+          <TextField
+            label="Celular"
+            type="tel"
+            autoComplete="tel"
+            maxLength={20}
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+
+          {profileError && <p className="font-sans text-body-sm text-rojo">{profileError}</p>}
+
+          <Button type="submit" variant="secondary" loading={savingProfile}>
+            Guardar cambios
+          </Button>
+        </form>
+
+        <dl className="flex flex-col gap-2 border-t border-border pt-3">
           <div className="flex items-center justify-between gap-3">
             <dt className="font-sans text-body-sm text-text-muted">Correo</dt>
             <dd className="font-sans text-body text-text">{user.email}</dd>

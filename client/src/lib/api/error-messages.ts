@@ -230,3 +230,9 @@ export function getChangePasswordErrorMessage(status: number | undefined): strin
   if (status === 422) return "La contraseña nueva debe tener al menos 8 caracteres.";
   return GENERIC_ERROR;
 }
+
+/** PATCH /users/me (sin RF asociado — ver CLAUDE.md). */
+export function getUpdateProfileErrorMessage(status: number | undefined): string {
+  if (status === 422) return "Revisa el nombre y el celular ingresados.";
+  return GENERIC_ERROR;
+}

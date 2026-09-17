@@ -73,6 +73,13 @@ interface AuthContextValue {
    * sesión solo porque otro endpoint también emitió tokens nuevos.
    */
   applyNewTokens: (tokens: { accessToken?: string; refreshToken?: string }) => Promise<boolean>;
+  /**
+   * PATCH /users/me (sin RF asociado, ver CLAUDE.md) no rota tokens —
+   * a diferencia de applyNewTokens, acá solo hace falta reflejar el
+   * User ya devuelto por esa respuesta en el estado en memoria, sin
+   * volver a pedir GET /users/me ni tocar el access/refresh token.
+   */
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -245,7 +252,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, login, register, logout, applyNewTokens: applySessionAndFetchUser }}
+      value={{
+        status,
+        user,
+        login,
+        register,
+        logout,
+        applyNewTokens: applySessionAndFetchUser,
+        updateUser: setUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

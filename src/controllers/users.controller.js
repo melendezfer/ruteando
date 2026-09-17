@@ -34,6 +34,23 @@ async function changePassword(req, res) {
   res.status(200).json(resultado);
 }
 
+// PATCH /users/me (sin RF asociado, ver CLAUDE.md) — el merge "campo
+// omitido conserva el valor existente" se resuelve acá (no en el
+// repositorio, mismo criterio que negocios.service.js#actualizar).
+async function updateMe(req, res) {
+  const actual = await usuariosRepo.buscarPorId(req.user.id);
+  if (!actual || !actual.activo) {
+    throw new UnauthorizedError('Token de acceso faltante o inválido');
+  }
+
+  const nombreCompleto =
+    req.body.fullName !== undefined ? req.body.fullName : actual.nombre_completo;
+  const telefono = req.body.phone !== undefined ? req.body.phone : actual.telefono;
+
+  const actualizado = await usuariosRepo.actualizar(req.user.id, { nombreCompleto, telefono });
+  res.status(200).json(toApiUser(actualizado));
+}
+
 async function listConsents(req, res) {
   const consents = await consentimientosService.listar(req.user.id);
   res.status(200).json(consents);
@@ -59,6 +76,7 @@ module.exports = {
   listFavorites,
   listBusinesses,
   changePassword,
+  updateMe,
   listConsents,
   listReviews,
   registerDeviceToken,

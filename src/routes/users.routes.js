@@ -7,6 +7,7 @@ const { reviewListQuerySchema } = require('../validators/resenas.validators');
 const { deviceTokenInputSchema } = require('../validators/deviceTokens.validators');
 const { myBusinessesListQuerySchema } = require('../validators/business.validators');
 const { changePasswordSchema } = require('../validators/auth.validators');
+const { updateProfileSchema } = require('../validators/usuarios.validators');
 const {
   accountDeletionRequestInputSchema,
 } = require('../validators/solicitudEliminacionCuenta.validators');
@@ -14,6 +15,15 @@ const {
 const router = Router();
 
 router.get('/me', authenticate, usersController.me);
+// PATCH /users/me (sin RF asociado, ver CLAUDE.md) — deliberadamente
+// solo fullName/phone, sin profilePhotoUrl (sin pipeline de subida de
+// foto de perfil de usuario todavía).
+router.patch(
+  '/me',
+  authenticate,
+  validateBody(updateProfileSchema),
+  usersController.updateMe,
+);
 router.get(
   '/me/favorites',
   authenticate,

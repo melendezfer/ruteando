@@ -9,6 +9,7 @@ import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { logSearchEvent } from "@/lib/api/events";
 import { CategoryChips } from "@/components/discovery/category-chips";
 import { SearchBar } from "@/components/discovery/search-bar";
+import { SearchModeToggle } from "@/components/discovery/search-mode-toggle";
 import { BusinessCard } from "@/components/discovery/business-card";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { PriceOpenNowFields, type PriceOpenNowState } from "@/components/discovery/price-open-now-fields";
@@ -60,6 +61,11 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   // alto fijo del que anclarse, es una página normal con scroll.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<PriceOpenNowState>(EMPTY_FILTERS);
+  // Sencilla/avanzada (Fase 3, sin RF asociado — ver CLAUDE.md sección
+  // 48): decide si se muestran precios — los campos de precio del panel
+  // de filtros y el monto en los chips de "por qué coincidió". Default
+  // "sencilla", sin persistencia.
+  const [advanced, setAdvanced] = useState(false);
 
   const { businesses, loading: listLoading, search } = useBusinessSearch({
     limit: LIST_LIMIT,
@@ -114,6 +120,19 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
     },
     [search, lastSearch.query, lastSearch.categoryId],
   );
+
+  /**
+   * Volver a "Sencilla" limpia cualquier filtro de precio ya aplicado
+   * (Fase 3, sección 48) — sin esto, un precio elegido en modo avanzado
+   * seguiría filtrando los resultados en silencio aunque el panel ya no
+   * muestre esos campos.
+   */
+  function handleModeChange(next: boolean) {
+    setAdvanced(next);
+    if (!next && (filters.priceMin || filters.priceMax)) {
+      refineWithFilters({ ...filters, priceMin: "", priceMax: "" });
+    }
+  }
 
   // Carga inicial de "cerca de ti" apenas se resuelve la geolocalización.
   // No dispara el evento `busqueda` — CLAUDE.md sección 16 solo lo pide
@@ -195,9 +214,11 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
         </button>
       </div>
 
+      <SearchModeToggle advanced={advanced} onChange={handleModeChange} />
+
       {filtersOpen && (
         <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-3">
-          <PriceOpenNowFields value={filters} onChange={refineWithFilters} />
+          <PriceOpenNowFields value={filters} onChange={refineWithFilters} showPrice={advanced} />
         </div>
       )}
 
@@ -240,6 +261,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
               categoryName={
                 business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null
               }
+              showPrices={advanced}
             />
           ))}
       </div>

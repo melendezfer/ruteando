@@ -14,7 +14,10 @@ interface ZoneComparisonCardProps {
    * sección 45): map-screen.tsx ahora tiene una barra de búsqueda fija en
    * `top-3` — este prop empuja la tarjeta debajo de esa barra en vez de
    * superponerse, mismo criterio que `aboveBottomNav` en
-   * FloatingActionStack.
+   * FloatingActionStack. Offset medido con Playwright (`boundingBox()`
+   * real del contenedor completo, input + SearchModeToggle de la Fase
+   * 3) — no a ojo, ver CLAUDE.md sección 46/48 sobre el mismo bug ya
+   * encontrado una vez con un offset insuficiente.
    */
   belowSearchBar?: boolean;
 }
@@ -47,7 +50,7 @@ export function ZoneComparisonCard({ zones, onJumpToZone, belowSearchBar = false
 
   return (
     <div
-      className={`absolute left-3 right-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur ${belowSearchBar ? "top-24" : "top-3"}`}
+      className={`absolute left-3 right-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur ${belowSearchBar ? "top-36" : "top-3"}`}
     >
       <div className="flex items-start gap-2">
         <MapTrifold size={20} weight="duotone" className="mt-0.5 shrink-0 text-mostaza" />

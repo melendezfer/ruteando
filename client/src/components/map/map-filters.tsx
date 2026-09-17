@@ -19,6 +19,8 @@ interface MapFiltersSheetProps {
   onChange: (filters: MapFiltersState) => void;
   showRadius: boolean;
   onClose: () => void;
+  /** Modo sencillo/avanzado (Fase 3, CLAUDE.md sección 48) — ver PriceOpenNowFields#showPrice. */
+  showPrice: boolean;
 }
 
 const RADIUS_OPTIONS = [2, 5, 10];
@@ -45,7 +47,7 @@ const RADIUS_OPTIONS = [2, 5, 10];
  * (GET /businesses/nearby) — sin geolocalización concedida se oculta, no
  * se muestra deshabilitada, para no prometer un filtro que no hace nada.
  */
-export function MapFiltersSheet({ filters, onChange, showRadius, onClose }: MapFiltersSheetProps) {
+export function MapFiltersSheet({ filters, onChange, showRadius, onClose, showPrice }: MapFiltersSheetProps) {
   return (
     <div className="absolute inset-x-0 bottom-0 z-[1000] px-3 pb-3">
       <div className="relative rounded-card border border-border bg-surface p-4 shadow-lg">
@@ -78,7 +80,11 @@ export function MapFiltersSheet({ filters, onChange, showRadius, onClose }: MapF
             </label>
           )}
 
-          <PriceOpenNowFields value={filters} onChange={(next) => onChange({ ...filters, ...next })} />
+          <PriceOpenNowFields
+            value={filters}
+            onChange={(next) => onChange({ ...filters, ...next })}
+            showPrice={showPrice}
+          />
         </div>
       </div>
     </div>

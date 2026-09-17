@@ -10,6 +10,7 @@ import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { SearchBar } from "@/components/discovery/search-bar";
+import { SearchModeToggle } from "@/components/discovery/search-mode-toggle";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { MapFiltersSheet, type MapFiltersState } from "@/components/map/map-filters";
 import { MapSearchResults } from "@/components/map/map-search-results";
@@ -67,6 +68,10 @@ export function MapScreen() {
   // controlado) para limpiar visualmente el campo cuando se toca "Limpiar".
   const [query, setQuery] = useState("");
   const [searchKey, setSearchKey] = useState(0);
+  // Sencilla/avanzada (Fase 3, sin RF asociado — ver CLAUDE.md sección
+  // 48): decide si se muestran precios — el panel de filtros y los
+  // chips de "por qué coincidió". Default "sencilla", sin persistencia.
+  const [advanced, setAdvanced] = useState(false);
   const [zones, setZones] = useState<BusinessZone[]>([]);
   const [selected, setSelected] = useState<BusinessPin | null>(null);
   // Negocio recién tocado, mientras el pin todavía está en la animación
@@ -147,6 +152,20 @@ export function MapScreen() {
   function handleClearSearch() {
     setQuery("");
     setSearchKey((k) => k + 1);
+  }
+
+  /**
+   * Volver a "Sencilla" limpia cualquier filtro de precio ya aplicado
+   * (Fase 3, sección 48) — sin esto, un precio elegido en modo avanzado
+   * seguiría filtrando los resultados en silencio aunque el panel ya no
+   * muestre esos campos (estado invisible afectando el resultado, sin
+   * ninguna pista visual de por qué). `runSearch()` se vuelve a disparar
+   * solo (su propia identidad cambia con filters.priceMin/priceMax, y el
+   * efecto de más abajo reacciona a eso).
+   */
+  function handleModeChange(next: boolean) {
+    setAdvanced(next);
+    if (!next) setFilters((f) => ({ ...f, priceMin: "", priceMax: "" }));
   }
 
   /**
@@ -350,20 +369,23 @@ export function MapScreen() {
           `bg-surface` + `shadow-lg` para que se lea sobre los tiles del
           mapa, mismo lenguaje visual que MapFiltersSheet.
         */}
-        <div className="absolute inset-x-3 top-3 z-[1000] flex items-start gap-2 rounded-card border border-border bg-surface p-3 shadow-lg">
-          <div className="flex-1">
-            <SearchBar key={searchKey} onSearch={handleTextSearch} />
+        <div className="absolute inset-x-3 top-3 z-[1000] flex flex-col gap-2 rounded-card border border-border bg-surface p-3 shadow-lg">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <SearchBar key={searchKey} onSearch={handleTextSearch} />
+            </div>
+            {query && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                aria-label="Limpiar búsqueda"
+                className="mt-7 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-text-muted hover:bg-background"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            )}
           </div>
-          {query && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              aria-label="Limpiar búsqueda"
-              className="mt-7 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-text-muted hover:bg-background"
-            >
-              <X size={16} weight="bold" />
-            </button>
-          )}
+          <SearchModeToggle advanced={advanced} onChange={handleModeChange} />
         </div>
 
         {!selected && !filtersOpen && (
@@ -373,6 +395,7 @@ export function MapScreen() {
             loading={loading}
             categoryNameById={categoryNameById}
             onSelect={handleSelectFromSearch}
+            showPrices={advanced}
           />
         )}
 
@@ -393,6 +416,7 @@ export function MapScreen() {
             business={selected}
             categoryName={selected.categoryId != null ? (categoryNameById.get(selected.categoryId) ?? null) : null}
             onClose={() => setSelected(null)}
+            showPrices={advanced}
           />
         )}
 
@@ -401,6 +425,7 @@ export function MapScreen() {
             filters={filters}
             onChange={setFilters}
             showRadius={showRadiusFilter}
+            showPrice={advanced}
             onClose={() => setFiltersOpen(false)}
           />
         )}

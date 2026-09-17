@@ -9,6 +9,14 @@ type Business = components["schemas"]["Business"];
 interface MatchReasonBadgesProps {
   matchType: Business["matchType"];
   matchedProducts: Business["matchedProducts"];
+  /**
+   * Modo sencillo/avanzado (Fase 3, CLAUDE.md sección 48) — en modo
+   * sencillo, el chip de producto muestra solo el nombre, sin precio.
+   * Sin default a propósito: cada caller decide explícitamente en qué
+   * modo está mostrando resultados, no hay un valor "razonable" a
+   * asumir en silencio para un dato tan visible como un precio.
+   */
+  showPrices: boolean;
 }
 
 // Compacto a propósito: un negocio con muchos productos coincidentes (ej.
@@ -31,7 +39,7 @@ const MAX_PRODUCT_CHIPS = 2;
  * (navegación normal, "cerca de ti", categoría) — en ese caso no
  * renderiza nada, mismo criterio que AvailabilityConfirmedBadge.
  */
-export function MatchReasonBadges({ matchType, matchedProducts }: MatchReasonBadgesProps) {
+export function MatchReasonBadges({ matchType, matchedProducts, showPrices }: MatchReasonBadgesProps) {
   if (!matchType) return null;
 
   const showName = matchType === "business_name" || matchType === "both";
@@ -54,7 +62,7 @@ export function MatchReasonBadges({ matchType, matchedProducts }: MatchReasonBad
         >
           <Tag size={12} weight="bold" />
           {product.name}
-          {product.price !== undefined ? ` · ${formatCOP(product.price)}` : ""}
+          {showPrices && product.price !== undefined ? ` · ${formatCOP(product.price)}` : ""}
         </span>
       ))}
       {extraCount > 0 && (

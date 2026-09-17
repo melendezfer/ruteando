@@ -52,30 +52,37 @@ export function MapSearchResults({
       )}
 
       {!loading &&
-        results.map((business) => (
-          <button
-            key={business.id}
-            type="button"
-            onClick={() => onSelect(business)}
-            className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-background"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="font-heading text-body font-semibold text-text">{business.name}</span>
-              <span className="font-sans text-body-sm text-text-muted">
-                {business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? "Comercio informal") : "Comercio informal"}
-                {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
-              </span>
-              {/* Por qué coincidió (Fase 2, CLAUDE.md sección 47) — ya
-                  viene calculado por el backend sobre esta misma `q`. */}
-              <MatchReasonBadges
-                matchType={business.matchType}
-                matchedProducts={business.matchedProducts}
-                showPrices={showPrices}
-              />
-            </div>
-            <CaretRight size={18} className="shrink-0 text-text-muted" />
-          </button>
-        ))}
+        results.map((business) => {
+          const categoryName =
+            business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null;
+          return (
+            <button
+              key={business.id}
+              type="button"
+              onClick={() => onSelect(business)}
+              className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-background"
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="font-heading text-body font-semibold text-text">{business.name}</span>
+                <span className="font-sans text-body-sm text-text-muted">
+                  {categoryName ?? "Comercio informal"}
+                  {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
+                </span>
+                {/* Por qué coincidió (Fases 2 y 5, CLAUDE.md sección
+                    47/50) — ya viene calculado por el backend sobre
+                    esta misma `q`. */}
+                <MatchReasonBadges
+                  matchType={business.matchType}
+                  matchedProducts={business.matchedProducts}
+                  matchedCategory={business.matchedCategory}
+                  categoryName={categoryName}
+                  showPrices={showPrices}
+                />
+              </div>
+              <CaretRight size={18} className="shrink-0 text-text-muted" />
+            </button>
+          );
+        })}
     </div>
   );
 }

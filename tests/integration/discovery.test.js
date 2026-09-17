@@ -19,6 +19,18 @@ async function crearCategoria() {
   return rows[0].id;
 }
 
+/**
+ * Categoría real, sembrada por migración (Fase 5, CLAUDE.md sección
+ * 50), no creada por esta suite — a propósito NO se agrega a
+ * `categoriaIdsCreadas` (el `afterAll` de este archivo las borraría al
+ * terminar, y son categorías reales de producción, no datos de prueba).
+ */
+async function obtenerCategoriaPorNombre(nombre) {
+  const { rows } = await pool.query('SELECT id FROM categorias WHERE nombre = $1', [nombre]);
+  if (!rows[0]) throw new Error(`Categoría "${nombre}" no encontrada — ¿corrió la migración?`);
+  return rows[0].id;
+}
+
 // telefono_verificado = true: desde la verificación de teléfono de
 // vendedores (ver CLAUDE.md), un negocio 'activo' sin el teléfono
 // verificado tampoco aparece en /businesses ni /businesses/nearby — esta
@@ -478,6 +490,101 @@ describe('Business.matchType / matchedProducts (búsqueda por texto, sin RF asoc
         { name: 'Arepa de queso', price: 5000, available: true },
       ]);
     }
+  });
+});
+
+describe('Búsqueda por familia — matchedCategory (sin RF asociado — ver CLAUDE.md, Fase 5)', () => {
+  const CENTRO = { lat: 4.578, lng: -74.217 };
+
+  it('q matchea el nombre LITERAL (parcial) de la categoría — matchedCategory=true, matchType=null', async () => {
+    const categoryId = await obtenerCategoriaPorNombre('Droguerías');
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      name: 'Punto de Salud',
+    });
+
+    // "droguer" es substring literal de "Droguerías" — matchea vía
+    // c.nombre ILIKE, sin necesidad del diccionario de alias (aunque
+    // también resuelve ahí, ver la prueba de alias puro más abajo con
+    // "farmacia", que NO es substring de "Droguerías").
+    for (const url of [
+      `/businesses?q=droguer`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&q=droguer`,
+    ]) {
+      const res = await request(app).get(url);
+      const resultado = res.body.data.find((b) => b.id === negocio.id);
+      expect(resultado).toBeDefined();
+      expect(resultado.matchedCategory).toBe(true);
+      expect(resultado.matchType).toBeNull();
+    }
+  });
+
+  it('q matchea SOLO por el DICCIONARIO DE ALIAS ("farmacia" → "Droguerías"), sin que el texto sea substring de ningún nombre real', async () => {
+    const categoryId = await obtenerCategoriaPorNombre('Droguerías');
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      name: 'Punto de Salud',
+    });
+
+    // "farmacia" no aparece en "Droguerías" ni en "Punto de Salud" — si
+    // este negocio aparece, fue exclusivamente por el alias.
+    for (const url of [
+      `/businesses?q=farmacia`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&q=farmacia`,
+    ]) {
+      const res = await request(app).get(url);
+      const resultado = res.body.data.find((b) => b.id === negocio.id);
+      expect(resultado).toBeDefined();
+      expect(resultado.matchedCategory).toBe(true);
+      expect(resultado.matchType).toBeNull();
+    }
+  });
+
+  it('un negocio de otra categoría NO aparece para un alias que no le corresponde', async () => {
+    const categoriaArepas = await crearCategoria();
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId: categoriaArepas,
+      name: 'Puesto Sin Relación',
+    });
+
+    const res = await request(app).get(
+      `/businesses?categoryId=${categoriaArepas}&q=droguerias`,
+    );
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+
+  it('coincide por categoría Y por nombre a la vez — las dos señales conviven', async () => {
+    const categoryId = await obtenerCategoriaPorNombre('Droguerías');
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      // Sin tilde a propósito — ILIKE compara caracteres literales, no
+      // es insensible a acentos por defecto en Postgres; con tilde, el
+      // nombre no matchearía "drogueria" (sin tilde) por ILIKE y esta
+      // prueba dejaría de verificar lo que dice verificar.
+      name: 'Drogueria La Rebaja Chiquita',
+    });
+
+    const res = await request(app).get(`/businesses?q=drogueria`);
+    const resultado = res.body.data.find((b) => b.id === negocio.id);
+    expect(resultado.matchedCategory).toBe(true);
+    expect(resultado.matchType).toBe('business_name');
+  });
+
+  it('sin q, matchedCategory queda null', async () => {
+    const categoryId = await obtenerCategoriaPorNombre('Droguerías');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, categoryId });
+
+    const res = await request(app).get(`/businesses?categoryId=${categoryId}`);
+    const resultado = res.body.data.find((b) => b.id === negocio.id);
+    expect(resultado.matchedCategory).toBeNull();
   });
 });
 

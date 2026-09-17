@@ -135,12 +135,15 @@ export function BusinessCard({
                 importar `mobility` (ambulante/local fijo) ni nada más —
                 nunca oculta ni reordena esta tarjeta ni ninguna otra. */}
             <AvailabilityConfirmedBadge confirmedAt={business.availabilityConfirmedAt} />
-            {/* Por qué coincidió con la búsqueda de texto (Fase 2 de la
-                fusión de buscadores, sin RF asociado — ver CLAUDE.md
-                sección 47) — null fuera de una búsqueda por `q`. */}
+            {/* Por qué coincidió con la búsqueda de texto (Fases 2 y 5
+                de la fusión de buscadores, sin RF asociado — ver
+                CLAUDE.md sección 47/50) — nada fuera de una búsqueda
+                por `q`. */}
             <MatchReasonBadges
               matchType={business.matchType}
               matchedProducts={business.matchedProducts}
+              matchedCategory={business.matchedCategory}
+              categoryName={categoryName}
               showPrices={showPrices}
             />
           </div>

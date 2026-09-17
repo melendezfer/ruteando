@@ -32,6 +32,21 @@ function recorrerPlan(nodo, visitar) {
 // que el índice esperado aparezca en alguna de estas variantes.
 const NODOS_INDEX_SCAN = new Set(['Index Scan', 'Bitmap Index Scan', 'Index Only Scan']);
 
+// Fase 5 (búsqueda por familia, sin RF asociado — ver CLAUDE.md sección
+// 50): cercanos() ahora hace JOIN categorias c ON c.id = n.categoria_id
+// (para comparar `q` contra el nombre de categoría) — `categorias` tiene
+// del orden de una decena de filas reales, así que el planificador elige
+// correctamente un Seq Scan ahí (más barato que cualquier índice para
+// una tabla tan chica, y no hay volumen sembrado de categorías en esta
+// prueba para que decida distinto). Es exactamente el mismo motivo por
+// el que esta prueba nunca exigió un índice sobre, por ejemplo,
+// `dia_semana` — solo importan las tablas que SÍ crecen con el volumen
+// real de negocios (ubicaciones, solicitudes_disponibilidad), que es lo
+// que el resto de las aserciones de este archivo verifica.
+function esSeqScanEsperado(nodo) {
+  return nodo['Node Type'] === 'Seq Scan' && nodo['Relation Name'] === 'categorias';
+}
+
 beforeAll(async () => {
   const usuario = await pool.query(
     `INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, rol)
@@ -123,7 +138,7 @@ describe('plan de ejecución de GET /businesses/nearby', () => {
     const nodos = [];
     recorrerPlan(plan.Plan, (nodo) => nodos.push(nodo));
 
-    const seqScans = nodos.filter((n) => n['Node Type'] === 'Seq Scan');
+    const seqScans = nodos.filter((n) => n['Node Type'] === 'Seq Scan' && !esSeqScanEsperado(n));
     expect(seqScans).toEqual([]);
 
     const indexScanUbicaciones = nodos.find(
@@ -155,7 +170,7 @@ describe('plan de ejecución de GET /businesses/nearby', () => {
     const nodos = [];
     recorrerPlan(plan.Plan, (nodo) => nodos.push(nodo));
 
-    expect(nodos.filter((n) => n['Node Type'] === 'Seq Scan')).toEqual([]);
+    expect(nodos.filter((n) => n['Node Type'] === 'Seq Scan' && !esSeqScanEsperado(n))).toEqual([]);
     expect(
       nodos.some(
         (n) => NODOS_INDEX_SCAN.has(n['Node Type']) && n['Index Name'] === 'idx_ubicaciones_punto',

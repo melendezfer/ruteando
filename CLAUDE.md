@@ -4987,3 +4987,134 @@ después.
   pudimos encontrar ese negocio". No se pidió, y en la práctica el
   enlace siempre sale de un negocio que ya se mostró como resultado
   real, así que este caso solo ocurriría con una URL manipulada a mano.
+
+## 50. Fusión de los dos buscadores — Fase 5 de 6 (última): búsqueda por familia
+
+Cierra el último gap del plan original (sección 45: "comidas rápidas,
+droguerías, tintos etc.") — propia rama (`feature/busqueda-familias`),
+backend + frontend. Decisiones ya tomadas con el usuario antes de
+empezar (ver la conversación de planeación): categorías nuevas creadas
+como parte de este trabajo (no delegadas al equipo del proyecto para
+después) + match directo por nombre de categoría + diccionario de alias
+combinados (no solo uno de los dos).
+
+### Categorías nuevas — migración, no solo el script de demo
+
+Migración `categorias-droguerias-tintos`: **Droguerías** (`tipo:
+productos`) y **Tintos y café** (`tipo: alimentos`) — mismo criterio que
+`categorias-tipo-comercio-no-gastronomico` (sección 31): se insertan por
+migración, no solo por `scripts/seedDemoBusinesses.js`, porque
+`categorias` no tiene endpoint de creación y sin este INSERT ningún
+vendedor real en producción tendría esas categorías para elegir.
+
+### `q` ahora compara contra TRES cosas, no dos
+
+`agregarFiltrosComunes()` (RF-010/011, ya comparaba nombre de
+negocio/producto) suma `c.nombre ILIKE $idxQ` — requiere el `JOIN
+categorias c ON c.id = n.categoria_id` nuevo en `listar()`/`cercanos()`
+(antes esas consultas solo comparaban `n.categoria_id = $N`, sin traer
+nunca el nombre de la categoría). Más, si `q` matchea el diccionario de
+alias (`src/config/categoryAliases.js`, nuevo), una cláusula extra
+`OR c.nombre = ANY($idxCategoriasAlias)` con los nombres reales que ese
+alias resolvió.
+
+### El diccionario de alias vive en JS, no en SQL
+
+`resolverCategoriasPorAlias(q)` — catálogo corto y curado (mismo
+criterio que el catálogo de etiquetas de reseñas, secciones 26/33): los
+términos que el usuario pidió explícitamente (droguerías, tintos,
+comida rápida) más un puñado de sinónimos obvios para las categorías ya
+sembradas, no un intento de cubrir cada término coloquial imaginable.
+Comparación normalizada (sin acentos, minúsculas) y bidireccional
+("tinto" dentro del alias "tintos", o un alias corto dentro de un `q`
+más largo), con un umbral mínimo (`LARGO_MINIMO_Q = 3`) para que un `q`
+de 1-2 caracteres no "matchee por contención" casi cualquier alias del
+diccionario. Se resuelve enteramente en JS antes de tocar la base de
+datos — más simple que resolver acentos/fuzzy matching en SQL (sin
+`unaccent`), y el diccionario es chico, iterarlo en memoria no es un
+problema de rendimiento real.
+
+### `matchedCategory`, no un cuarto valor de `matchType`
+
+Se consideró extender el enum `matchType` (`business_name`/`product`/
+`both`) con una cuarta variante para categoría y se descartó: un negocio
+puede coincidir por categoría Y por nombre/producto A LA VEZ, y con 3
+señales independientes eso son hasta 7 combinaciones no vacías — un
+enum de 7+ valores es peor que 2 campos independientes. `Business.matchedCategory`
+(nuevo, `boolean | null`) viaja aparte de `matchType`, sin el nombre de
+la categoría (el cliente ya lo tiene vía `categoryId` + su propio
+`GET /categories`, no hacía falta duplicarlo).
+
+**Bug real encontrado al diseñar esto, no relacionado con categorías en
+sí**: `business.mapper.js#resolverMatchType` tenía un `else` implícito
+que asumía que, con `q` presente, la única forma de NO coincidir por
+nombre era coincidir por producto (`return row.nombre_coincide ?
+'business_name' : 'product'`) — cierto hasta esta fase, porque antes no
+existía una tercera vía para calificar. Con la búsqueda por familia, un
+negocio puede calificar SOLO por categoría (ni nombre ni producto), y
+ese `else` lo etiquetaba mal como `'product'`. Corregido para devolver
+`null` en ese caso (matchType null + matchedCategory true es una
+combinación real y válida ahora) — encontrado en el diseño, con una
+prueba unitaria de regresión, no en producción.
+
+### Frontend: `MatchReasonBadges` gana un tercer chip
+
+Mismo componente de la Fase 2, extendido con `matchedCategory` +
+`categoryName` (prop nueva, `string | null` — cada caller ya lo tenía
+vía `categoryNameById`, no hizo falta pedirle nada nuevo al backend). El
+guard de "no renderizar nada" se corrigió de `if (!matchType) return
+null` a comprobar las tres señales — con el bug de arriba sin corregir,
+este guard viejo habría ocultado por completo el chip de categoría
+cuando era la única razón del match.
+
+### Verificado
+
+Backend: `npm test` completo — 554/554 (7 pruebas nuevas: 4 unitarias
+de `categoryAliases.js`, 3 de `business.mapper.js` para el fix de
+`resolverMatchType`/`matchedCategory`, 5 de integración en
+`discovery.test.js` contra las categorías reales sembradas por la
+migración). **Regresión real encontrada corriendo la suite completa, no
+solo los archivos "obviamente relacionados"**: el nuevo `JOIN categorias`
+metía un `Seq Scan` sobre esa tabla en el plan de `GET /businesses/nearby`,
+rompiendo `nearbyIndexPlan.test.js` (que hasta ahora prohibía CUALQUIER
+seq scan, no solo sobre `ubicaciones`) — corregido permitiendo
+explícitamente el seq scan sobre `categorias` (14-16 filas reales, el
+plan correcto para una tabla tan chica) sin relajar la prueba para
+ninguna otra tabla.
+
+Frontend: `npm run build`/`lint` en verde. Verificado con Playwright +
+llamadas directas a la API contra el servidor de desarrollo real —
+negocios reales creados en "Droguerías"/"Tintos y café" con nombres que
+NO contienen esas palabras ("Punto de Salud Ciudad Verde", "El Rincón
+del Sabor"):
+- `q=droguerias` (match literal parcial del nombre de categoría) →
+  aparece "Punto de Salud Ciudad Verde" con el chip "Droguerías".
+- `q=tintos` → aparece "El Rincón del Sabor" con el chip "Tintos y
+  café" (visible al expandir la tarjeta).
+- `q=farmacia` (alias PURO — "farmacia" no es substring de
+  "Droguerías" ni del nombre del negocio) → igual aparece "Punto de
+  Salud Ciudad Verde" con el chip "Droguerías", confirmando que el
+  diccionario de alias funciona independientemente del match literal.
+
+Datos y cuentas de prueba borrados después.
+
+### Gaps conocidos, no ocultos
+
+- El diccionario de alias es fijo en código
+  (`src/config/categoryAliases.js`) — agregar un término nuevo requiere
+  un despliegue de backend, no hay panel de administración. Mismo
+  criterio ya aceptado para el catálogo de etiquetas de reseñas
+  (secciones 26/33) y el de la guía de higiene (sección 30).
+- `scripts/seedDemoBusinesses.js` no se tocó — ningún negocio de demo
+  quedó sembrado en "Droguerías"/"Tintos y café" todavía. No se pidió
+  para esta fase (el foco era que la búsqueda funcionara, verificado con
+  negocios creados ad-hoc para la verificación y borrados después) —​
+  agregar negocios de demo reales en estas categorías queda como mejora
+  a futuro si hace falta para seguir probando manualmente.
+- `GET /businesses/zones` (sección 32) sigue sin aceptar `q` — decisión
+  ya tomada en esa sección (filtrar antes de clusterizar fragmentaría la
+  variedad que ese endpoint existe para mostrar), sin relación con esta
+  fase.
+- Con esta fase se cierra el plan de 6 fases de la fusión de
+  buscadores (sección 45) — no queda ninguna fase pendiente en este
+  plan.

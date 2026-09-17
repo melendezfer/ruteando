@@ -6,6 +6,7 @@ const {
   AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES,
 } = require('../config/constants');
 const env = require('../config/env');
+const { resolverCategoriasPorAlias } = require('../config/categoryAliases');
 
 // TEMPORAL, SOLO DESARROLLO — ver CLAUDE.md sección 21 y el comentario
 // completo en src/config/env.js. `env.NODE_ENV === 'development'` se
@@ -256,13 +257,25 @@ function lateralDisponibilidadFresca(idxFrescura) {
  * `params.length` como siguiente índice evita tener que llevar la cuenta
  * a mano en cada caller.
  *
- * Devuelve `{ idxQ }` — el índice del placeholder de `q` (o `null` si no
- * se buscó por texto) — para que el caller arme
- * `lateralProductosCoincidentes()` reusando exactamente el mismo patrón
- * ya ligado acá, en vez de calcularlo dos veces.
+ * Devuelve `{ idxQ, idxCategoriasAlias }` — los índices de los
+ * placeholders ligados para `q` (o `null` si no se buscó por texto) y
+ * para la lista de nombres de categoría que activó el diccionario de
+ * alias (o `null` si `q` no matcheó ningún alias) — para que el caller
+ * arme `lateralProductosCoincidentes()`/`columnaCategoriaCoincide()`
+ * reusando exactamente el mismo patrón ya ligado acá, en vez de
+ * calcularlo dos veces.
+ *
+ * `q` compara contra tres cosas a la vez, unidas por OR (RF-010/011 +
+ * Fase 5 de la fusión de buscadores, sin RF asociado — ver CLAUDE.md
+ * sección 45/50): nombre del negocio, nombre de un producto suyo, y
+ * nombre de SU PROPIA categoría (`c.nombre`, requiere el JOIN a
+ * `categorias` que ya arman listar()/cercanos()) — más, si `q` matcheó
+ * algún alias del diccionario ("tintos" → "Tintos y café"), que la
+ * categoría del negocio esté entre los nombres que ese alias resolvió.
  */
 function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow }) {
   let idxQ = null;
+  let idxCategoriasAlias = null;
 
   if (categoryId != null) {
     params.push(categoryId);
@@ -272,9 +285,18 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
   if (q) {
     params.push(`%${escaparComodinesLike(q)}%`);
     idxQ = params.length;
-    clausulas.push(
-      `(n.nombre ILIKE $${idxQ} OR EXISTS (SELECT 1 FROM productos p WHERE p.negocio_id = n.id AND p.nombre ILIKE $${idxQ}))`,
-    );
+    let clausulaQ = `n.nombre ILIKE $${idxQ}
+        OR EXISTS (SELECT 1 FROM productos p WHERE p.negocio_id = n.id AND p.nombre ILIKE $${idxQ})
+        OR c.nombre ILIKE $${idxQ}`;
+
+    const categoriasAlias = resolverCategoriasPorAlias(q);
+    if (categoriasAlias.length > 0) {
+      params.push(categoriasAlias);
+      idxCategoriasAlias = params.length;
+      clausulaQ += ` OR c.nombre = ANY($${idxCategoriasAlias})`;
+    }
+
+    clausulas.push(`(${clausulaQ})`);
   }
 
   if (priceMin != null || priceMax != null) {
@@ -309,7 +331,7 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
     )`);
   }
 
-  return { idxQ };
+  return { idxQ, idxCategoriasAlias };
 }
 
 /**
@@ -358,6 +380,19 @@ function lateralProductosCoincidentes(idxQ) {
  */
 function columnaNombreCoincide(idxQ) {
   return idxQ == null ? 'NULL' : `(n.nombre ILIKE $${idxQ})`;
+}
+
+/**
+ * Columna compartida por listar() y cercanos() (Fase 5, sección 50): si
+ * el negocio calificó por su CATEGORÍA (nombre literal o vía el
+ * diccionario de alias), no por su nombre ni por un producto — mismo
+ * criterio que columnaNombreCoincide(), reusando los placeholders ya
+ * ligados en agregarFiltrosComunes(). `NULL` sin `q`.
+ */
+function columnaCategoriaCoincide(idxQ, idxCategoriasAlias) {
+  if (idxQ == null) return 'NULL';
+  const aliasCheck = idxCategoriasAlias == null ? '' : ` OR c.nombre = ANY($${idxCategoriasAlias})`;
+  return `(c.nombre ILIKE $${idxQ}${aliasCheck})`;
 }
 
 /**
@@ -411,7 +446,13 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
   const params = [AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
   const idxFrescura = params.length;
 
-  const { idxQ } = agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
+  const { idxQ, idxCategoriasAlias } = agregarFiltrosComunes(clausulas, params, {
+    categoryId,
+    q,
+    priceMin,
+    priceMax,
+    openNow,
+  });
   const productosCoincidentes = lateralProductosCoincidentes(idxQ);
 
   if (cursor) {
@@ -433,8 +474,10 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
     `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta,
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
+            ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
             ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
+     JOIN categorias c ON c.id = n.categoria_id
      LEFT JOIN LATERAL (
        SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud, u.mostrar_ubicacion_exacta
        FROM ubicaciones u WHERE u.negocio_id = n.id AND u.es_actual = true
@@ -486,7 +529,7 @@ function construirConsultaCercanos({
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
 
-  const { idxQ } = agregarFiltrosComunes(clausulas, params, {
+  const { idxQ, idxCategoriasAlias } = agregarFiltrosComunes(clausulas, params, {
     categoryId,
     q,
     priceMin,
@@ -513,9 +556,11 @@ function construirConsultaCercanos({
             ST_Distance(u.punto, objetivo.punto) AS distancia_m,
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
+            ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
             ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
+     JOIN categorias c ON c.id = n.categoria_id
      CROSS JOIN objetivo
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}

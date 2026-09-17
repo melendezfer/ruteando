@@ -55,9 +55,30 @@ const LeafletMap = dynamic(() => import("@/components/map/leaflet-map").then((mo
  * fue denegado) y "Filtros" como secundaria (abre el panel de
  * distancia/precio/abierto-ahora como bottom sheet, sección 17).
  */
-export function MapScreen() {
+interface MapScreenProps {
+  /**
+   * "Ver en el mapa" desde /buscar (Fase 4 de la fusión de buscadores,
+   * sin RF asociado — ver CLAUDE.md sección 45/49): id del negocio a
+   * centrar/seleccionar apenas el mapa esté listo. Viene de
+   * `?businessId=` en la URL (/mapa/page.tsx), no de un state que este
+   * componente conozca por su cuenta.
+   */
+  initialBusinessId?: string;
+}
+
+export function MapScreen({ initialBusinessId }: MapScreenProps) {
   const geolocation = useConsumerGeolocation();
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  // Negocio pedido por `initialBusinessId` que no vino en la búsqueda
+  // general (fuera de radio/límite, o filtrado por precio/abierto-ahora)
+  // — se agrega a `businesses` para que también se vea como pin, no
+  // solo como BusinessSummarySheet flotando sin nada que lo marque en
+  // el mapa. `handledInitialBusinessIdRef` evita repetir el fetch si
+  // este componente vuelve a renderizar con el mismo id (y permite un
+  // id NUEVO si la URL cambia a otro negocio sin recargar la página).
+  const [externalPin, setExternalPin] = useState<BusinessPin | null>(null);
+  const handledInitialBusinessIdRef = useRef<string | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   // Texto libre del buscador del mapa (Fase 1 de la fusión de
@@ -130,14 +151,19 @@ export function MapScreen() {
     geolocation,
   });
 
-  const businesses = useMemo<BusinessPin[]>(
-    () =>
-      (rawBusinesses ?? []).filter(
-        (business): business is BusinessPin =>
-          typeof business.latitude === "number" && typeof business.longitude === "number",
-      ),
-    [rawBusinesses],
-  );
+  const businesses = useMemo<BusinessPin[]>(() => {
+    const base = (rawBusinesses ?? []).filter(
+      (business): business is BusinessPin =>
+        typeof business.latitude === "number" && typeof business.longitude === "number",
+    );
+    // "Ver en el mapa" (Fase 4, sección 49): el negocio pedido por
+    // initialBusinessId puede no estar entre los resultados de la
+    // búsqueda general — se agrega aparte, sin duplicar si ya vino.
+    if (externalPin && !base.some((b) => b.id === externalPin.id)) {
+      return [...base, externalPin];
+    }
+    return base;
+  }, [rawBusinesses, externalPin]);
 
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
@@ -210,6 +236,39 @@ export function MapScreen() {
       ignore = true;
     };
   }, [geolocation.status, runSearch, loadZones]);
+
+  /**
+   * "Ver en el mapa" (Fase 4, sección 49) — pide el perfil completo en
+   * vez de buscar entre `businesses` porque el negocio puede quedar
+   * fuera del radio/límite/filtros de la búsqueda general (ej. lejos de
+   * la ubicación del consumidor). Usa `profile.location` (no
+   * `profile.latitude/longitude`, que quedan `null` en un GET por id —
+   * ver business.mapper.js#toApiBusiness, "solo se llena en
+   * listar/cercanos") — respeta la misma regla de "zona aproximada" vs.
+   * dirección exacta que ya aplica el backend según quién pregunta.
+   */
+  useEffect(() => {
+    if (!initialBusinessId || !mapReady) return;
+    if (handledInitialBusinessIdRef.current === initialBusinessId) return;
+    handledInitialBusinessIdRef.current = initialBusinessId;
+
+    let ignore = false;
+    api.GET("/businesses/{businessId}", { params: { path: { businessId: initialBusinessId } } }).then(({ data }) => {
+      if (ignore || !data) return;
+      const { latitude, longitude } = data.location ?? {};
+      if (latitude == null || longitude == null) return;
+
+      const pin: BusinessPin = { ...data, latitude, longitude };
+      setExternalPin(pin);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.setView([latitude, longitude], LOCATE_ME_ZOOM, { animate: true });
+      }
+      setSelected(pin);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [initialBusinessId, mapReady]);
 
   // "Cargando" de verdad hasta que se resuelva la PRIMERA búsqueda
   // (rawBusinesses === null) — `loading` del hook solo cubre mientras
@@ -358,6 +417,7 @@ export function MapScreen() {
               onSelectBusiness={handleSelectBusiness}
               onMapReady={(map) => {
                 mapInstanceRef.current = map;
+                setMapReady(true);
               }}
             />
           )}

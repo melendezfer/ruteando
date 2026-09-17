@@ -11,6 +11,8 @@ interface MapSearchResultsProps {
   loading: boolean;
   categoryNameById: Map<number, string>;
   onSelect: (business: BusinessPin) => void;
+  /** Modo sencillo/avanzado (Fase 3, CLAUDE.md sección 48) — ver MatchReasonBadges#showPrices. */
+  showPrices: boolean;
 }
 
 /**
@@ -27,11 +29,18 @@ interface MapSearchResultsProps {
  * de pedir una lista aparte: son exactamente los mismos negocios que ya
  * se dibujan como pines con la búsqueda de texto activa.
  */
-export function MapSearchResults({ query, results, loading, categoryNameById, onSelect }: MapSearchResultsProps) {
+export function MapSearchResults({
+  query,
+  results,
+  loading,
+  categoryNameById,
+  onSelect,
+  showPrices,
+}: MapSearchResultsProps) {
   if (!query) return null;
 
   return (
-    <div className="absolute inset-x-3 top-24 z-[900] max-h-[55%] overflow-y-auto rounded-card border border-border bg-surface shadow-lg">
+    <div className="absolute inset-x-3 top-36 z-[900] max-h-[50%] overflow-y-auto rounded-card border border-border bg-surface shadow-lg">
       {loading && (
         <p className="px-4 py-3 font-sans text-body-sm text-text-muted">Buscando...</p>
       )}
@@ -58,7 +67,11 @@ export function MapSearchResults({ query, results, loading, categoryNameById, on
               </span>
               {/* Por qué coincidió (Fase 2, CLAUDE.md sección 47) — ya
                   viene calculado por el backend sobre esta misma `q`. */}
-              <MatchReasonBadges matchType={business.matchType} matchedProducts={business.matchedProducts} />
+              <MatchReasonBadges
+                matchType={business.matchType}
+                matchedProducts={business.matchedProducts}
+                showPrices={showPrices}
+              />
             </div>
             <CaretRight size={18} className="shrink-0 text-text-muted" />
           </button>

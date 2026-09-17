@@ -12,6 +12,15 @@ export interface PriceOpenNowState {
 interface PriceOpenNowFieldsProps {
   value: PriceOpenNowState;
   onChange: (value: PriceOpenNowState) => void;
+  /**
+   * Modo sencillo/avanzado (Fase 3 de la fusión de buscadores, sin RF
+   * asociado — ver CLAUDE.md sección 48): en modo sencillo, los campos
+   * de precio no se muestran — "abierto ahora" sigue disponible en los
+   * dos modos, no es un filtro de precio. Default `true` (siempre
+   * visibles) para no romper otros usos futuros de este componente que
+   * no pasen este prop.
+   */
+  showPrice?: boolean;
 }
 
 /**
@@ -30,30 +39,34 @@ interface PriceOpenNowFieldsProps {
  * otro contenedor flex-wrap adentro cambiaría en qué unidad envuelven
  * los controles.
  */
-export function PriceOpenNowFields({ value, onChange }: PriceOpenNowFieldsProps) {
+export function PriceOpenNowFields({ value, onChange, showPrice = true }: PriceOpenNowFieldsProps) {
   return (
     <Fragment>
-      <div className="w-24">
-        <TextField
-          label="Precio mín."
-          type="number"
-          min={0}
-          inputMode="numeric"
-          value={value.priceMin}
-          onChange={(event) => onChange({ ...value, priceMin: event.target.value })}
-        />
-      </div>
+      {showPrice && (
+        <>
+          <div className="w-24">
+            <TextField
+              label="Precio mín."
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={value.priceMin}
+              onChange={(event) => onChange({ ...value, priceMin: event.target.value })}
+            />
+          </div>
 
-      <div className="w-24">
-        <TextField
-          label="Precio máx."
-          type="number"
-          min={0}
-          inputMode="numeric"
-          value={value.priceMax}
-          onChange={(event) => onChange({ ...value, priceMax: event.target.value })}
-        />
-      </div>
+          <div className="w-24">
+            <TextField
+              label="Precio máx."
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={value.priceMax}
+              onChange={(event) => onChange({ ...value, priceMax: event.target.value })}
+            />
+          </div>
+        </>
+      )}
 
       <button
         type="button"

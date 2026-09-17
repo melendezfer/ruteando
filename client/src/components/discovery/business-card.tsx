@@ -35,6 +35,14 @@ interface BusinessCardProps {
    * original (colapsada hasta que se toca).
    */
   defaultExpanded?: boolean;
+  /**
+   * Modo sencillo/avanzado (Fase 3, CLAUDE.md sección 48) — si se
+   * muestra el precio de cada producto coincidente en
+   * `MatchReasonBadges`. Default `false` (sencillo): un caller que no
+   * conoce el concepto de modo (si alguno apareciera más adelante) no
+   * muestra precios por accidente.
+   */
+  showPrices?: boolean;
 }
 
 /**
@@ -50,7 +58,12 @@ interface BusinessCardProps {
  * /negocios/{id} (Épica F4) — antes de esa épica no existía esa ruta y
  * este enlace quedaba deliberadamente sin ofrecerse.
  */
-export function BusinessCard({ business, categoryName, defaultExpanded = false }: BusinessCardProps) {
+export function BusinessCard({
+  business,
+  categoryName,
+  defaultExpanded = false,
+  showPrices = false,
+}: BusinessCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -116,7 +129,11 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
             {/* Por qué coincidió con la búsqueda de texto (Fase 2 de la
                 fusión de buscadores, sin RF asociado — ver CLAUDE.md
                 sección 47) — null fuera de una búsqueda por `q`. */}
-            <MatchReasonBadges matchType={business.matchType} matchedProducts={business.matchedProducts} />
+            <MatchReasonBadges
+              matchType={business.matchType}
+              matchedProducts={business.matchedProducts}
+              showPrices={showPrices}
+            />
           </div>
           {expanded ? (
             <CaretUp size={20} className="shrink-0 text-text-muted" />

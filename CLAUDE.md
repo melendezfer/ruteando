@@ -4806,3 +4806,99 @@ Cuentas de prueba borradas después.
   muestra cuando hay `matchType`. Fase 3.
 - Sin "ver en el mapa" desde `/buscar` — Fase 4.
 - Sin búsqueda por familia — Fase 5.
+
+## 48. Fusión de los dos buscadores — Fase 3 de 6: modo sencillo/avanzado
+
+Cierra el último gap pendiente de la sección 45/47 ("Me gustaría que
+hubiera un modo de búsqueda sencillo y otro más especializado que
+muestre precios", petición directa del usuario) — propia rama
+(`feature/busqueda-modo-simple-avanzado`), enteramente de frontend.
+
+### Qué decide el modo — solo precio, nada más
+
+Se acotó a propósito a lo que el usuario pidió explícitamente: mostrar
+precios o no. "Abierto ahora", el selector de radio y el filtro de
+categoría **no** dependen del modo — no son información de precio, y
+ocultarlos en modo sencillo habría sido quitarle funcionalidad no
+pedida a ese modo. Dos lugares, nada más:
+
+1. `PriceOpenNowFields#showPrice` (nuevo prop, default `true` para no
+   romper otros usos): en modo sencillo no renderiza los inputs de
+   precio mín./máx. — "Abierto ahora" se queda.
+2. `MatchReasonBadges#showPrices` (nuevo prop, **sin** default a
+   propósito — cada caller declara explícitamente en qué modo está
+   mostrando resultados, no hay un valor "razonable" a asumir en
+   silencio para un dato tan visible como un precio): en modo sencillo,
+   el chip de producto muestra solo el nombre, sin el monto.
+
+### `SearchModeToggle`
+
+`client/src/components/discovery/search-mode-toggle.tsx` (nuevo) —
+segmentado (dos botones, `role="radiogroup"`), mismo criterio que
+`MobilityToggle` (CLAUDE.md sección 36): una elección entre dos estados
+excluyentes, ninguno "apagado" por defecto. Sin persistencia (ni
+localStorage ni por cuenta de usuario) — estado local de cada pantalla,
+vuelve a "Sencilla" en cada visita; no se pidió recordarlo, y el
+proyecto no tiene ningún precedente de `localStorage` para preferencias
+de UI (sí `sessionStorage`, solo para el refresh token — ver sección
+13.2 de este archivo).
+
+Montado siempre visible (no escondido dentro del panel de filtros) en
+`/buscar` (bajo la fila de búsqueda+filtros, sobre las categorías) y en
+el mapa (segunda fila del mismo contenedor de la barra de búsqueda, Fase
+1) — el modo también afecta los chips de resultados, que se ven sin
+abrir ningún panel, así que el control tenía que estar igual de a la
+vista.
+
+### Volver a "Sencilla" limpia el precio, no lo deja actuando en silencio
+
+Si el usuario ya había puesto un precio mínimo/máximo en modo avanzado
+y vuelve a "Sencilla", `handleModeChange()` limpia `priceMin`/`priceMax`
+y vuelve a ejecutar la búsqueda — sin esto, ese precio seguiría
+filtrando los resultados aunque el panel ya no mostrara esos campos:
+estado invisible afectando el resultado, sin ninguna pista visual de
+por qué. En el mapa reusa que `runSearch()` cambia de identidad con
+`filters.priceMin`/`priceMax` (el mismo efecto que ya dispara la
+búsqueda al cambiar cualquier filtro); en `/buscar` reusa
+`refineWithFilters()`, la misma función que ya usa cualquier cambio del
+panel de filtros.
+
+### Bug real, mismo patrón que la Fase 1 — offset insuficiente, esta vez reintroducido
+
+El contenedor de la barra de búsqueda del mapa creció una fila (el
+`SearchModeToggle` nuevo, siempre visible) — el `top-24` (96px) que la
+Fase 1 ya había corregido con la medición real de Playwright quedó
+corto de nuevo, y la primera fila de `MapSearchResults`/
+`ZoneComparisonCard` volvió a aparecer parcialmente tapada. Medido de
+nuevo con `boundingBox()` real (`{ top: 178, height: 36 }` del
+`SearchModeToggle`, sumado al contenedor completo) y corregido a
+`top-36` (144px) en los dos componentes — no a ojo. Encontrado en la
+propia captura de verificación, antes de darlo por cerrado.
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del
+backend sin cambios: 536/536 (fase enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real (cuenta de
+consumidor registrada por la UI, geolocalización simulada sobre Ciudad
+Verde), con los datos reales de demo (`q=arepa`):
+- Modo sencillo (default): "Arepa boyacense"/"Arepa con chicharrón" sin
+  precio, ningún "$" en la tarjeta.
+- Modo avanzado: mismos chips, ahora con "· $ 4.500"/"· $ 7.000".
+- Panel de filtros: precio mín./máx. visibles solo en modo avanzado
+  (confirmado que el campo "Precio mín." no está en el DOM en modo
+  sencillo, no solo oculto visualmente).
+- Poner `priceMin=1000` en avanzado y volver a "Sencilla" limpia el
+  campo (confirmado que vuelve a estar vacío al reabrir el panel).
+- Mismo comportamiento confirmado en `/buscar`.
+
+Cuentas de prueba borradas después.
+
+### Gaps conocidos — quedan para las fases siguientes
+
+- Sin "ver en el mapa" desde `/buscar` — Fase 4.
+- Sin búsqueda por familia (categorías nuevas + alias) — Fase 5.
+- El modo no se recuerda entre pantallas (`/buscar` y el mapa tienen
+  cada uno su propio `advanced`, independientes) ni entre visitas — no
+  se pidió, y el resto de los filtros de este proyecto (categoría,
+  precio, radio) ya funcionan igual, sin sincronizar entre pantallas.

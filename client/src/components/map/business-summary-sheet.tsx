@@ -10,6 +10,8 @@ interface BusinessSummarySheetProps {
   business: Business;
   categoryName: string | null;
   onClose: () => void;
+  /** Modo sencillo/avanzado (Fase 3, CLAUDE.md sección 48) — pasado tal cual a BusinessCard. */
+  showPrices: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface BusinessSummarySheetProps {
  * resumen (horario de hoy + calificación) ya está visible desde el primer
  * toque sobre el pin, sin un segundo toque para expandir.
  */
-export function BusinessSummarySheet({ business, categoryName, onClose }: BusinessSummarySheetProps) {
+export function BusinessSummarySheet({ business, categoryName, onClose, showPrices }: BusinessSummarySheetProps) {
   return (
     <div className="absolute inset-x-0 bottom-0 z-[1000] px-3 pb-3">
       <div className="relative">
@@ -36,6 +38,7 @@ export function BusinessSummarySheet({ business, categoryName, onClose }: Busine
           business={business}
           categoryName={categoryName}
           defaultExpanded
+          showPrices={showPrices}
         />
       </div>
     </div>

@@ -9,17 +9,6 @@ type BusinessZone = components["schemas"]["BusinessZone"];
 interface ZoneComparisonCardProps {
   zones: BusinessZone[];
   onJumpToZone: (zone: BusinessZone) => void;
-  /**
-   * Fase 1 de la fusión de buscadores (sin RF asociado, ver CLAUDE.md
-   * sección 45): map-screen.tsx ahora tiene una barra de búsqueda fija en
-   * `top-3` — este prop empuja la tarjeta debajo de esa barra en vez de
-   * superponerse, mismo criterio que `aboveBottomNav` en
-   * FloatingActionStack. Offset medido con Playwright (`boundingBox()`
-   * real del contenedor completo, input + SearchModeToggle de la Fase
-   * 3) — no a ojo, ver CLAUDE.md sección 46/48 sobre el mismo bug ya
-   * encontrado una vez con un offset insuficiente.
-   */
-  belowSearchBar?: boolean;
 }
 
 /**
@@ -35,8 +24,15 @@ interface ZoneComparisonCardProps {
  * con estrictamente MÁS variedad que la actual — si no existe ninguna
  * (la más cercana ya es la más variada, o solo hay una zona), este
  * componente no renderiza nada: no hay nada que sugerir.
+ *
+ * Siempre `top-3` — hasta la Fase B de la retroalimentación sobre el
+ * buscador (sin RF asociado, ver CLAUDE.md sección 51) esta tarjeta
+ * necesitaba un prop `belowSearchBar` para esquivar la caja de búsqueda
+ * fija del mapa (con un offset medido a mano que se rompió dos veces,
+ * Fases 1 y 3). Esa caja ya no existe — el buscador vive en una hoja
+ * inferior (`MapSearchSheet`), así que no hay nada arriba que esquivar.
  */
-export function ZoneComparisonCard({ zones, onJumpToZone, belowSearchBar = false }: ZoneComparisonCardProps) {
+export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardProps) {
   if (zones.length === 0) return null;
 
   const currentZone = zones[0];
@@ -49,9 +45,7 @@ export function ZoneComparisonCard({ zones, onJumpToZone, belowSearchBar = false
   const minutes = estimateWalkingMinutes(betterZone.distanceMeters ?? 0);
 
   return (
-    <div
-      className={`absolute left-3 right-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur ${belowSearchBar ? "top-36" : "top-3"}`}
-    >
+    <div className="absolute left-3 right-3 top-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
       <div className="flex items-start gap-2">
         <MapTrifold size={20} weight="duotone" className="mt-0.5 shrink-0 text-mostaza" />
         <p className="font-sans text-body-sm text-text">

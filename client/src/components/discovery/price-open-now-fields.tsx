@@ -24,17 +24,18 @@ interface PriceOpenNowFieldsProps {
 }
 
 /**
- * Precio mín./máx. + "abierto ahora" — extraído de MapFiltersSheet (Fase
- * 1 de la fusión de buscadores, sin RF asociado — ver CLAUDE.md sección
- * 45) para reusarse también en `/buscar`, que no tiene el mismo
- * contenedor de alto fijo que el mapa: ahí estos campos se expanden
- * in-place bajo la barra de búsqueda (CLAUDE.md sección 17), no como un
- * "bottom sheet" anclado al viewport — MapFiltersSheet sigue siendo
- * quien decide esa posición para el mapa, envolviendo este mismo
- * componente junto con el selector de radio.
+ * Precio mín./máx. + "abierto ahora" — extraído originalmente del panel
+ * "Filtros" del mapa (Fase 1 de la fusión de buscadores, sin RF asociado
+ * — ver CLAUDE.md sección 45) para reusarse también en `/buscar`, donde
+ * estos campos se expanden in-place bajo la barra de búsqueda (CLAUDE.md
+ * sección 17). Desde la Fase B de la retroalimentación sobre el
+ * buscador (sección 51), el mapa dejó de tener un panel "Filtros"
+ * separado — `MapSearchSheet` es ahora quien envuelve este mismo
+ * componente (junto con el selector de radio) dentro de la hoja de
+ * búsqueda unificada.
  *
  * Sin div contenedor propio a propósito (un `Fragment`) — cada caller ya
- * tiene su propio `flex flex-wrap` (MapFiltersSheet lo comparte con el
+ * tiene su propio `flex flex-wrap` (MapSearchSheet lo comparte con el
  * selector de radio; el panel inline de /buscar lo usa solo) y anidar
  * otro contenedor flex-wrap adentro cambiaría en qué unidad envuelven
  * los controles.

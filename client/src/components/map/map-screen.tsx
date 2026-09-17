@@ -3,17 +3,14 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type L from "leaflet";
-import { Crosshair, SlidersHorizontal, X } from "@phosphor-icons/react/dist/ssr";
+import { Crosshair, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { Skeleton } from "@/components/discovery/skeleton";
-import { SearchBar } from "@/components/discovery/search-bar";
-import { SearchModeToggle } from "@/components/discovery/search-mode-toggle";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
-import { MapFiltersSheet, type MapFiltersState } from "@/components/map/map-filters";
-import { MapSearchResults } from "@/components/map/map-search-results";
+import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
 import type { BusinessPin } from "@/components/map/leaflet-map";
@@ -48,12 +45,20 @@ const LeafletMap = dynamic(() => import("@/components/map/leaflet-map").then((mo
 /**
  * Vista de mapa (Épica F3, retrofit fix/mapa-floating-action-stack):
  * pines agrupados contra GET /businesses/nearby (o GET /businesses sin
- * geolocalización). Los controles ya no son una barra fija arriba del
- * mapa — el mismo FloatingActionStack de la Épica F4 (ver CLAUDE.md,
- * sección FloatingActionStack) reemplaza esos controles: "Mi ubicación"
- * como acción principal (recentra el mapa, o reintenta el permiso si
- * fue denegado) y "Filtros" como secundaria (abre el panel de
- * distancia/precio/abierto-ahora como bottom sheet, sección 17).
+ * geolocalización). Los controles no son una barra fija arriba del mapa
+ * — el mismo FloatingActionStack de la Épica F4 (ver CLAUDE.md, sección
+ * FloatingActionStack) los agrupa: "Mi ubicación" como acción principal
+ * (recentra el mapa, o reintenta el permiso si fue denegado) y "Buscar"
+ * como secundaria.
+ *
+ * "Buscar" reemplaza a lo que hasta la Fase B de la retroalimentación
+ * sobre el buscador (sin RF asociado — ver CLAUDE.md sección 51) eran
+ * DOS superficies separadas: una caja de texto fija arriba del mapa
+ * (Fase 1, sección 45) y un botón "Filtros" aparte (distancia/precio/
+ * abierto-ahora, también Fase 1) — ahora las dos viven juntas en un
+ * solo bottom sheet (`MapSearchSheet`), abierto desde este mismo botón,
+ * mismo slot secundario de `FloatingActionStack` que antes ocupaba
+ * "Filtros" (sin tocar ese componente, sigue siendo 2 slots fijos).
  */
 interface MapScreenProps {
   /**
@@ -82,16 +87,17 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
 
   const [categories, setCategories] = useState<Category[]>([]);
   // Texto libre del buscador del mapa (Fase 1 de la fusión de
-  // buscadores, sin RF asociado — ver CLAUDE.md sección 45): antes el
-  // mapa no tenía ninguna caja de texto, solo los filtros de
-  // precio/abierto-ahora/radio de abajo. `searchKey` fuerza un remount
-  // de SearchBar (que maneja su propio input internamente, sin `value`
-  // controlado) para limpiar visualmente el campo cuando se toca "Limpiar".
+  // buscadores, sin RF asociado — ver CLAUDE.md sección 45). `searchKey`
+  // fuerza un remount de SearchBar (que maneja su propio input
+  // internamente, sin `value` controlado) para limpiar visualmente el
+  // campo cuando se toca "Limpiar" — sigue haciendo falta aunque el
+  // input ahora viva dentro de MapSearchSheet (Fase B, sección 51).
   const [query, setQuery] = useState("");
   const [searchKey, setSearchKey] = useState(0);
   // Sencilla/avanzada (Fase 3, sin RF asociado — ver CLAUDE.md sección
-  // 48): decide si se muestran precios — el panel de filtros y los
-  // chips de "por qué coincidió". Default "sencilla", sin persistencia.
+  // 48): decide si se muestran precios — los campos de precio del
+  // buscador y los chips de "por qué coincidió". Default "sencilla",
+  // sin persistencia.
   const [advanced, setAdvanced] = useState(false);
   const [zones, setZones] = useState<BusinessZone[]>([]);
   const [selected, setSelected] = useState<BusinessPin | null>(null);
@@ -102,7 +108,10 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   // popup aparezca, no al mismo tiempo.
   const [pendingSelection, setPendingSelection] = useState<BusinessPin | null>(null);
   const pendingSelectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Hoja de búsqueda (texto + Sencilla/Avanzada + distancia/precio/
+  // abierto-ahora + resultados, todo junto — Fase B, sección 51),
+  // abierta desde el botón "Buscar" de FloatingActionStack.
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
   const [filters, setFilters] = useState<MapFiltersState>({
     radiusKm: DEFAULT_MAP_RADIUS_KM,
     priceMin: "",
@@ -277,9 +286,12 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   // arriba; sin esto, ese instante mostraría "No encontramos negocios"
   // en vez del skeleton.
   const showSkeleton = businesses.length === 0 && (loading || rawBusinesses === null);
-  // Con `query` activo, MapSearchResults ya comunica "sin resultados"
-  // para ese texto — no duplicar el mismo mensaje centrado sobre el mapa.
-  const showEmptyState = !loading && rawBusinesses !== null && businesses.length === 0 && !query;
+  // Con `query` activo, MapSearchSheet ya comunica "sin resultados" para
+  // ese texto — no duplicar el mismo mensaje centrado sobre el mapa. Con
+  // la hoja abierta tampoco (Fase B, sección 51): mostrar un mensaje
+  // flotando detrás de una hoja que ya cubre media pantalla es ruido.
+  const showEmptyState =
+    !loading && rawBusinesses !== null && businesses.length === 0 && !query && !searchSheetOpen;
 
   let center = DEFAULT_CENTER;
   if (geolocation.status === "granted" && geolocation.coords) {
@@ -306,7 +318,7 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   }
 
   function handleSelectBusiness(business: BusinessPin) {
-    setFiltersOpen(false);
+    setSearchSheetOpen(false);
     // El pin ya arranca a crecer acá (ver selectedBusinessId más abajo,
     // que combina pendingSelection y selected) — BusinessSummarySheet
     // recién se abre cuando esa animación termina.
@@ -320,7 +332,7 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   }
 
   /**
-   * Tocar un resultado de MapSearchResults (Fase 1, sección 45) — a
+   * Tocar un resultado dentro de MapSearchSheet (Fase 1, sección 45) — a
    * diferencia de tocar un pin ya visible, el negocio puede estar fuera
    * del encuadre actual o agrupado dentro de un cluster, así que primero
    * recentra el mapa sobre su coordenada (mismo zoom que "Mi ubicación")
@@ -350,18 +362,18 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     }
   }
 
-  function handleToggleFilters() {
+  function handleToggleSearchSheet() {
     if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
     setPendingSelection(null);
     setSelected(null);
-    setFiltersOpen((open) => !open);
+    setSearchSheetOpen((open) => !open);
   }
 
   return (
     // pb-24 a propósito: BottomNavBar (CLAUDE.md sección 27) es `fixed`,
     // así que no reserva espacio por sí sola en el flujo normal — sin este
     // padding, el borde inferior de este contenedor (de donde cuelgan
-    // BusinessSummarySheet/MapFiltersSheet con `absolute bottom-0`, y
+    // BusinessSummarySheet/MapSearchSheet con `absolute bottom-0`, y
     // hasta el propio mapa de Leaflet) quedaría debajo de la barra fija,
     // no encima. FloatingActionStack no depende de esto — usa su propio
     // prop `aboveBottomNav` porque es `fixed`, no `absolute` dentro de
@@ -423,42 +435,6 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           )}
         </div>
 
-        {/*
-          Buscador de texto (Fase 1, CLAUDE.md sección 45) — siempre
-          visible arriba del mapa, mismo lugar que ocupa en /buscar.
-          `bg-surface` + `shadow-lg` para que se lea sobre los tiles del
-          mapa, mismo lenguaje visual que MapFiltersSheet.
-        */}
-        <div className="absolute inset-x-3 top-3 z-[1000] flex flex-col gap-2 rounded-card border border-border bg-surface p-3 shadow-lg">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <SearchBar key={searchKey} onSearch={handleTextSearch} />
-            </div>
-            {query && (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                aria-label="Limpiar búsqueda"
-                className="mt-7 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-text-muted hover:bg-background"
-              >
-                <X size={16} weight="bold" />
-              </button>
-            )}
-          </div>
-          <SearchModeToggle advanced={advanced} onChange={handleModeChange} />
-        </div>
-
-        {!selected && !filtersOpen && (
-          <MapSearchResults
-            query={query}
-            results={businesses}
-            loading={loading}
-            categoryNameById={categoryNameById}
-            onSelect={handleSelectFromSearch}
-            showPrices={advanced}
-          />
-        )}
-
         {showEmptyState && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
             <p className="rounded-card bg-surface px-4 py-3 text-center font-sans text-body-sm text-text-muted shadow">
@@ -467,8 +443,8 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           </div>
         )}
 
-        {!selected && !filtersOpen && !query && (
-          <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} belowSearchBar />
+        {!selected && !searchSheetOpen && !query && (
+          <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} />
         )}
 
         {selected && (
@@ -480,17 +456,26 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           />
         )}
 
-        {filtersOpen && (
-          <MapFiltersSheet
+        {searchSheetOpen && (
+          <MapSearchSheet
+            searchKey={searchKey}
+            query={query}
+            onSearch={handleTextSearch}
+            onClear={handleClearSearch}
+            advanced={advanced}
+            onModeChange={handleModeChange}
             filters={filters}
-            onChange={setFilters}
+            onFiltersChange={setFilters}
             showRadius={showRadiusFilter}
-            showPrice={advanced}
-            onClose={() => setFiltersOpen(false)}
+            results={businesses}
+            resultsLoading={loading}
+            categoryNameById={categoryNameById}
+            onSelectResult={handleSelectFromSearch}
+            onClose={() => setSearchSheetOpen(false)}
           />
         )}
 
-        {!selected && !filtersOpen && (
+        {!selected && !searchSheetOpen && (
           <FloatingActionStack
             aboveBottomNav
             primary={{
@@ -499,9 +484,9 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
               onClick: handleLocateMe,
             }}
             secondary={{
-              icon: <SlidersHorizontal size={20} weight="bold" />,
-              label: "Filtros",
-              onClick: handleToggleFilters,
+              icon: <MagnifyingGlass size={20} weight="bold" />,
+              label: "Buscar",
+              onClick: handleToggleSearchSheet,
             }}
           />
         )}

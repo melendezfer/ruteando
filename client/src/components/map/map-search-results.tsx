@@ -17,11 +17,9 @@ interface MapSearchResultsProps {
 }
 
 /**
- * Lista de resultados de texto libre sobre el mapa (Fase 1 de la fusión
- * de buscadores, sin RF asociado — ver CLAUDE.md sección 45): antes de
- * esto, el mapa no tenía ninguna caja de texto — solo filtros de
- * precio/abierto-ahora/radio (MapFiltersSheet) sobre los pines. Tocar un
- * resultado hace lo mismo que tocar su pin (recentra + abre
+ * Contenido de los resultados de texto libre del mapa (Fase 1 de la
+ * fusión de buscadores, sin RF asociado — ver CLAUDE.md sección 45).
+ * Tocar un resultado hace lo mismo que tocar su pin (recentra + abre
  * BusinessSummarySheet, ver map-screen.tsx#handleSelectBusiness) — no
  * duplica esa experiencia, solo la hace accesible sin tener que
  * encontrar el pin a ojo en el mapa.
@@ -29,6 +27,15 @@ interface MapSearchResultsProps {
  * Reusa `businesses` (ya filtrado a BusinessPin, con coordenadas) en vez
  * de pedir una lista aparte: son exactamente los mismos negocios que ya
  * se dibujan como pines con la búsqueda de texto activa.
+ *
+ * Sin posicionamiento propio (`absolute`/offset) a propósito — Fase B de
+ * la retroalimentación sobre el buscador (sin RF asociado, ver CLAUDE.md
+ * sección 51): hasta esa fase este componente flotaba solo, anclado
+ * bajo la caja de búsqueda fija del mapa (con un offset medido a mano,
+ * `top-36`, que se rompió dos veces cuando esa caja creció una fila —
+ * Fases 1 y 3). Ahora vive embebido dentro de `MapSearchSheet`, que ya
+ * es la única superficie posicionada — este componente es contenido
+ * puro (scroll incluido, lo maneja el padre).
  */
 export function MapSearchResults({
   query,
@@ -41,7 +48,7 @@ export function MapSearchResults({
   if (!query) return null;
 
   return (
-    <div className="absolute inset-x-3 top-36 z-[900] max-h-[50%] overflow-y-auto rounded-card border border-border bg-surface shadow-lg">
+    <div>
       {loading && (
         <p className="px-4 py-3 font-sans text-body-sm text-text-muted">Buscando...</p>
       )}

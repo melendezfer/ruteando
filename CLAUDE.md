@@ -4162,3 +4162,62 @@ para `/auth/refresh`), 401 con la contraseña actual incorrecta (y que
 ese intento fallido no toca la contraseña real), 401 sin token, 422
 con una contraseña nueva corta. Suite completa del backend: 522/522.
 Cuenta de prueba borrada después.
+
+## 41. `PATCH /users/me` — editar nombre y celular
+
+Sin RF asociado — el endpoint ya estaba declarado completo en
+`openapi.yaml` desde antes (`fullName`/`phone`/`profilePhotoUrl`) pero
+nunca tuvo ruta ni implementación, mismo tipo de gap que
+`DELETE /users/me` (sección 23) salvo que acá sí tenía sentido
+completarlo tal cual. Propia rama (`feature/editar-perfil-usuario`).
+
+**Alcance deliberadamente recortado**: solo `fullName`/`phone` —
+`profilePhotoUrl` queda declarado en el contrato pero sin implementar
+(nota agregada en `openapi.yaml` explicando por qué): no existe ningún
+pipeline de subida de foto de perfil de **usuario** (distinto de fotos
+de negocio/producto, Épica 3) — construirlo hubiera sido una
+funcionalidad bastante más grande que "editar el celular", que es lo
+que se pidió.
+
+### Dónde vive la lógica — sin `usuarios.service.js` nuevo
+
+A diferencia de la mayoría de los dominios de este proyecto, `usuarios`
+nunca tuvo una capa de servicio propia — `me()` (Épica 1) ya llamaba a
+`usuariosRepo.buscarPorId` directo desde el controlador, sin nada en
+medio. Se mantuvo ese mismo criterio en vez de introducir un archivo
+nuevo solo para esta funcionalidad: `usersController.updateMe` resuelve
+el merge "campo omitido conserva el valor existente" (trae el usuario
+actual, sustituye solo lo que vino en el body) y llama directo a
+`usuariosRepo.actualizar(id, {...})` con los valores ya finales — mismo
+principio que `negocios.service.js#actualizar` con un PATCH parcial,
+solo que acá el "service" es el propio controlador por lo liviano que
+es. `src/validators/usuarios.validators.js` (nuevo, siguiendo la
+convención de un archivo de validadores por dominio, no metido dentro
+de `auth.validators.js`) exige al menos uno de los dos campos —
+un body vacío es 422, no un no-op silencioso.
+
+### Verificado con la suite completa + en vivo
+
+`tests/integration/users.test.js` (nuevo — no existía ningún archivo de
+pruebas para `usuarios` fuera de auth/password): actualizar los dos
+campos juntos, actualizar solo uno y confirmar que el otro se conserva
+(los dos sentidos), 422 con body vacío, 422 con `fullName` vacío, 401
+sin token. Suite completa del backend: 528/528. Verificado además con
+`curl` directo contra el backend real (cuenta de demo
+`demo-arepas-dona-rosa@ruteando.test`) y con Playwright contra el
+frontend real (`SettingsTab`, cuenta `demo-perros-el-parche@ruteando.test`):
+edición → mensaje de confirmación → **recarga real de la página**
+(confirma que el backend quedó actualizado, no solo el estado en
+memoria) → validación del lado del cliente bloqueando un nombre vacío
+→ datos de la cuenta de demo restaurados a como estaban al terminar.
+
+### Frontend
+
+`SettingsTab` — la sección "Tu cuenta" (antes de solo lectura) pasó a
+ser un formulario (`updateProfile()`, `client/src/lib/api/update-profile.ts`)
+con los mismos dos campos; correo y tipo de cuenta siguen debajo, de
+solo lectura, sin endpoint para cambiarlos. `AuthContextValue` ganó
+`updateUser(user)` (nuevo, junto a `applyNewTokens`) — a diferencia de
+cambiar la contraseña, `PATCH /users/me` no rota tokens, así que no
+hacía falta re-emitir sesión: solo reflejar el `User` ya devuelto por
+la respuesta en el estado en memoria, sin un `GET /users/me` adicional.

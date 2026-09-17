@@ -1069,6 +1069,12 @@ paths:
     patch:
       tags: [Usuarios]
       summary: Editar el perfil propio
+      description: >-
+        Implementado con solo fullName/phone (sin RF asociado, ver
+        CLAUDE.md) — profilePhotoUrl queda declarado acá pero sin
+        implementación todavía: no existe ningún pipeline de subida de
+        foto de perfil de usuario (distinto de fotos de negocio/
+        producto, Épica 3), sería una funcionalidad aparte.
       requestBody:
         required: true
         content:
@@ -1085,6 +1091,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Usuarios]

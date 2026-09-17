@@ -51,6 +51,21 @@ async function actualizarContrasena(id, contrasenaHash) {
   );
 }
 
+// PATCH /users/me (sin RF asociado, ver CLAUDE.md) — el merge de "qué
+// campo se manda vs. cuál se conserva" ya se resolvió en el controlador
+// (mismo criterio que negocios.service.js#actualizar con PATCH parcial),
+// así que acá solo se escriben los valores finales, sin COALESCE.
+async function actualizar(id, { nombreCompleto, telefono }) {
+  const { rows } = await pool.query(
+    `UPDATE usuarios
+     SET nombre_completo = $2, telefono = $3, fecha_actualizacion = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, nombreCompleto, telefono],
+  );
+  return rows[0];
+}
+
 /**
  * Endpoint faltante agregado en la Épica 9 (ver CLAUDE.md): "suspender un
  * usuario" es exactamente esto — usuarios.activo ya bloqueaba login()/
@@ -88,6 +103,7 @@ module.exports = {
   buscarPorCorreo,
   buscarPorId,
   actualizarContrasena,
+  actualizar,
   suspender,
   contarTotal,
 };

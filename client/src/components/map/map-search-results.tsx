@@ -2,6 +2,7 @@
 
 import { CaretRight } from "@phosphor-icons/react/dist/ssr";
 import type { BusinessPin } from "@/components/map/leaflet-map";
+import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
 
 interface MapSearchResultsProps {
@@ -55,6 +56,9 @@ export function MapSearchResults({ query, results, loading, categoryNameById, on
                 {business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? "Comercio informal") : "Comercio informal"}
                 {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
               </span>
+              {/* Por qué coincidió (Fase 2, CLAUDE.md sección 47) — ya
+                  viene calculado por el backend sobre esta misma `q`. */}
+              <MatchReasonBadges matchType={business.matchType} matchedProducts={business.matchedProducts} />
             </div>
             <CaretRight size={18} className="shrink-0 text-text-muted" />
           </button>

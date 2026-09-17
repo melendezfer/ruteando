@@ -1736,6 +1736,97 @@ igual que la usaría un celular, pero no prueba el dispositivo en sí.
   configurado, ver `ci.yml`) que un origen permitido recibe el header
   `Access-Control-Allow-Origin` y uno no permitido no lo recibe.
 
+### Bug real: "Cargando sesión..." colgado para siempre por LAN — `--prod-frontend`
+
+Reportado por el usuario, propia rama de diagnóstico
+(`fix/sesion-colgada-sin-token`, cerrada sin cambios de aplicación — ver
+más abajo por qué). Síntoma: entrando por primera vez a `http://192.168.1.8:3001`
+(sin ningún token guardado), la app se quedaba en "Cargando sesión…"
+para siempre — la pestaña Network con filtro Fetch/XHR mostraba **cero**
+peticiones, ni siquiera un intento de refrescar sesión.
+
+**Investigado antes de tocar código, no asumido**: se agregó
+`console.log` temporal en el efecto de arranque de
+`client/src/lib/auth/auth-context.tsx` (el que decide `loading` →
+`authenticated`/`unauthenticated`) y se probó con Playwright (contexto
+nuevo = mismo efecto que Incógnito) en 3 combinaciones:
+
+| Modo | Origen | Resultado |
+|---|---|---|
+| `next dev` | `localhost:3001` | Funciona — el efecto se dispara, `status` pasa a `unauthenticated` |
+| `next dev` | IP de LAN | **Se cuelga** — el `useEffect` nunca se dispara, ni el primer `console.log` |
+| `next start` (producción) | IP de LAN | Funciona — mismo efecto, mismo resultado que localhost |
+
+Es decir: **no se reproduce en localhost** (la hipótesis original de
+"reproducirlo sin LAN" no se confirmó) y **tampoco en producción por la
+misma IP de LAN** — solo pasa con `next dev` accedido por la IP de LAN a
+la vez. La consola mostraba, sin parar:
+
+```
+WebSocket connection to 'ws://192.168.1.8:3001/_next/hmr?id=...' failed:
+Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE
+```
+
+El socket de HMR (recarga en vivo) de Next/Turbopack — que no existe en
+un build de producción — nunca completa su handshake al acceder por esa
+IP en este entorno (WSL2 NAT + `netsh interface portproxy`, ya
+documentado arriba en esta sección como una fuente de complejidad de
+red). Cuando eso pasa, React nunca llega a hidratar — ningún efecto de
+**toda** la app corre, no solo el de `auth-context.tsx`, por eso cero
+peticiones de red de cualquier tipo. El código de `auth-context.tsx` es
+correcto — confirmado corriendo exactamente el mismo código, por la
+misma IP, en modo producción, sin ningún cambio.
+
+**Sin fix de aplicación posible**: si React nunca hidrata, ningún JS del
+lado del cliente llega a ejecutarse — no hay ningún `setTimeout` de
+rescate ni lógica de respaldo que pueda escribirse en código de la app
+para esto, porque ese código mismo depende de que la hidratación ya haya
+ocurrido. Perseguir la causa de red exacta (por qué el *upgrade* a
+WebSocket específicamente falla cuando el resto del tráfico HTTP normal
+por la misma ruta funciona bien) quedó fuera de alcance — decisión
+explícita del usuario: es un problema de entorno de desarrollo, nunca
+afecta a un usuario real (la build de producción no tiene socket de HMR
+en absoluto), así que no vale la pena perseguirlo.
+
+**Solución elegida: probar por LAN con un build de producción, sin
+HMR** — `bash scripts/dev-lan.sh --prod-frontend` en vez de
+`bash scripts/dev-lan.sh` a secas. Reusa TODO lo que ya hacía el script
+(detección de IPs, Postgres/MinIO, migraciones, reescritura de
+`client/.env.local`/`CORS_ORIGIN`, reenvío de puertos/Firewall) — lo
+único que cambia es el paso 5: en vez de `pm2 startOrReload` con
+`ruteando-frontend` (`next dev`), compila el frontend
+(`npm run build` dentro de `client/`, ya recoge el `NEXT_PUBLIC_API_BASE_URL`
+recién reescrito) y levanta `ruteando-frontend-prod` (nuevo proceso pm2,
+`npm run start` → `next start -p 3001 -H 0.0.0.0`) en su lugar —
+`pm2 delete` del que no corresponde en cada modo, porque los dos
+procesos bindean el mismo puerto 3001 y nunca pueden estar los dos
+registrados en pm2 a la vez. Volver a correr el script **sin** el flag
+restaura `next dev` normal — probado en los dos sentidos.
+
+`client/package.json#start` pasó de `next start -p 3001` a
+`next start -p 3001 -H 0.0.0.0` — mismo motivo ya documentado para
+`dev` en esta misma sección (el bind a todas las interfaces no debería
+depender de un default implícito de Next.js que podría cambiar).
+
+**Verificado de punta a punta, no solo "el script no tiró error"**: con
+`ruteando-frontend` (dev) corriendo, `bash scripts/dev-lan.sh --prod-frontend`
+→ pm2 queda con `ruteando-frontend-prod` (sin `ruteando-frontend`) → con
+Playwright, `http://192.168.1.8:3001` carga normal ("Iniciar sesión"/
+"Crear cuenta", con los fetches RSC reales de vuelta, sin ningún error
+de WebSocket en consola) → `bash scripts/dev-lan.sh` (sin el flag) →
+pm2 vuelve a `ruteando-frontend` (sin `ruteando-frontend-prod`) — los
+dos sentidos confirmados, no solo uno.
+
+### Gap conocido, no oculto
+
+- El modo `--prod-frontend` no tiene recarga en vivo — cualquier cambio
+  de código en `client/` requiere volver a correr
+  `bash scripts/dev-lan.sh --prod-frontend` (recompila) para verse
+  reflejado. Es exactamente el trade-off que resuelve el bug (sin
+  socket de HMR, no hay nada que se pueda colgar) — usarlo solo para
+  probar por celular/LAN cuando haga falta, no como reemplazo del
+  `next dev` normal para el día a día en este mismo computador.
+
 ## 25. Datos de demo: `scripts/seedDemoBusinesses.js`
 
 Petición directa del usuario, sin RF asociado — script para poblar el

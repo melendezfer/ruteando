@@ -2231,18 +2231,21 @@ la URL.
 ### Pantallas fuera de la barra — mismo criterio que `BackButton` (sección 27)
 
 `BottomNavBar` solo se monta dentro de `RequireAuth` en las 4 pantallas
-principales (`/`, `/mapa`, `/favoritos`, `/perfil`). Quedan fuera, a
-propósito, exactamente las mismas pantallas que ya no llevaban
-`AppHeader`:
+principales (`/`, `/mapa`, `/favoritos`, `/perfil`). Quedaba fuera, a
+propósito según esta sección original, exactamente las mismas pantallas
+que ya no llevaban `AppHeader` — **`GET /negocios/{businessId}` ya no es
+una de ellas, ver sección 42**: la decisión de no mostrarla ahí ni para
+un visitante con sesión activa se revirtió por un bug real, no se
+mantiene vigente tal como se describe abajo.
 
 - `GET /negocios/{businessId}` — sigue siendo alcanzable sin sesión
-  (link de WhatsApp, Open Graph); `BackButton` (sección 27) sigue siendo
-  su única salida, sin cambios en este PR. **Decisión explícita, no un
-  descuido**: no se le agregó `BottomNavBar` condicionada a
-  `user` (aunque esta pantalla ya usa `useAuth()` para `isOwner`) — el
-  alcance pedido fueron "las pantallas principales", no "cualquier
-  pantalla cuando hay sesión". Mostrarla ahí también para un visitante
-  con sesión activa es una mejora razonable a futuro, no construida acá.
+  (link de WhatsApp, Open Graph) y en ese caso `BackButton` (sección 27)
+  sigue siendo su única salida, sin cambios. **Con sesión activa, desde
+  la sección 42, también monta `BottomNavBar`** — la decisión original
+  de esta sección ("no se pidió, sería una mejora a futuro") quedó
+  invalidada por un bug real: un vendedor autoredirigido acá como su
+  pantalla de inicio (sección 38) se quedaba sin ninguna forma de llegar
+  al mapa/favoritos/perfil.
 - `/negocios/nuevo` (asistente de registro) y `/legal/*` — sin cambios,
   ya tenían su propia salida (sección 27).
 
@@ -4221,3 +4224,59 @@ solo lectura, sin endpoint para cambiarlos. `AuthContextValue` ganó
 cambiar la contraseña, `PATCH /users/me` no rota tokens, así que no
 hacía falta re-emitir sesión: solo reflejar el `User` ya devuelto por
 la respuesta en el estado en memoria, sin un `GET /users/me` adicional.
+
+## 42. Bug real: un vendedor quedaba sin salida en su propio negocio (regresión de la sección 38)
+
+Reportado por el usuario probando la app real en el navegador después de
+fusionar la sección 41 ("quedó pegada en la vista del vendedor") — propia
+rama (`fix/negocio-propio-sin-navegacion`).
+
+### Causa raíz, reproducida antes de tocar código
+
+La pantalla de inicio por rol (sección 38) manda a un vendedor con
+exactamente un negocio activo directo a `/negocios/{id}` en vez del
+mapa. Esa pantalla (sección 27/28) nunca montaba `BottomNavBar` — decisión
+explícita en su momento, porque hasta la sección 38 solo era alcanzable
+como un destino que alguien visitaba DESDE otra pantalla de la app (o sin
+sesión, por un link compartido), nunca como el punto de entrada. Desde la
+sección 38, para un vendedor con un negocio activo, **es** el punto de
+entrada — y su única salida (`BackButton`) cae por default a `/`, que la
+sección 38 vuelve a redirigir de inmediato al mismo negocio. Reproducido
+con Playwright antes de escribir el fix: tras iniciar sesión como una
+cuenta de vendedor de demo, no había ningún `getByRole('link', { name:
+'Mapa' })` en la página — la barra de navegación no existía en absoluto
+en esa pantalla, así que no había ningún control con el que salir.
+
+### Fix
+
+`business-profile-screen.tsx` monta `<BottomNavBar />` cuando hay sesión
+activa (`user`, cualquier usuario autenticado — no solo `isOwner`,
+mismo criterio que ya se había dejado anotado como "mejora razonable a
+futuro" en la sección 28 y que este bug obligó a construir ahora).
+`FloatingActionStack` (WhatsApp/Cómo llegar) recibe
+`aboveBottomNav={Boolean(user)}` para no quedar tapado por la barra
+nueva — mismo prop que ya usaba `MapScreen` para el mismo problema
+(sección 20). Un visitante **sin** sesión sigue sin ver la barra, sin
+cambios: sigue siendo la misma pantalla alcanzable por un link de
+WhatsApp que la sección 27 diseñó, con `BackButton` como única salida.
+
+### Verificado con Playwright contra el servidor de desarrollo real
+
+Reproducido el bug primero (confirmado: sin la barra, ningún link
+"Mapa" en la página), luego confirmado el fix: la misma cuenta de
+vendedor de demo, tras iniciar sesión y aterrizar en su propio negocio,
+ahora puede tocar "Mapa"/"Favoritos"/"Perfil" en la barra inferior y
+llegar a cada pantalla real — y navegar directo a `/mapa` por URL
+también funciona (antes del fix ya funcionaba igual, pero sin ninguna
+forma de *llegar* ahí desde la interfaz). Confirmado además que un
+visitante anónimo en ese mismo negocio sigue sin ver la barra
+(`getByRole('navigation', { name: 'Navegación principal' })` no
+visible) — el fix no cambia el comportamiento para quien no tiene
+sesión.
+
+### Gap conocido, no ocultado por el fix
+
+`BottomNavBar` no resalta ningún destino como activo en esta pantalla
+(no es una de las 4 rutas de `DESTINATIONS`) — comportamiento esperado,
+no un descuido: el perfil de negocio no es uno de los 4 destinos
+principales, solo necesitaba dejar de ser un callejón sin salida.

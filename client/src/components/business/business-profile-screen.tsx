@@ -16,6 +16,7 @@ import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from 
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { BackButton } from "@/components/ui/back-button";
+import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
@@ -524,7 +525,10 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
               }
             : null
         }
+        aboveBottomNav={Boolean(user)}
       />
+
+      {user && <BottomNavBar />}
     </div>
   );
 }

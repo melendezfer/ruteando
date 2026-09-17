@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Briefcase,
@@ -28,6 +29,7 @@ import { ReviewForm } from "@/components/business/review-form";
 import { BusinessFeedbackPanel } from "@/components/business/business-feedback-panel";
 import { PhoneVerificationPanel } from "@/components/business/phone-verification-panel";
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
+import { Skeleton } from "@/components/discovery/skeleton";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { MobilityToggle } from "@/components/business/mobility-toggle";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
@@ -87,6 +89,20 @@ const HERO_FALLBACK_ICON_BY_TYPE: Record<CatalogType, typeof CookingPot> = {
   services: Briefcase,
 };
 
+// Leaflet toca `window`/`document` al cargarse — mismo motivo exacto que
+// map-screen.tsx documenta para LeafletMap: este componente ("use client")
+// igual recibe un primer render en el servidor desde
+// negocios/[businessId]/page.tsx (Server Component), así que importar
+// Leaflet en el módulo de arriba rompería ese render. `ssr: false` lo
+// difiere al navegador.
+const LocationPinEditor = dynamic(
+  () => import("@/components/business/location-pin-editor").then((mod) => mod.LocationPinEditor),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-56 w-full rounded-card" />,
+  },
+);
+
 /**
  * Perfil público de negocio (Épica F4, RF-012 a RF-014). Recibe el
  * perfil ya resuelto por el Server Component (src/app/negocios/[businessId]/page.tsx,
@@ -100,6 +116,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // inmediato sin depender de recargar la página o volver a pedir el
   // perfil completo solo por este campo.
   const [phoneVerified, setPhoneVerified] = useState(Boolean(profile.phoneVerified));
+
+  // Ajustar ubicación en el mapa (sin RF asociado — ver CLAUDE.md):
+  // mismo criterio que phoneVerified arriba — así, al guardar una nueva
+  // posición del pin (LocationPinEditor), "Cómo llegar" y la dirección
+  // de referencia mostrada se actualizan de inmediato sin recargar.
+  const [location, setLocation] = useState(profile.location ?? null);
 
   // "Vendiendo ahora" (Fase 2, sin RF asociado — ver CLAUDE.md sección
   // 11/37): mismo criterio que phoneVerified arriba — así, cuando el
@@ -259,8 +281,8 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
   const itemNoun = resolveItemNoun(catalogType);
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
-  const directionsHref = profile.location
-    ? `https://www.google.com/maps/dir/?api=1&destination=${profile.location.latitude},${profile.location.longitude}`
+  const directionsHref = location
+    ? `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`
     : null;
 
   return (
@@ -307,8 +329,8 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           {profile.averageRating != null &&
             ` · ${profile.averageRating.toFixed(1)} ★ (${profile.reviewCount ?? 0} reseña${profile.reviewCount === 1 ? "" : "s"})`}
         </p>
-        {profile.location?.referenceAddress && (
-          <p className="font-sans text-body-sm text-text-muted">{profile.location.referenceAddress}</p>
+        {location?.referenceAddress && (
+          <p className="font-sans text-body-sm text-text-muted">{location.referenceAddress}</p>
         )}
         <div className="mt-1 flex flex-wrap gap-2">
           {profile.ownDelivery && (
@@ -352,11 +374,27 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
-      {isOwner && profile.id && profile.location && (
+      {isOwner && profile.id && location && (
         <div className="px-5 pb-4">
           <LocationVisibilityToggle
             businessId={profile.id}
-            initialShowExactLocation={Boolean(profile.location.showExactLocation)}
+            initialShowExactLocation={Boolean(location.showExactLocation)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && location && location.type && (
+        <div className="px-5 pb-4">
+          <LocationPinEditor
+            businessId={profile.id}
+            location={{
+              type: location.type,
+              referenceAddress: location.referenceAddress,
+              latitude: location.latitude ?? 0,
+              longitude: location.longitude ?? 0,
+              showExactLocation: Boolean(location.showExactLocation),
+            }}
+            onSaved={setLocation}
           />
         </div>
       )}

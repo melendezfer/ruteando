@@ -4393,3 +4393,137 @@ fue enteramente de frontend.
   de un negocio no activo; ese vendedor puede seguir viéndolo desde
   `GET /users/me/businesses` si navega manualmente, pero no hay atajo
   dedicado para ese caso.
+
+## 44. Ajustar manualmente la ubicación del negocio en el mapa
+
+Sin RF asociado — petición directa del usuario: un vendedor ambulante,
+o alguien que atiende desde la entrada de un conjunto residencial, no
+siempre queda bien representado por la ubicación que se capturó al
+registrarse (geolocalización del navegador, `location-step.tsx`). Propia
+rama (`feature/ajustar-ubicacion-mapa`).
+
+### Inventario hecho antes de escribir código (pedido explícito del usuario)
+
+- `ubicaciones` (`schema.sql`) ya es un historial append-only: cada
+  fila tiene `punto`, `tipo`, `direccion_referencia`,
+  `mostrar_ubicacion_exacta` y `es_actual` — un índice único parcial
+  garantiza una sola fila vigente por negocio. `movilidad`
+  (ambulante/local fijo, sección 36) vive en `negocios`, no en
+  `ubicaciones` — son conceptos deliberadamente separados, sin ninguna
+  lógica que condicione mover la ubicación según ese campo.
+- `PUT /businesses/{businessId}/location` ya existía completo desde la
+  Épica 2: acepta `latitude`/`longitude` sueltos, valida el bounding
+  box de Cundinamarca, y **siempre inserta una fila nueva** (nunca
+  hace UPDATE del punto) — `ubicacionesRepo.reemplazarActual()` marca
+  la fila anterior como no vigente e inserta la nueva en una
+  transacción. Cero cambios de backend necesarios para esta
+  funcionalidad.
+- El único lugar del proyecto que capturaba ubicación
+  (`location-step.tsx`, asistente de registro) nunca tuvo mapa —
+  geolocalización del navegador + dos campos numéricos de texto,
+  decisión explícita documentada ahí mismo en su momento. El perfil de
+  negocio tampoco tenía ningún mapa embebido, solo el interruptor de
+  zona aproximada/dirección exacta (`LocationVisibilityToggle`). **Sin
+  ningún marcador arrastrable en todo el proyecto** (confirmado por
+  grep) — Leaflet/react-leaflet ya estaban instalados y probados, pero
+  solo dentro de `components/map/` (mapa de descubrimiento), nunca
+  importados en el contexto de negocio.
+
+Con esto, la brecha real quedó clara: 100% frontend, una pieza de UI
+nueva (no una extensión de algo ya empezado) sobre infraestructura de
+backend/validación que ya existía. Se decidió con el usuario que **no**
+ameritaba un plan de fases como "vendiendo ahora" — cabe en un solo PR.
+
+### Decisiones tomadas con el usuario antes de implementar
+
+Tres preguntas reales, presentadas con pros/contras, sin asumir:
+
+1. **Guardado**: confirmación explícita ("Guardar nueva ubicación"),
+   no automático al soltar el pin — cada `PUT` inserta una fila nueva
+   en el historial, así que guardar en cada pixel de un arrastre
+   llenaría `ubicaciones` de filas ruidosas.
+2. **Alcance del control**: solo mueve el punto — `type`/
+   `referenceAddress`/`showExactLocation` se preservan tal cual venían,
+   sin convertir esto en un editor completo de ubicación. Esos campos
+   siguen editándose donde ya se editaban (el tipo, en el registro; la
+   visibilidad, en su propio interruptor).
+3. **Atajo de geolocalización**: sí se agrega un botón "Usar mi
+   ubicación actual" junto al mapa — útil para el caso central descrito
+   por el usuario (un ambulante ajustando su ubicación desde donde
+   realmente está parado), sin depender de que sepa arrastrar el pin
+   con precisión.
+
+### `LocationPinEditor` (`client/src/components/business/location-pin-editor.tsx`)
+
+Solo visible para el dueño (`isOwner`, mismo criterio que el resto de
+los controles de esta pantalla), montado con `next/dynamic({ ssr: false })`
+en `business-profile-screen.tsx` — mismo motivo exacto que ya
+documenta `map-screen.tsx` para `LeafletMap`: Leaflet toca
+`window`/`document` al cargarse, y este componente ("use client")
+igual recibe un primer render en el servidor desde
+`negocios/[businessId]/page.tsx` (Server Component).
+
+- Un solo `<Marker draggable>` de react-leaflet, con
+  `eventHandlers={{ dragend }}` leyendo la posición final del marcador
+  — el primer marcador arrastrable de todo el proyecto (hasta ahora,
+  todos los `<Marker>` del mapa de descubrimiento son de solo lectura).
+  Ícono propio vía `L.divIcon` con `class="text-terracota"` +
+  `fill="currentColor"` (no un hex propio) — sigue el token de marca
+  (`--color-terracota`, hoy violeta) sin tocarse si el acento vuelve a
+  cambiar.
+- `navigator.geolocation.getCurrentPosition` se llama directo en el
+  handler del botón, **sin reusar** `useConsumerGeolocation`
+  (`lib/geo/use-geolocation.ts`) — ese hook pide el permiso
+  automáticamente al montar (pensado para el mapa de descubrimiento);
+  acá el dueño siempre tiene ya una ubicación guardada, así que pedir
+  el permiso sin que lo pida explícitamente sería una interrupción sin
+  beneficio la mayoría de las veces que se abre el perfil.
+  `enableHighAccuracy: true` (a diferencia del hook compartido, que usa
+  `false`) — acá sí importa la precisión real de dónde está parado el
+  vendedor, no solo aproximar "cerca de ti" para ordenar una búsqueda.
+- `business-profile-screen.tsx` gana un estado local `location`
+  (mismo patrón que `phoneVerified`/`heroPhoto`/`products` — estado
+  aparte de `profile`, inmutable) — al guardar una posición nueva,
+  "Cómo llegar" y la dirección de referencia mostrada se actualizan de
+  inmediato, sin recargar la página.
+- Reusa `getBusinessFormErrorMessage` (`error-messages.ts`, ya cubre
+  `PUT .../location` desde el asistente de registro) — sin mensaje
+  nuevo, mismo criterio (401 sesión vencida, 403 no-dueño, 404 negocio
+  borrado, 422 datos inválidos).
+
+### Verificado con Playwright + curl contra el servidor de desarrollo real
+
+Con la cuenta y el negocio reales de demo (`demo-arepas-dona-rosa`):
+arrastrar el pin con el mouse (simulando el gesto real, no solo llamar
+al backend a mano) → aparecen "Guardar nueva ubicación"/"Cancelar" →
+guardar → confirmado por `curl` directo contra
+`GET /businesses/{id}` que se insertó una fila nueva (`id`/`createdAt`
+distintos) con `type`/`referenceAddress`/`showExactLocation`
+**exactamente iguales** a los de antes y solo `latitude`/`longitude`
+cambiados. "Usar mi ubicación actual" (con geolocalización simulada del
+navegador vía Playwright) mueve el pin y ofrece guardar igual que un
+arrastre — cancelado a propósito en la verificación (geolocalización
+simulada sin relación real con el negocio) para no dejarlo escrito, y
+confirmado por `curl` que efectivamente no se insertó una fila
+adicional. Un visitante anónimo en el mismo negocio no ve la tarjeta en
+absoluto. Coordenadas originales del negocio de demo restauradas al
+terminar (mismo `PUT` que usa el propio control, vía `curl`). Suite
+completa del backend sin cambios: 528/528 (funcionalidad enteramente de
+frontend).
+
+### Gaps conocidos, no ocultos
+
+- Sin límite visual de "qué tan lejos se puede arrastrar" — el
+  `MapContainer` embebido permite alejar el zoom y soltar el pin lejos;
+  el único freno real es la validación de backend (bounding box de
+  Cundinamarca, ya existente) devolviendo 422 con el mensaje genérico
+  de `getBusinessFormErrorMessage`. No se pidió una restricción de UI
+  más estricta.
+- Sin animación ni confirmación visual adicional al guardar más allá de
+  que los botones "Guardar"/"Cancelar" desaparecen — mismo nivel de
+  feedback que el resto de los toggles de esta pantalla
+  (`LocationVisibilityToggle`, `OwnDeliveryToggle`), no se pidió más.
+- El mapa embebido usa `scrollWheelZoom={false}` (a diferencia del mapa
+  de descubrimiento) — evita que hacer scroll por la página del perfil
+  termine haciendo zoom sin querer sobre este mapa chico; el zoom sigue
+  disponible con los botones `+`/`-` de Leaflet.

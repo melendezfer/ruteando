@@ -4280,3 +4280,116 @@ sesión.
 (no es una de las 4 rutas de `DESTINATIONS`) — comportamiento esperado,
 no un descuido: el perfil de negocio no es uno de los 4 destinos
 principales, solo necesitaba dejar de ser un callejón sin salida.
+
+## 43. `/perfil` por rol: un vendedor puede volver a su negocio desde la barra
+
+Segundo hueco real de navegación encontrado por el usuario probando la
+app, relacionado con la sección 42 pero distinto: la sección 42 arregló
+que el vendedor pudiera SALIR de su propio negocio; este arreglaba que
+pudiera VOLVER — antes de esta sección, un vendedor que salía a Mapa o
+Favoritos no tenía ninguna forma de volver a su negocio desde la barra
+inferior ("Perfil" llevaba siempre a la cuenta genérica, y ningún
+destino de `BottomNavBar` apunta a "/"). Propia rama
+(`feature/perfil-negocio-vendedor`).
+
+### Opciones evaluadas con el usuario antes de implementar
+
+Presentadas explícitamente con pros/contras, sin asumir cuál preferiría:
+
+1. **"Perfil" apunta al negocio** (elegida) — para un vendedor con
+   negocio activo, la pestaña lleva directo a su negocio; cuenta/
+   contraseña quedan accesibles desde un ícono dentro de esa pantalla.
+   Un toque para la acción más frecuente de ese rol, a costa de que
+   "Perfil" cambie de significado según el rol.
+2. **Quinta pestaña "Mi negocio"** — descartada: rompe el criterio de
+   "4 destinos fijos" ya confirmado explícitamente con el usuario en la
+   sección 28, y deja la barra desigual entre roles (4 ítems vs. 5) en
+   pantallas chicas.
+3. **Tarjeta atajo dentro de "Perfil"** — descartada: "Perfil" seguiría
+   siendo siempre la cuenta, con una tarjeta arriba que enlaza al
+   negocio, pero cuesta un toque extra cada vez para la acción más
+   repetida de un vendedor.
+
+### Mismo criterio exacto que "/" (sección 38), no una lógica paralela
+
+`/perfil` se vuelve un router por rol idéntico en estructura al que ya
+existe en "/": sin negocio activo (consumidor, administrador, o
+vendedor sin ninguno todavía) → la cuenta de siempre; exactamente uno →
+aterriza ahí; 2+ → el mismo selector. Para no duplicar esa lógica en dos
+componentes separados, se extrajeron las dos piezas que
+`home-screen-router.tsx` ya tenía:
+
+- `client/src/lib/vendor/use-vendor-active-businesses.ts` (nuevo) — el
+  hook que resuelve "¿qué negocios activos tiene este vendedor?"
+  (`GET /users/me/businesses`, filtrado a `status: "active"`). Devuelve
+  `[]` de inmediato para cualquier no-vendedor (sin fetch), `null`
+  mientras se resuelve para un vendedor, el array ya filtrado cuando
+  termina.
+- `client/src/components/discovery/vendor-business-picker.tsx` (nuevo)
+  — el selector "¿Cuál de tus negocios quieres ver?", movido tal cual
+  desde dentro de `home-screen-router.tsx` a su propio archivo.
+
+`client/src/components/profile/profile-screen-router.tsx` (nuevo) usa
+ambas piezas exactamente igual que `HomeScreenRouter`, cambiando solo
+el caso "sin negocio activo" (ahí monta `ProfileScreen`, no `MapScreen`).
+`home-screen-router.tsx` se simplificó para consumir el hook/componente
+extraídos en vez de tener su propia copia — mismo comportamiento, sin
+duplicación.
+
+### `/cuenta`: la cuenta sigue accesible sin el redirect
+
+Con `/perfil` redirigiendo a un vendedor con negocio activo, enlazar
+"cuenta/contraseña" a esa misma URL desde dentro del perfil de negocio
+habría formado un ciclo (el redirect se dispara de nuevo, devolviendo
+al mismo negocio). Se agregó `/cuenta` (nuevo, `client/src/app/cuenta/page.tsx`)
+— exactamente lo que rendía `/perfil` antes de esta sección, sin ningún
+redirect por rol, mismo patrón que `/mapa/page.tsx` (sección 38: "la
+pantalla real de siempre, en una ruta dedicada, cuando la ruta original
+dejó de servirla siempre"). `business-profile-screen.tsx` gana un
+ícono nuevo (engranaje, `isOwner` solamente) en la esquina superior
+derecha — el mismo lugar donde viviría `FavoriteButton` si no fuera
+`null` para el dueño (`FavoriteButton` ya no se renderiza para
+`isOwner`, sección 29) — que enlaza ahí.
+
+`/cuenta` sí monta `BottomNavBar` (a diferencia de lo que se podría
+asumir por no ser uno de los 4 destinos) — mismo motivo que llevó a
+agregarla al perfil de negocio en la sección 42: sin ella, sería un
+callejón sin salida más. Que "Perfil" no quede resaltada ahí (ningún
+`href` de la barra matchea `/cuenta`) es aceptable, mismo criterio ya
+documentado en esa sección; y tocar "Perfil" desde `/cuenta` simplemente
+devuelve al vendedor a su negocio — comportamiento esperado, no un ciclo
+roto, porque en ningún momento se intenta volver a `/cuenta` desde ahí.
+
+### Verificado con Playwright + curl contra el servidor de desarrollo real
+
+Tres escenarios reales, no solo el camino feliz obvio:
+
+1. **Vendedor con un negocio activo** (demo-arepas-dona-rosa): login →
+   negocio propio → Mapa → tocar "Perfil" en la barra → vuelve al mismo
+   negocio (URL idéntica) → tocar el ícono de engranaje → `/cuenta`
+   muestra la cuenta real (nombre, correo, pestañas Reseñas/
+   Configuración) con `BottomNavBar` visible → tocar "Perfil" de nuevo
+   desde ahí → vuelve al negocio.
+2. **Vendedor con dos negocios activos** (cuenta + 2 negocios creados
+   por API para esto, aprobados y verificados por SQL como en la
+   sección 34): tocar "Perfil" desde Mapa muestra el mismo selector que
+   ya usa "/", con "Perfil" resaltada como pestaña activa. Datos de
+   prueba borrados después.
+3. **Consumidor normal** (registrado por la UI real): `/perfil` sigue
+   mostrando la cuenta de siempre, sin ningún redirect, con "Perfil"
+   resaltada — cero cambios de comportamiento para este rol.
+
+Suite completa del backend sin cambios (528/528) — esta funcionalidad
+fue enteramente de frontend.
+
+### Gaps conocidos, no ocultos
+
+- Mismo gap ya documentado en la sección 42, ahora también en
+  `/cuenta`: ningún destino de la barra queda resaltado como activo en
+  esa pantalla — aceptable, no es uno de los 4 destinos principales.
+- Un vendedor sin ningún negocio activo (pendiente/rechazado/
+  suspendido) sigue viendo la cuenta en "Perfil", igual que antes de
+  esta sección — no se pidió ninguna señal especial ahí sobre el estado
+  de un negocio no activo; ese vendedor puede seguir viéndolo desde
+  `GET /users/me/businesses` si navega manualmente, pero no hay atajo
+  dedicado para ese caso.

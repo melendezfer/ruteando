@@ -96,10 +96,20 @@ function aproximarCoordenada(valor) {
 // señales al contrato público, nunca recalcula el match en JS (regla de
 // seguridad #1: la razón de la coincidencia se decide una sola vez, en
 // la consulta que ya decidió si el negocio aparece).
+//
+// Devuelve `null` tanto sin `q` como cuando el negocio calificó por otra
+// razón que no es nombre ni producto — desde la Fase 5 (búsqueda por
+// familia, sección 50) eso es un caso real y esperado (matchType null +
+// matchedCategory true), no solo "no se buscó por texto": antes de esa
+// fase, la única forma de calificar con `q` presente era por nombre o
+// producto, así que el `else` implícito nunca hacía falta distinguirlo
+// (bug latente, nunca alcanzable hasta que existió una tercera vía).
 function resolverMatchType(row) {
-  if (row.nombre_coincide == null) return null; // no hubo búsqueda de texto (sin `q`)
+  if (row.nombre_coincide == null) return null;
   if (row.nombre_coincide && row.productos_coincidentes) return 'both';
-  return row.nombre_coincide ? 'business_name' : 'product';
+  if (row.nombre_coincide) return 'business_name';
+  if (row.productos_coincidentes) return 'product';
+  return null;
 }
 
 // Forma liviana, no el Product completo (id/businessId/categoryId/etc.)
@@ -183,6 +193,17 @@ function toApiBusiness(row) {
     matchedProducts: row.productos_coincidentes
       ? row.productos_coincidentes.map(toApiMatchedProduct)
       : null,
+    // Búsqueda por familia (Fase 5, sin RF asociado — ver CLAUDE.md
+    // sección 50): el negocio calificó por su CATEGORÍA (nombre literal
+    // o vía el diccionario de alias — "tintos" → "Tintos y café"), no
+    // por su nombre ni por un producto. Independiente de `matchType` a
+    // propósito, no un cuarto valor del enum: un negocio puede calificar
+    // por nombre/producto Y por categoría a la vez, y una sola cadena no
+    // alcanza para expresar esa combinación sin volverse una lista de
+    // valores compuestos. El nombre de la categoría no viaja acá — el
+    // cliente ya lo tiene vía `categoryId` + su propio catálogo de
+    // categorías (GET /categories), no hace falta duplicarlo.
+    matchedCategory: row.categoria_coincide ?? null,
     // Confirmación de disponibilidad en tiempo real (sección 11 de
     // CLAUDE.md) — mismo criterio que latitude/longitude/distanceMeters
     // arriba: solo viene lleno cuando la consulta que produjo esta fila

@@ -267,7 +267,11 @@ components:
             producto de su catálogo, `both` si ambos. `null` cuando la
             búsqueda no incluyó `q` (incluidos GET /businesses/{businessId}
             y el resto de las operaciones, que nunca toman este
-            parámetro). Solo en GET /businesses y GET /businesses/nearby.
+            parámetro) **o** cuando el negocio calificó por otra razón
+            que no es nombre ni producto — ver `matchedCategory` (Fase 5,
+            búsqueda por familia): un negocio puede tener `matchType: null`
+            y `matchedCategory: true` a la vez. Solo en GET /businesses y
+            GET /businesses/nearby.
         matchedProducts:
           type: array
           nullable: true
@@ -279,6 +283,20 @@ components:
             no solo que el negocio coincidió. Solo en GET /businesses y
             GET /businesses/nearby.
           items: { $ref: '#/components/schemas/MatchedProduct' }
+        matchedCategory:
+          type: boolean
+          nullable: true
+          description: >-
+            Búsqueda por familia (sin RF asociado — ver CLAUDE.md): si
+            `q` coincidió con el nombre de la categoría del negocio (de
+            forma literal, ej. "Comida rápida") o con un término
+            coloquial del diccionario de alias (ej. "tintos" →
+            "Tintos y café"). Independiente de `matchType` — un negocio
+            puede coincidir por categoría Y por nombre/producto a la
+            vez. `null` cuando la búsqueda no incluyó `q`. El nombre de
+            la categoría no viaja acá — resolverlo con `categoryId`
+            contra GET /categories, que el cliente ya consulta aparte.
+            Solo en GET /businesses y GET /businesses/nearby.
         availabilityConfirmedAt:
           type: string
           format: date-time

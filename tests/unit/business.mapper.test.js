@@ -45,6 +45,7 @@ describe('toApiBusiness', () => {
       distanceMeters: null,
       matchType: null,
       matchedProducts: null,
+      matchedCategory: null,
       rejectionReason: null,
       availabilityConfirmedAt: null,
     });
@@ -180,6 +181,74 @@ describe('toApiBusiness', () => {
         { name: 'Arepa de queso', price: 5000, available: true },
         { name: 'Arepa con todo', price: 7000, available: false },
       ]);
+    });
+
+    // Fase 5 (búsqueda por familia, sección 50): hubo `q` pero el
+    // negocio no calificó ni por nombre ni por producto — antes de esta
+    // fase esta combinación nunca ocurría de verdad (la única forma de
+    // calificar con `q` era nombre o producto), así que el bug latente
+    // (caía en 'product' por el `else` implícito) nunca se manifestaba.
+    it('hubo q pero ni el nombre ni un producto coincidieron (calificó por categoría): matchType queda null, no "product"', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: false,
+        productos_coincidentes: null,
+      });
+      expect(resultado.matchType).toBeNull();
+      expect(resultado.matchedProducts).toBeNull();
+    });
+  });
+
+  // Búsqueda por familia (Fase 5, sin RF asociado — ver CLAUDE.md sección
+  // 50): `categoria_coincide` es independiente de matchType — un negocio
+  // puede coincidir por categoría Y por nombre/producto a la vez.
+  describe('matchedCategory (búsqueda por familia)', () => {
+    const filaBase = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Farmacia Central',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('sin búsqueda de texto: matchedCategory queda null', () => {
+      expect(toApiBusiness(filaBase).matchedCategory).toBeNull();
+    });
+
+    it('coincidió por categoría (nombre literal o alias), no por nombre ni producto', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: false,
+        productos_coincidentes: null,
+        categoria_coincide: true,
+      });
+      expect(resultado.matchedCategory).toBe(true);
+      expect(resultado.matchType).toBeNull();
+    });
+
+    it('coincidió por categoría Y por nombre a la vez — las dos señales conviven', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: true,
+        productos_coincidentes: null,
+        categoria_coincide: true,
+      });
+      expect(resultado.matchedCategory).toBe(true);
+      expect(resultado.matchType).toBe('business_name');
+    });
+
+    it('hubo q pero la categoría no coincidió: matchedCategory=false', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: true,
+        productos_coincidentes: null,
+        categoria_coincide: false,
+      });
+      expect(resultado.matchedCategory).toBe(false);
     });
   });
 });

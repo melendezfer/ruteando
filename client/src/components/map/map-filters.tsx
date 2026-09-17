@@ -1,10 +1,14 @@
 "use client";
 
 import { X } from "@phosphor-icons/react/dist/ssr";
-import { TextField } from "@/components/ui/text-field";
+import { PriceOpenNowFields } from "@/components/discovery/price-open-now-fields";
 
 export interface MapFiltersState {
-  radiusKm: number;
+  // Opcional a propósito (Fase 1 de la fusión de buscadores, sin RF
+  // asociado — ver CLAUDE.md sección 45): /buscar reusa PriceOpenNowFields
+  // para precio/abierto-ahora sin este sheet — su radio de "cerca de ti"
+  // es fijo, no un filtro que el usuario elija.
+  radiusKm?: number;
   priceMin: string;
   priceMax: string;
   openNow: boolean;
@@ -31,7 +35,11 @@ const RADIUS_OPTIONS = [2, 5, 10];
  * FloatingActionStack (ver CLAUDE.md, sección FloatingActionStack) — ya
  * no es una barra siempre visible arriba del mapa: la sección 17 de
  * CLAUDE.md pide expandir en el mismo lugar en vez de dejar controles
- * permanentes ocupando espacio de pantalla.
+ * permanentes ocupando espacio de pantalla. `PriceOpenNowFields` (precio
+ * mín./máx. + abierto ahora) se extrajo para reusarse también en
+ * `/buscar` (Fase 1, sección 45) — este componente sigue siendo el único
+ * que agrega el selector de radio y la posición de "bottom sheet" fijo
+ * al contenedor del mapa.
  *
  * La distancia solo tiene sentido con una coordenada de referencia
  * (GET /businesses/nearby) — sin geolocalización concedida se oculta, no
@@ -70,40 +78,7 @@ export function MapFiltersSheet({ filters, onChange, showRadius, onClose }: MapF
             </label>
           )}
 
-          <div className="w-24">
-            <TextField
-              label="Precio mín."
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={filters.priceMin}
-              onChange={(event) => onChange({ ...filters, priceMin: event.target.value })}
-            />
-          </div>
-
-          <div className="w-24">
-            <TextField
-              label="Precio máx."
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={filters.priceMax}
-              onChange={(event) => onChange({ ...filters, priceMax: event.target.value })}
-            />
-          </div>
-
-          <button
-            type="button"
-            aria-pressed={filters.openNow}
-            onClick={() => onChange({ ...filters, openNow: !filters.openNow })}
-            className={`h-btn shrink-0 whitespace-nowrap rounded-full px-4 font-sans text-body-sm font-medium transition-colors ${
-              filters.openNow
-                ? "bg-terracota text-white"
-                : "border border-border bg-surface text-text hover:bg-background"
-            }`}
-          >
-            Abierto ahora
-          </button>
+          <PriceOpenNowFields value={filters} onChange={(next) => onChange({ ...filters, ...next })} />
         </div>
       </div>
     </div>

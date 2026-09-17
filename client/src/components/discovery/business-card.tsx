@@ -8,6 +8,7 @@ import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
+import { formatDistance } from "@/lib/format/distance";
 
 type Business = components["schemas"]["Business"];
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -165,9 +166,4 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
       )}
     </div>
   );
-}
-
-function formatDistance(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
 }

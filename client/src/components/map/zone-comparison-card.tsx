@@ -9,6 +9,14 @@ type BusinessZone = components["schemas"]["BusinessZone"];
 interface ZoneComparisonCardProps {
   zones: BusinessZone[];
   onJumpToZone: (zone: BusinessZone) => void;
+  /**
+   * Fase 1 de la fusión de buscadores (sin RF asociado, ver CLAUDE.md
+   * sección 45): map-screen.tsx ahora tiene una barra de búsqueda fija en
+   * `top-3` — este prop empuja la tarjeta debajo de esa barra en vez de
+   * superponerse, mismo criterio que `aboveBottomNav` en
+   * FloatingActionStack.
+   */
+  belowSearchBar?: boolean;
 }
 
 /**
@@ -25,7 +33,7 @@ interface ZoneComparisonCardProps {
  * (la más cercana ya es la más variada, o solo hay una zona), este
  * componente no renderiza nada: no hay nada que sugerir.
  */
-export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardProps) {
+export function ZoneComparisonCard({ zones, onJumpToZone, belowSearchBar = false }: ZoneComparisonCardProps) {
   if (zones.length === 0) return null;
 
   const currentZone = zones[0];
@@ -38,7 +46,9 @@ export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardPr
   const minutes = estimateWalkingMinutes(betterZone.distanceMeters ?? 0);
 
   return (
-    <div className="absolute left-3 right-3 top-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+    <div
+      className={`absolute left-3 right-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur ${belowSearchBar ? "top-24" : "top-3"}`}
+    >
       <div className="flex items-start gap-2">
         <MapTrifold size={20} weight="duotone" className="mt-0.5 shrink-0 text-mostaza" />
         <p className="font-sans text-body-sm text-text">

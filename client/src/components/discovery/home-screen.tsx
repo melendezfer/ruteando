@@ -1,26 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
+import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { logSearchEvent } from "@/lib/api/events";
 import { CategoryChips } from "@/components/discovery/category-chips";
 import { SearchBar } from "@/components/discovery/search-bar";
 import { BusinessCard } from "@/components/discovery/business-card";
 import { Skeleton } from "@/components/discovery/skeleton";
+import { PriceOpenNowFields, type PriceOpenNowState } from "@/components/discovery/price-open-now-fields";
 
-type Business = components["schemas"]["Business"];
 type Category = components["schemas"]["Category"];
 
 const NEARBY_RADIUS_KM = 5;
 const LIST_LIMIT = 6;
+const EMPTY_FILTERS: PriceOpenNowState = { priceMin: "", priceMax: "", openNow: false };
 
 interface HomeScreenProps {
   userFirstName: string;
 }
 
-interface RunSearchOptions {
+interface LastSearch {
   query?: string;
   categoryId?: number;
   title: string;
@@ -44,9 +47,25 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
-  const [businesses, setBusinesses] = useState<Business[] | null>(null);
-  const [listLoading, setListLoading] = useState(false);
   const [listTitle, setListTitle] = useState("Cerca de ti");
+  // Último query/categoryId disparado por el usuario (texto o chip) — se
+  // reusa al cambiar los filtros de precio/abierto-ahora (Fase 1 de la
+  // fusión de buscadores, sin RF asociado — ver CLAUDE.md sección 45),
+  // para no perder "en qué búsqueda estoy" solo porque se ajustó un
+  // filtro encima.
+  const [lastSearch, setLastSearch] = useState<LastSearch>({ title: "Cerca de ti" });
+  // Precio mín./máx. + "abierto ahora" (Fase 1) — se expanden in-place
+  // bajo la barra de búsqueda (CLAUDE.md sección 17), no como un "bottom
+  // sheet" fijo al viewport como en el mapa: acá no hay un contenedor de
+  // alto fijo del que anclarse, es una página normal con scroll.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<PriceOpenNowState>(EMPTY_FILTERS);
+
+  const { businesses, loading: listLoading, search } = useBusinessSearch({
+    limit: LIST_LIMIT,
+    radiusKm: NEARBY_RADIUS_KM,
+    geolocation,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -61,39 +80,39 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   }, []);
 
   const runSearch = useCallback(
-    async ({ query, categoryId, title }: RunSearchOptions) => {
-      setListLoading(true);
-      setListTitle(title);
-
-      const coords = geolocation.status === "granted" ? geolocation.coords : null;
-
-      const { data } = coords
-        ? await api.GET("/businesses/nearby", {
-            params: {
-              query: {
-                lat: coords.lat,
-                lng: coords.lng,
-                radiusKm: NEARBY_RADIUS_KM,
-                limit: LIST_LIMIT,
-                ...(query ? { q: query } : {}),
-                ...(categoryId !== undefined ? { categoryId } : {}),
-              },
-            },
-          })
-        : await api.GET("/businesses", {
-            params: {
-              query: {
-                limit: LIST_LIMIT,
-                ...(query ? { q: query } : {}),
-                ...(categoryId !== undefined ? { categoryId } : {}),
-              },
-            },
-          });
-
-      setBusinesses(data?.data ?? []);
-      setListLoading(false);
+    (params: LastSearch) => {
+      setLastSearch(params);
+      setListTitle(params.title);
+      const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
+      const priceMax = filters.priceMax ? Number(filters.priceMax) : undefined;
+      search({
+        q: params.query,
+        categoryId: params.categoryId,
+        priceMin,
+        priceMax,
+        openNow: filters.openNow,
+      });
     },
-    [geolocation.status, geolocation.coords],
+    [search, filters.priceMin, filters.priceMax, filters.openNow],
+  );
+
+  // Cambiar un filtro (precio/abierto-ahora) reusa el último query/categoría
+  // — no dispara logSearchEvent (CLAUDE.md sección 16 solo lo pide "al
+  // ejecutar una búsqueda por texto o categoría", un filtro no es eso).
+  const refineWithFilters = useCallback(
+    (nextFilters: PriceOpenNowState) => {
+      setFilters(nextFilters);
+      const priceMin = nextFilters.priceMin ? Number(nextFilters.priceMin) : undefined;
+      const priceMax = nextFilters.priceMax ? Number(nextFilters.priceMax) : undefined;
+      search({
+        q: lastSearch.query,
+        categoryId: lastSearch.categoryId,
+        priceMin,
+        priceMax,
+        openNow: nextFilters.openNow,
+      });
+    },
+    [search, lastSearch.query, lastSearch.categoryId],
   );
 
   // Carga inicial de "cerca de ti" apenas se resuelve la geolocalización.
@@ -113,7 +132,8 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, runSearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geolocation.status]);
 
   function handleTextSearch(text: string) {
     setSelectedCategoryId(null);
@@ -128,7 +148,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
       if (geolocation.status === "granted") {
         runSearch({ title: "Cerca de ti" });
       } else {
-        setBusinesses(null);
+        setLastSearch({ title: "Cerca de ti" });
         setListTitle("Cerca de ti");
       }
       return;
@@ -150,6 +170,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   }, [categories]);
 
   const showLocationHint = geolocation.status !== "granted" && businesses === null && !listLoading;
+  const filtersActive = Boolean(filters.priceMin || filters.priceMax || filters.openNow);
 
   return (
     <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
@@ -157,7 +178,28 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
         Hola, {userFirstName} — ¿qué estás buscando hoy?
       </h1>
 
-      <SearchBar onSearch={handleTextSearch} />
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <SearchBar onSearch={handleTextSearch} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-label="Filtros de precio y abierto ahora"
+          aria-pressed={filtersOpen || filtersActive}
+          className={`flex h-btn w-btn shrink-0 items-center justify-center rounded-full border ${
+            filtersActive ? "border-terracota bg-terracota text-white" : "border-border bg-surface text-text"
+          }`}
+        >
+          <SlidersHorizontal size={20} weight="bold" />
+        </button>
+      </div>
+
+      {filtersOpen && (
+        <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-3">
+          <PriceOpenNowFields value={filters} onChange={refineWithFilters} />
+        </div>
+      )}
 
       <CategoryChips
         categories={categories}
@@ -185,7 +227,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
 
         {!listLoading && businesses !== null && businesses.length === 0 && (
           <p className="font-sans text-body-sm text-text-muted">
-            No encontramos negocios que coincidan. Prueba con otro nombre o categoría.
+            No encontramos negocios que coincidan. Prueba con otro nombre, categoría o filtro.
           </p>
         )}
 

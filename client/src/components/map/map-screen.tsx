@@ -3,13 +3,16 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type L from "leaflet";
-import { Crosshair, SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
+import { Crosshair, SlidersHorizontal, X } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
+import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { Skeleton } from "@/components/discovery/skeleton";
+import { SearchBar } from "@/components/discovery/search-bar";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { MapFiltersSheet, type MapFiltersState } from "@/components/map/map-filters";
+import { MapSearchResults } from "@/components/map/map-search-results";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
 import type { BusinessPin } from "@/components/map/leaflet-map";
@@ -24,6 +27,7 @@ type BusinessZone = components["schemas"]["BusinessZone"];
 // real para calcular un centro a partir de sus coordenadas.
 const DEFAULT_CENTER = { lat: 4.578, lng: -74.217 };
 const MAP_RESULTS_LIMIT = 50;
+const DEFAULT_MAP_RADIUS_KM = 5;
 const LOCATE_ME_ZOOM = 16;
 // Debe coincidir con la duración de la transición de
 // `.f3-business-pin-inner` en globals.css — el popup de información
@@ -55,9 +59,15 @@ export function MapScreen() {
   const mapInstanceRef = useRef<L.Map | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [businesses, setBusinesses] = useState<BusinessPin[]>([]);
+  // Texto libre del buscador del mapa (Fase 1 de la fusión de
+  // buscadores, sin RF asociado — ver CLAUDE.md sección 45): antes el
+  // mapa no tenía ninguna caja de texto, solo los filtros de
+  // precio/abierto-ahora/radio de abajo. `searchKey` fuerza un remount
+  // de SearchBar (que maneja su propio input internamente, sin `value`
+  // controlado) para limpiar visualmente el campo cuando se toca "Limpiar".
+  const [query, setQuery] = useState("");
+  const [searchKey, setSearchKey] = useState(0);
   const [zones, setZones] = useState<BusinessZone[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<BusinessPin | null>(null);
   // Negocio recién tocado, mientras el pin todavía está en la animación
   // de crecimiento (ver PIN_GROW_ANIMATION_MS) — separado de `selected`
@@ -68,7 +78,7 @@ export function MapScreen() {
   const pendingSelectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<MapFiltersState>({
-    radiusKm: 5,
+    radiusKm: DEFAULT_MAP_RADIUS_KM,
     priceMin: "",
     priceMax: "",
     openNow: false,
@@ -105,45 +115,39 @@ export function MapScreen() {
     return map;
   }, [categories]);
 
-  const loadBusinesses = useCallback(async () => {
-    setLoading(true);
+  const {
+    businesses: rawBusinesses,
+    loading,
+    search,
+  } = useBusinessSearch({
+    limit: MAP_RESULTS_LIMIT,
+    radiusKm: filters.radiusKm ?? DEFAULT_MAP_RADIUS_KM,
+    geolocation,
+  });
 
+  const businesses = useMemo<BusinessPin[]>(
+    () =>
+      (rawBusinesses ?? []).filter(
+        (business): business is BusinessPin =>
+          typeof business.latitude === "number" && typeof business.longitude === "number",
+      ),
+    [rawBusinesses],
+  );
+
+  const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
     const priceMax = filters.priceMax ? Number(filters.priceMax) : undefined;
-    const coords = geolocation.status === "granted" ? geolocation.coords : null;
+    search({ q: query || undefined, priceMin, priceMax, openNow: filters.openNow });
+  }, [search, query, filters.priceMin, filters.priceMax, filters.openNow]);
 
-    const { data } = coords
-      ? await api.GET("/businesses/nearby", {
-          params: {
-            query: {
-              lat: coords.lat,
-              lng: coords.lng,
-              radiusKm: filters.radiusKm,
-              limit: MAP_RESULTS_LIMIT,
-              ...(priceMin !== undefined ? { priceMin } : {}),
-              ...(priceMax !== undefined ? { priceMax } : {}),
-              ...(filters.openNow ? { openNow: true } : {}),
-            },
-          },
-        })
-      : await api.GET("/businesses", {
-          params: {
-            query: {
-              limit: MAP_RESULTS_LIMIT,
-              ...(priceMin !== undefined ? { priceMin } : {}),
-              ...(priceMax !== undefined ? { priceMax } : {}),
-              ...(filters.openNow ? { openNow: true } : {}),
-            },
-          },
-        });
+  function handleTextSearch(text: string) {
+    setQuery(text);
+  }
 
-    const pins = (data?.data ?? []).filter(
-      (business): business is BusinessPin =>
-        typeof business.latitude === "number" && typeof business.longitude === "number",
-    );
-    setBusinesses(pins);
-    setLoading(false);
-  }, [geolocation.status, geolocation.coords, filters]);
+  function handleClearSearch() {
+    setQuery("");
+    setSearchKey((k) => k + 1);
+  }
 
   /**
    * "Zonas de aglomeración" (ver CLAUDE.md sección 32) — solo se piden
@@ -179,14 +183,25 @@ export function MapScreen() {
     let ignore = false;
     Promise.resolve().then(() => {
       if (!ignore) {
-        loadBusinesses();
+        runSearch();
         loadZones();
       }
     });
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, loadBusinesses, loadZones]);
+  }, [geolocation.status, runSearch, loadZones]);
+
+  // "Cargando" de verdad hasta que se resuelva la PRIMERA búsqueda
+  // (rawBusinesses === null) — `loading` del hook solo cubre mientras
+  // una petición está en vuelo, no el instante entre montar y que
+  // geolocation.status deje "loading"/"idle" y dispare el efecto de
+  // arriba; sin esto, ese instante mostraría "No encontramos negocios"
+  // en vez del skeleton.
+  const showSkeleton = businesses.length === 0 && (loading || rawBusinesses === null);
+  // Con `query` activo, MapSearchResults ya comunica "sin resultados"
+  // para ese texto — no duplicar el mismo mensaje centrado sobre el mapa.
+  const showEmptyState = !loading && rawBusinesses !== null && businesses.length === 0 && !query;
 
   let center = DEFAULT_CENTER;
   if (geolocation.status === "granted" && geolocation.coords) {
@@ -224,6 +239,22 @@ export function MapScreen() {
       setPendingSelection(null);
       pendingSelectionTimeoutRef.current = null;
     }, PIN_GROW_ANIMATION_MS);
+  }
+
+  /**
+   * Tocar un resultado de MapSearchResults (Fase 1, sección 45) — a
+   * diferencia de tocar un pin ya visible, el negocio puede estar fuera
+   * del encuadre actual o agrupado dentro de un cluster, así que primero
+   * recentra el mapa sobre su coordenada (mismo zoom que "Mi ubicación")
+   * y recién ahí dispara la misma selección que un pin.
+   */
+  function handleSelectFromSearch(business: BusinessPin) {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([business.latitude, business.longitude], LOCATE_ME_ZOOM, {
+        animate: true,
+      });
+    }
+    handleSelectBusiness(business);
   }
 
   useEffect(() => {
@@ -293,7 +324,7 @@ export function MapScreen() {
           viene después en el JSX) vuelve a ganar de forma confiable.
         */}
         <div className="absolute inset-0 isolate">
-          {loading && businesses.length === 0 ? (
+          {showSkeleton ? (
             <div className="flex h-full w-full flex-col gap-2 p-4">
               <Skeleton className="h-full w-full" />
             </div>
@@ -313,7 +344,39 @@ export function MapScreen() {
           )}
         </div>
 
-        {!loading && businesses.length === 0 && (
+        {/*
+          Buscador de texto (Fase 1, CLAUDE.md sección 45) — siempre
+          visible arriba del mapa, mismo lugar que ocupa en /buscar.
+          `bg-surface` + `shadow-lg` para que se lea sobre los tiles del
+          mapa, mismo lenguaje visual que MapFiltersSheet.
+        */}
+        <div className="absolute inset-x-3 top-3 z-[1000] flex items-start gap-2 rounded-card border border-border bg-surface p-3 shadow-lg">
+          <div className="flex-1">
+            <SearchBar key={searchKey} onSearch={handleTextSearch} />
+          </div>
+          {query && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label="Limpiar búsqueda"
+              className="mt-7 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-text-muted hover:bg-background"
+            >
+              <X size={16} weight="bold" />
+            </button>
+          )}
+        </div>
+
+        {!selected && !filtersOpen && (
+          <MapSearchResults
+            query={query}
+            results={businesses}
+            loading={loading}
+            categoryNameById={categoryNameById}
+            onSelect={handleSelectFromSearch}
+          />
+        )}
+
+        {showEmptyState && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
             <p className="rounded-card bg-surface px-4 py-3 text-center font-sans text-body-sm text-text-muted shadow">
               No encontramos negocios que coincidan con estos filtros.
@@ -321,7 +384,9 @@ export function MapScreen() {
           </div>
         )}
 
-        {!selected && !filtersOpen && <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} />}
+        {!selected && !filtersOpen && !query && (
+          <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} belowSearchBar />
+        )}
 
         {selected && (
           <BusinessSummarySheet

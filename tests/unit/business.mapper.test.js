@@ -43,6 +43,8 @@ describe('toApiBusiness', () => {
       latitude: null,
       longitude: null,
       distanceMeters: null,
+      matchType: null,
+      matchedProducts: null,
       rejectionReason: null,
       availabilityConfirmedAt: null,
     });
@@ -114,6 +116,71 @@ describe('toApiBusiness', () => {
     expect(resultado.longitude).toBe(-74.217);
     // La distancia real de la búsqueda nunca se aproxima — solo el pin.
     expect(resultado.distanceMeters).toBe(532.108);
+  });
+
+  // Búsqueda por texto (RF-010/011): distinguir por qué coincidió un
+  // negocio con `q` (sin RF asociado — ver CLAUDE.md). `nombre_coincide`
+  // y `productos_coincidentes` son lo que negocios.repository.js#listar/
+  // cercanos calculan vía columnaNombreCoincide()/
+  // lateralProductosCoincidentes() cuando hubo `q`.
+  describe('matchType / matchedProducts (búsqueda por texto)', () => {
+    const filaBase = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Arepas Doña Rosa',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('sin búsqueda de texto (nombre_coincide ausente): matchType y matchedProducts quedan null', () => {
+      const resultado = toApiBusiness(filaBase);
+      expect(resultado.matchType).toBeNull();
+      expect(resultado.matchedProducts).toBeNull();
+    });
+
+    it('coincidió solo por el nombre del negocio: matchType="business_name", sin productos', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: true,
+        productos_coincidentes: null,
+      });
+      expect(resultado.matchType).toBe('business_name');
+      expect(resultado.matchedProducts).toBeNull();
+    });
+
+    it('coincidió solo por un producto: matchType="product", con el/los producto(s)', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: false,
+        productos_coincidentes: [
+          { nombre: 'Arepa de queso', precio: '5000.00', disponible: true },
+        ],
+      });
+      expect(resultado.matchType).toBe('product');
+      expect(resultado.matchedProducts).toEqual([
+        { name: 'Arepa de queso', price: 5000, available: true },
+      ]);
+    });
+
+    it('coincidió por el nombre del negocio Y por un producto: matchType="both"', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        nombre_coincide: true,
+        productos_coincidentes: [
+          { nombre: 'Arepa de queso', precio: '5000.00', disponible: true },
+          { nombre: 'Arepa con todo', precio: '7000.00', disponible: false },
+        ],
+      });
+      expect(resultado.matchType).toBe('both');
+      expect(resultado.matchedProducts).toEqual([
+        { name: 'Arepa de queso', price: 5000, available: true },
+        { name: 'Arepa con todo', price: 7000, available: false },
+      ]);
+    });
   });
 });
 

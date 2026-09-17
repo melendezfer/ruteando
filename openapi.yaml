@@ -256,6 +256,29 @@ components:
           format: double
           nullable: true
           description: Distancia en metros al punto de búsqueda. Solo en GET /businesses/nearby.
+        matchType:
+          type: string
+          nullable: true
+          enum: [business_name, product, both]
+          description: >-
+            Por qué este negocio calificó para el texto libre `q` (sin RF
+            asociado — ver CLAUDE.md): `business_name` si coincidió el
+            nombre del negocio, `product` si coincidió el nombre de un
+            producto de su catálogo, `both` si ambos. `null` cuando la
+            búsqueda no incluyó `q` (incluidos GET /businesses/{businessId}
+            y el resto de las operaciones, que nunca toman este
+            parámetro). Solo en GET /businesses y GET /businesses/nearby.
+        matchedProducts:
+          type: array
+          nullable: true
+          description: >-
+            Productos del catálogo cuyo nombre coincidió con `q` — `null`
+            si ninguno coincidió (el negocio calificó solo por su
+            nombre) o si la búsqueda no incluyó `q`. Pensado para un modo
+            de búsqueda "avanzado" que muestre el producto y su precio,
+            no solo que el negocio coincidió. Solo en GET /businesses y
+            GET /businesses/nearby.
+          items: { $ref: '#/components/schemas/MatchedProduct' }
         availabilityConfirmedAt:
           type: string
           format: date-time
@@ -289,6 +312,17 @@ components:
             autenticadas como el dueño, y GET /businesses /
             /businesses/nearby, que nunca devuelven un negocio "rejected")
             es null.
+
+    MatchedProduct:
+      description: >-
+        Forma liviana de un producto que coincidió con `q` — no el
+        Product completo (sin id/businessId/categoryId): acá solo
+        importa qué coincidió y su precio, ver Business.matchedProducts.
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: number }
+        available: { type: boolean }
 
     BusinessZone:
       description: >-

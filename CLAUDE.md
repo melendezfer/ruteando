@@ -4527,3 +4527,77 @@ frontend).
   de descubrimiento) — evita que hacer scroll por la página del perfil
   termine haciendo zoom sin querer sobre este mapa chico; el zoom sigue
   disponible con los botones `+`/`-` de Leaflet.
+
+## 45. Fusión de los dos buscadores — Fase 0 de 6: `matchType`/`matchedProducts`
+
+Sin RF asociado — petición directa del usuario, tras pedir primero un
+inventario de cómo funcionaba cada buscador hoy (`/buscar` vs. el mapa)
+antes de tocar nada. Plan aprobado en 6 fases, cada una su propio PR
+(mismo criterio que "vendiendo ahora", sección 37); esta sección
+documenta la Fase 0. Propia rama (`feature/busqueda-coincidencia-producto`).
+
+**Hallazgo de arranque**: esta misma rama ya tenía un cambio sin
+commitear en `negocios.repository.js` de una sesión anterior — el
+primer 20% de esta fase (`lateralProductosCoincidentes()`, trae los
+productos cuyo nombre coincidió con `q`), enganchado solo en `listar()`
+(`GET /businesses`), nunca en `cercanos()` (`GET /businesses/nearby`,
+el que usa el mapa) pese a que el propio comentario del código ya decía
+"compartido por listar() y cercanos()". Sin mapper, sin `openapi.yaml`,
+sin pruebas. Esta fase termina exactamente eso, no lo rehace desde
+cero.
+
+**Qué resuelve**: hasta ahora, `q` ya comparaba contra el nombre del
+negocio O el nombre de un producto suyo (desde la Épica 4), pero la API
+nunca decía CUÁL de las dos causó el match — un negocio como "Arepas
+Doña Rosa" con un producto "Arepa de queso" no se podía distinguir de
+un caso donde solo coincidió el nombre o solo un producto.
+
+### Diseño
+
+- `negocios.repository.js#columnaNombreCoincide(idxQ)` (nueva, simétrica
+  a `lateralProductosCoincidentes`): agrega `(n.nombre ILIKE $idxQ) AS
+  nombre_coincide` — mismo placeholder de `q` ya ligado en
+  `agregarFiltrosComunes()`, sin recalcular el patrón. `NULL` (no
+  `false`) cuando no hubo `q`, para distinguir "no se buscó por texto"
+  de "se buscó y el nombre no coincidió".
+- `construirConsultaCercanos()` ahora sí usa el `idxQ` que
+  `agregarFiltrosComunes()` ya devolvía (antes lo descartaba) — mismo
+  `LEFT JOIN LATERAL` y misma columna que `listar()`, sin duplicar la
+  lógica.
+- `business.mapper.js#resolverMatchType(row)` traduce
+  `nombre_coincide`/`productos_coincidentes` a un solo campo público:
+  `null` (sin `q`), `business_name`, `product` o `both` — el cliente
+  nunca recalcula el match en JS (regla de seguridad #1: la razón de la
+  coincidencia se decide una sola vez, en la misma consulta que ya
+  decidió si el negocio calificó).
+- `Business.matchedProducts` (nuevo, `MatchedProduct[] | null`): los
+  productos que coincidieron, con nombre/precio/disponible — forma
+  liviana, no el `Product` completo (sin id/businessId/categoryId), ya
+  pensada para el modo "avanzado" de búsqueda con precios de la Fase 3.
+  `null` tanto si ningún producto coincidió como si no hubo `q`.
+- Ambos campos viajan en `Business`, por lo tanto en `GET /businesses` y
+  `GET /businesses/nearby` (los únicos que aceptan `q`) — en el resto de
+  las operaciones (`GET /businesses/{id}`, POST/PATCH) quedan `null`,
+  mismo criterio que `distanceMeters`/`availabilityConfirmedAt`.
+
+### Verificado
+
+Suite completa: 536/536 (8 pruebas nuevas — 4 unitarias sobre
+`toApiBusiness` con filas armadas a mano, 4 de integración contra los
+dos endpoints reales con negocios/productos creados vía la API). En
+vivo contra el servidor de desarrollo real y los negocios de demo
+(`Arepas Doña Rosa`, con 4 productos "Arepa ..."): `q=rosa` →
+`business_name`; `q=boyacense` → `product`, con el producto y su precio
+reales; `q=arepa` → `both`, con los 4 productos; sin `q` → `null` en
+los dos campos. Los mismos 4 casos, replicados en `GET
+/businesses/nearby`.
+
+### Gaps conocidos — quedan para las fases siguientes, no de esta
+
+- Ninguna UI todavía consume `matchType`/`matchedProducts` — la Fase 2
+  ("por qué coincidió") es la que los muestra.
+- El mapa (`map-screen.tsx`) sigue sin ninguna caja de texto (`q`) — Fase 1.
+- `/buscar` sigue sin filtros de precio/abierto-ahora ni enlace "ver en
+  el mapa" — Fases 1 y 4.
+- Sin modo simple/avanzado — Fase 3.
+- Sin búsqueda por familia (categorías nuevas + alias) — Fase 5.

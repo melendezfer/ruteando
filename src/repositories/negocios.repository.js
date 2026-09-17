@@ -255,8 +255,15 @@ function lateralDisponibilidadFresca(idxFrescura) {
  * consulta que llama (distintos entre listar() y cercanos()) — usar
  * `params.length` como siguiente índice evita tener que llevar la cuenta
  * a mano en cada caller.
+ *
+ * Devuelve `{ idxQ }` — el índice del placeholder de `q` (o `null` si no
+ * se buscó por texto) — para que el caller arme
+ * `lateralProductosCoincidentes()` reusando exactamente el mismo patrón
+ * ya ligado acá, en vez de calcularlo dos veces.
  */
 function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow }) {
+  let idxQ = null;
+
   if (categoryId != null) {
     params.push(categoryId);
     clausulas.push(`n.categoria_id = $${params.length}`);
@@ -264,9 +271,9 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
 
   if (q) {
     params.push(`%${escaparComodinesLike(q)}%`);
-    const idx = params.length;
+    idxQ = params.length;
     clausulas.push(
-      `(n.nombre ILIKE $${idx} OR EXISTS (SELECT 1 FROM productos p WHERE p.negocio_id = n.id AND p.nombre ILIKE $${idx}))`,
+      `(n.nombre ILIKE $${idxQ} OR EXISTS (SELECT 1 FROM productos p WHERE p.negocio_id = n.id AND p.nombre ILIKE $${idxQ}))`,
     );
   }
 
@@ -301,6 +308,56 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
       )
     )`);
   }
+
+  return { idxQ };
+}
+
+/**
+ * LEFT JOIN LATERAL compartido por listar() y cercanos() para traer, solo
+ * cuando hubo búsqueda de texto (`idxQ` no nulo), el o los productos cuyo
+ * nombre coincidió con `q` — mismo patrón `ILIKE $idxQ` ya ligado en
+ * agregarFiltrosComunes(), reusado tal cual (no se vuelve a calcular el
+ * patrón de comodines escapados). Sin `q`, no arma ningún JOIN — el
+ * caller usa `columna: 'NULL'` para esa columna.
+ *
+ * Sin filtro de `p.disponible` a propósito: la cláusula WHERE de
+ * agregarFiltrosComunes() que decide si el negocio aparece TAMPOCO lo
+ * filtra — este LATERAL debe devolver exactamente los productos que
+ * causaron (o no) que el negocio calificara, no un subconjunto distinto.
+ * `json_agg` sobre cero filas da `NULL`, no un array vacío — así el
+ * cliente distingue "coincidió por nombre del negocio, ningún producto"
+ * (`matchedProducts: null`) de "coincidió por producto" (array con al
+ * menos un elemento), sin necesitar un booleano aparte.
+ */
+function lateralProductosCoincidentes(idxQ) {
+  if (idxQ == null) return { join: '', columna: 'NULL' };
+  return {
+    join: `LEFT JOIN LATERAL (
+       SELECT json_agg(
+         json_build_object('nombre', p.nombre, 'precio', p.precio, 'disponible', p.disponible)
+         ORDER BY p.nombre
+       ) AS productos
+       FROM productos p
+       WHERE p.negocio_id = n.id AND p.nombre ILIKE $${idxQ}
+     ) prodq ON true`,
+    columna: 'prodq.productos',
+  };
+}
+
+/**
+ * Columna compartida por listar() y cercanos(): además de qué productos
+ * coincidieron (lateralProductosCoincidentes), business.mapper.js#toApiBusiness
+ * necesita saber si fue el NOMBRE DEL NEGOCIO el que hizo match, para
+ * poder derivar `matchType` (business_name/product/both) sin que el
+ * cliente tenga que adivinarlo repitiendo la lógica de ILIKE — regla de
+ * seguridad #1, la razón de la coincidencia se decide una sola vez, acá,
+ * no en el cliente. Mismo placeholder $idxQ ya ligado en
+ * agregarFiltrosComunes(), reusado tal cual. `NULL` (no `false`) cuando
+ * no hubo búsqueda de texto — así toApiBusiness distingue "no se buscó
+ * por texto" de "se buscó y el nombre no coincidió".
+ */
+function columnaNombreCoincide(idxQ) {
+  return idxQ == null ? 'NULL' : `(n.nombre ILIKE $${idxQ})`;
 }
 
 /**
@@ -354,7 +411,8 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
   const params = [AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
   const idxFrescura = params.length;
 
-  agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
+  const { idxQ } = agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
+  const productosCoincidentes = lateralProductosCoincidentes(idxQ);
 
   if (cursor) {
     params.push(cursor.fechaCreacion, cursor.id);
@@ -373,7 +431,9 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
     // registros concurrentes) podían quedar fuera de cualquier página al
     // paginar, porque el cursor comparaba contra un valor ya truncado.
     `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta,
-            disp.respondida_en AS disponibilidad_confirmada_en
+            disp.respondida_en AS disponibilidad_confirmada_en,
+            ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
+            ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
      LEFT JOIN LATERAL (
        SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud, u.mostrar_ubicacion_exacta
@@ -381,6 +441,7 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
        LIMIT 1
      ) ub ON true
      ${lateralDisponibilidadFresca(idxFrescura)}
+     ${productosCoincidentes.join}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY n.fecha_creacion DESC, n.id DESC
      LIMIT $${params.length}`,
@@ -425,7 +486,14 @@ function construirConsultaCercanos({
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
 
-  agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow });
+  const { idxQ } = agregarFiltrosComunes(clausulas, params, {
+    categoryId,
+    q,
+    priceMin,
+    priceMax,
+    openNow,
+  });
+  const productosCoincidentes = lateralProductosCoincidentes(idxQ);
 
   if (cursor) {
     params.push(cursor.distanceMeters, cursor.id);
@@ -443,11 +511,14 @@ function construirConsultaCercanos({
             ST_X(u.punto::geometry) AS longitud,
             u.mostrar_ubicacion_exacta,
             ST_Distance(u.punto, objetivo.punto) AS distancia_m,
-            disp.respondida_en AS disponibilidad_confirmada_en
+            disp.respondida_en AS disponibilidad_confirmada_en,
+            ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
+            ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
      CROSS JOIN objetivo
      ${lateralDisponibilidadFresca(idxFrescura)}
+     ${productosCoincidentes.join}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY u.punto <-> objetivo.punto, n.id
      LIMIT $${params.length}`;

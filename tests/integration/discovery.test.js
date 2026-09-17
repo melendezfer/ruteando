@@ -383,6 +383,104 @@ describe('GET /businesses (lista con filtros, sin coordenada)', () => {
   });
 });
 
+describe('Business.matchType / matchedProducts (búsqueda por texto, sin RF asociado — ver CLAUDE.md, Fase 0)', () => {
+  const CENTRO = { lat: 4.578, lng: -74.217 };
+
+  it('sin q: matchType y matchedProducts quedan null (GET /businesses y GET /businesses/nearby)', async () => {
+    const categoryId = await crearCategoria();
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, categoryId });
+
+    const lista = await request(app).get(`/businesses?categoryId=${categoryId}`);
+    const propio = lista.body.data.find((b) => b.id === negocio.id);
+    expect(propio.matchType).toBeNull();
+    expect(propio.matchedProducts).toBeNull();
+
+    const cercanos = await request(app).get(
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&categoryId=${categoryId}`,
+    );
+    const propioCercano = cercanos.body.data.find((b) => b.id === negocio.id);
+    expect(propioCercano.matchType).toBeNull();
+    expect(propioCercano.matchedProducts).toBeNull();
+  });
+
+  it('coincide solo por el nombre del negocio: matchType="business_name", matchedProducts null', async () => {
+    const categoryId = await crearCategoria();
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      name: 'Arepas Doña Rosa',
+    });
+    // Producto sin relación textual con "arepas" — no debe colarse en matchedProducts.
+    await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${negocio.accessToken}`)
+      .send({ name: 'Jugo de mora', price: 3000 });
+
+    for (const url of [
+      `/businesses?categoryId=${categoryId}&q=arepas`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&categoryId=${categoryId}&q=arepas`,
+    ]) {
+      const res = await request(app).get(url);
+      const resultado = res.body.data.find((b) => b.id === negocio.id);
+      expect(resultado.matchType).toBe('business_name');
+      expect(resultado.matchedProducts).toBeNull();
+    }
+  });
+
+  it('coincide solo por un producto: matchType="product", con el producto y su precio', async () => {
+    const categoryId = await crearCategoria();
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      name: 'Puesto Genérico',
+    });
+    await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${negocio.accessToken}`)
+      .send({ name: 'Arepa de Choclo', price: 4000 });
+
+    for (const url of [
+      `/businesses?categoryId=${categoryId}&q=choclo`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&categoryId=${categoryId}&q=choclo`,
+    ]) {
+      const res = await request(app).get(url);
+      const resultado = res.body.data.find((b) => b.id === negocio.id);
+      expect(resultado.matchType).toBe('product');
+      expect(resultado.matchedProducts).toEqual([
+        { name: 'Arepa de Choclo', price: 4000, available: true },
+      ]);
+    }
+  });
+
+  it('coincide por el nombre del negocio Y por un producto a la vez: matchType="both"', async () => {
+    const categoryId = await crearCategoria();
+    const negocio = await crearNegocioActivo({
+      lat: CENTRO.lat,
+      lng: CENTRO.lng,
+      categoryId,
+      name: 'Arepas Doña Rosa',
+    });
+    await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${negocio.accessToken}`)
+      .send({ name: 'Arepa de queso', price: 5000 });
+
+    for (const url of [
+      `/businesses?categoryId=${categoryId}&q=arepa`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&categoryId=${categoryId}&q=arepa`,
+    ]) {
+      const res = await request(app).get(url);
+      const resultado = res.body.data.find((b) => b.id === negocio.id);
+      expect(resultado.matchType).toBe('both');
+      expect(resultado.matchedProducts).toEqual([
+        { name: 'Arepa de queso', price: 5000, available: true },
+      ]);
+    }
+  });
+});
+
 describe('Business.availabilityConfirmedAt en los listados (sección 11 de CLAUDE.md)', () => {
   it('viaja en GET /businesses y GET /businesses/nearby cuando hay una confirmación fresca, y null si no hay ninguna', async () => {
     const categoryId = await crearCategoria();

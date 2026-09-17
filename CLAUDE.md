@@ -4601,3 +4601,135 @@ los dos campos. Los mismos 4 casos, replicados en `GET
   el mapa" — Fases 1 y 4.
 - Sin modo simple/avanzado — Fase 3.
 - Sin búsqueda por familia (categorías nuevas + alias) — Fase 5.
+
+## 46. Fusión de los dos buscadores — Fase 1 de 6: buscador único
+
+Cierra los dos primeros gaps que quedaron documentados en la sección 45
+— propia rama (`feature/buscador-unico-mapa-y-precio`), enteramente de
+frontend (sin cambios de backend).
+
+### `useBusinessSearch` — el fetch compartido
+
+`client/src/lib/discovery/use-business-search.ts` (nuevo): antes,
+`home-screen.tsx` y `map-screen.tsx` duplicaban la misma elección entre
+`GET /businesses` y `GET /businesses/nearby` según geolocalización, cada
+una armando su propia lista de query params a mano. Ahora un solo hook
+decide eso; cada pantalla sigue dueña de su propio estado de filtros/UI
+(categorías rápidas, panel de filtros, evento `busqueda`...).
+
+**El hook NO llama a `useConsumerGeolocation()` por su cuenta** — recibe
+la instancia ya montada del caller (`geolocation` en las opciones). Se
+consideró que lo hiciera internamente (más simple a primera vista) y se
+descartó antes de escribir el resto: `MapScreen`/`HomeScreen` ya montan
+su propia `useConsumerGeolocation()` (la necesitan para centrar el mapa,
+mostrar el aviso de "activa tu ubicación", etc.) — si el hook también la
+llamara, quedarían **dos** instancias independientes pidiendo
+`getCurrentPosition` al navegador dentro de la misma pantalla.
+
+### El mapa gana un buscador de texto — sin duplicar lo que ya existía
+
+`map-screen.tsx`: `SearchBar` (el mismo componente de `/buscar`) fijo
+arriba del mapa (`bg-surface`/`shadow-lg` para leerse sobre los tiles,
+mismo lenguaje visual que `MapFiltersSheet`). Al buscar, además de
+filtrar los pines (ya lo hacían price/openNow desde antes), se muestra
+`MapSearchResults` (nuevo, `client/src/components/map/map-search-results.tsx`)
+— una lista con nombre/categoría/distancia de cada resultado.
+
+**No se pidió una lista aparte con su propio fetch**: `MapSearchResults`
+reusa exactamente `businesses` (ya filtrado a los que tienen coordenadas)
+— son los mismos negocios que ya se dibujan como pines, la lista es solo
+una forma más legible de verlos sin tener que encontrarlos a ojo en el
+mapa. Tocar un resultado reusa `handleSelectBusiness` (recentra primero,
+con `mapInstanceRef`, por si el negocio está fuera de encuadre o
+agrupado en un cluster, y recién ahí dispara la misma selección que
+tocar su pin) — abre el mismo `BusinessSummarySheet` de siempre, no una
+segunda vista de detalle.
+
+`searchKey` (contador que remonta `SearchBar` vía `key`) es el mecanismo
+para el botón "Limpiar búsqueda" — `SearchBar` maneja su propio input
+internamente sin `value` controlado (mismo componente que ya usaba
+`/buscar`, sin tocarlo), así que la única forma de vaciar visualmente el
+campo desde afuera es forzar un remount.
+
+### `/buscar` gana precio/abierto-ahora — expandido in-place, no como bottom sheet
+
+`PriceOpenNowFields` (nuevo, `client/src/components/discovery/price-open-now-fields.tsx`)
+extrae los 3 controles (precio mín./máx./abierto ahora) que antes vivían
+solo dentro de `MapFiltersSheet`, como un componente sin contenedor
+propio (`Fragment`, no un `<div>`) — cada caller ya tiene su propio
+`flex flex-wrap` (`MapFiltersSheet` lo comparte con el selector de
+radio; `/buscar` lo usa solo), así que anidar otro contenedor adentro
+habría cambiado en qué unidad envuelven los controles al hacer `wrap`.
+`MapFiltersSheet` pasó a envolver este componente en vez de duplicar su
+JSX — sin cambios de comportamiento para el mapa.
+
+**Por qué `/buscar` NO reusa el "bottom sheet" del mapa tal cual**: se
+evaluó reusar `MapFiltersSheet` completo (`position: absolute; bottom:
+0`) y se descartó — esa posición se ancla al **contenedor** más cercano
+con `position` distinto de `static`, y en el mapa ese contenedor es un
+`div` de alto acotado (`min-h-[420px] flex-1`, el mismo tamaño del mapa,
+nunca crece con el contenido). `/buscar` es una página normal con
+scroll (crece con la cantidad de resultados) — envolverla en `relative`
+para anclar el mismo sheet lo habría pegado al fondo de TODO el
+contenido de la página, no al fondo visible del viewport. Se optó por
+expandir `PriceOpenNowFields` in-place bajo la barra de búsqueda
+(coherente con CLAUDE.md sección 17, "expandir en el mismo lugar"), sin
+ninguna posición `absolute`/`fixed` — un panel más en el flujo normal de
+la página.
+
+`MapFiltersState.radiusKm` pasó a opcional (`radiusKm?: number`) para
+que este mismo tipo sirviera para el estado de filtros de `/buscar`
+(que no tiene selector de radio — su "cerca de ti" usa un radio fijo,
+`NEARBY_RADIUS_KM`, no un filtro que el usuario elija).
+
+`home-screen.tsx#lastSearch` (nuevo) recuerda el último `query`/
+`categoryId` disparado por el usuario — cambiar un filtro de precio
+reusa esa búsqueda en vez de perderla; no dispara `logSearchEvent`
+(CLAUDE.md sección 16 solo lo pide "al ejecutar una búsqueda por texto o
+categoría", un ajuste de filtro no es eso).
+
+### `formatDistance` — extraído, ya usado en dos lugares reales
+
+`client/src/lib/format/distance.ts` (nuevo) — antes vivía privado dentro
+de `business-card.tsx`; `map-search-results.tsx` lo necesitaba también
+para el mismo formato exacto (metros bajo 1km, km con un decimal encima)
+— extraído en vez de duplicado.
+
+### Bug real encontrado en la propia verificación con Playwright, no en código de producto separado
+
+La primera versión de `MapSearchResults`/`ZoneComparisonCard` (con
+`belowSearchBar`) usaba `top-[4.5rem]` (72px) como offset bajo la barra
+de búsqueda — midiendo con Playwright (`boundingBox()` real del
+contenedor de la barra: `{ top: 12px, height: 72px }`) se confirmó que
+el offset correcto era `12 + 72 = 84px`, no 72px — la primera fila de
+resultados quedaba parcialmente tapada por la propia barra de búsqueda
+(su nombre no se veía, solo la línea de categoría/distancia debajo).
+Corregido a `top-24` (96px, con margen de sobra) en los dos
+componentes. Encontrado con una captura real (no solo `tsc`/lint), antes
+de darlo por terminado.
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del backend
+sin cambios: 536/536 (esta fase fue enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real (cuenta de
+consumidor registrada por la UI, geolocalización simulada sobre Ciudad
+Verde): buscar "arepa" en el mapa muestra "Arepas Doña Rosa — Arepas ·
+248 m" y "Arepas j — Comida rápida · 761 m" en la lista; tocar el
+primero recentra el mapa y abre el mismo `BusinessSummarySheet` de
+siempre; "Limpiar búsqueda" vacía el campo y vuelve a los pines
+filtrados normales. En `/buscar`: el botón de filtros expande
+precio/abierto-ahora in-place bajo la barra, se resalta cuando hay un
+filtro activo, y aplicar `priceMin=1000` reejecuta la búsqueda sin
+perder "Cerca de ti". Cuentas de prueba borradas después.
+
+### Gaps conocidos — quedan para las fases siguientes
+
+- `matchType`/`matchedProducts` (Fase 0) siguen sin ningún consumidor en
+  esta UI — Fase 2.
+- Sin modo simple/avanzado — Fase 3.
+- Sin "ver en el mapa" desde `/buscar` — Fase 4.
+- Sin búsqueda por familia — Fase 5.
+- El botón "Limpiar búsqueda" solo existe en el mapa — `/buscar` sigue
+  sin una forma de vaciar el campo una vez enviado (mismo límite que ya
+  tenía antes de esta fase, no se pidió resolverlo acá).

@@ -20,10 +20,29 @@
 # hacerlo por completo sin esa aprobación humana.
 #
 # Uso: bash scripts/dev-lan.sh
+#      bash scripts/dev-lan.sh --prod-frontend
+#
+# --prod-frontend: el frontend corre compilado (next build + next
+# start) en vez de next dev — sin socket de HMR. Existe por un bug real
+# encontrado probando por LAN (ver CLAUDE.md sección 24): el handshake
+# de ese socket puede fallar específicamente al acceder por la IP de
+# LAN en este entorno (WSL2 NAT + portproxy), y cuando eso pasa React
+# nunca llega a hidratar — la app se queda en "Cargando sesión..." para
+# siempre, sin ningún fetch de por medio. No es un bug de la
+# aplicación (confirmado con el mismo código corriendo en este modo,
+# por la misma IP) — es que ese socket no existe en un build de
+# producción, así que no hay nada que se pueda colgar. El backend NO
+# necesita este modo — ya funciona bien por LAN tal cual, HTTP normal
+# sin ningún socket de por medio.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+PROD_FRONTEND=0
+if [ "${1:-}" = "--prod-frontend" ]; then
+  PROD_FRONTEND=1
+fi
 
 LAN_PORTS=(3000 3001)
 
@@ -123,7 +142,19 @@ fi
 #    entorno, hay que volver a correr este script después de eso).
 # ---------------------------------------------------------------------
 log "Levantando backend + frontend con pm2 (startOrReload, idempotente)"
-pm2 startOrReload ecosystem.config.cjs
+if [ "$PROD_FRONTEND" -eq 1 ]; then
+  echo "Frontend en modo producción (next build + next start, sin HMR) — ver CLAUDE.md sección 24."
+  # `pm2 delete` (no solo `stop`): los dos procesos bindean :3001, así
+  # que no pueden quedar los dos registrados en pm2 a la vez, ni
+  # siquiera uno "detenido" — un `pm2 startOrReload` posterior sin este
+  # flag no debe encontrarse este proceso todavía ahí.
+  pm2 delete ruteando-frontend >/dev/null 2>&1 || true
+  (cd client && npm run build)
+  pm2 startOrReload ecosystem.config.cjs --only ruteando-backend,ruteando-frontend-prod
+else
+  pm2 delete ruteando-frontend-prod >/dev/null 2>&1 || true
+  pm2 startOrReload ecosystem.config.cjs --only ruteando-backend,ruteando-frontend
+fi
 pm2 save >/dev/null
 
 echo -n "Esperando a que el backend responda en :3000/health"
@@ -233,4 +264,9 @@ if [ -n "$LAN_IP" ]; then
   fi
 else
   echo "Desde el celular (LAN):  no se pudo detectar la IP LAN de Windows"
+fi
+if [ "$PROD_FRONTEND" -eq 1 ]; then
+  echo "Frontend: modo producción (sin recarga en vivo) — volvé a correr sin --prod-frontend para recuperar next dev."
+else
+  echo "Frontend: modo desarrollo (next dev, con recarga en vivo)."
 fi

@@ -4902,3 +4902,88 @@ Cuentas de prueba borradas después.
   cada uno su propio `advanced`, independientes) ni entre visitas — no
   se pidió, y el resto de los filtros de este proyecto (categoría,
   precio, radio) ya funcionan igual, sin sincronizar entre pantallas.
+
+## 49. Fusión de los dos buscadores — Fase 4 de 6: "ver en el mapa" desde `/buscar`
+
+Cierra el gap original de la sección 45 ("los resultados no tienen
+forma de ir a esa ubicación en el mapa") — propia rama
+(`feature/busqueda-ver-en-mapa`), enteramente de frontend.
+
+### `/mapa`, no `/` — mismo motivo que ya llevó a crear esa ruta
+
+El enlace apunta a `/mapa?businessId={id}`, nunca a `/`: desde la
+pantalla de inicio por rol (sección 38), un vendedor con un negocio
+activo aterriza en `/` en su propio perfil, no en el mapa — mandarlo a
+"/" con `businessId` lo devolvería a su propio negocio, ignorando el
+parámetro. `/mapa` siempre renderiza el mapa sin importar el rol
+(razón por la que esa ruta existe, sección 27/38), así que es el único
+destino confiable para esta funcionalidad.
+
+### `MapScreen` acepta un negocio inicial, resuelto por perfil completo
+
+`initialBusinessId` (nuevo prop, desde `?businessId=` en
+`/mapa/page.tsx` vía `useSearchParams()` — mismo patrón de `Suspense`
+que `/restablecer-contrasena`, sección 39). Pide `GET
+/businesses/{businessId}` (perfil completo) en vez de buscar el negocio
+entre los `businesses` ya cargados: el negocio puede estar fuera del
+radio/límite/filtros de la búsqueda general del mapa (ej. lejos de la
+ubicación del consumidor, o filtrado por un precio que ya no aplica al
+volver a "Sencilla").
+
+Usa `profile.location.latitude/longitude`, no
+`profile.latitude/longitude` — ese campo top-level de `Business` queda
+`null` en un `GET` por id (business.mapper.js#toApiBusiness: "solo se
+llena en listar/cercanos"), la coordenada real de un perfil individual
+vive en `location` (con la misma regla de "zona aproximada" vs.
+dirección exacta que ya aplica el backend según quién pregunta — sin
+tocar nada de esa lógica, se reusa tal cual viene).
+
+`handledInitialBusinessIdRef` (por id, no un booleano "ya se resolvió
+uno") evita repetir el fetch en renders de más, pero sí permite
+resolver un id **nuevo** si la URL cambia a otro negocio sin recargar
+la página completa (navegación cliente entre dos "Ver en el mapa"
+seguidos).
+
+### El pin también se agrega al mapa, no solo el resumen flotando
+
+Se consideró simplemente centrar + abrir `BusinessSummarySheet` sin
+tocar los pines visibles, y se descartó: un resumen flotando sin nada
+que marque su ubicación en el mapa no cumple "ver en el **mapa**".
+`externalPin` (nuevo estado) se agrega a `businesses` (el array que ya
+alimenta tanto los pines como `MapSearchResults`) solo si ese negocio
+no vino ya en la búsqueda general — sin duplicar el pin cuando sí
+estaba.
+
+### `BusinessCard#hideMapLink`
+
+El enlace "Ver en el mapa" (ícono `MapTrifold`, junto a "Ver perfil
+completo") se agregó directo a `BusinessCard`, así que aparece en los
+dos lugares que la reusan — pero `BusinessSummarySheet` (el resumen que
+abre el propio mapa al tocar un pin) lo oculta con el prop nuevo
+`hideMapLink`: ese enlace ahí sería circular, ya estás viendo ese mismo
+negocio en el mapa.
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del
+backend sin cambios: 536/536 (fase enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real (cuenta de
+consumidor registrada por la UI, geolocalización simulada sobre Ciudad
+Verde): buscar "arepa" en `/buscar`, expandir "Arepas Doña Rosa",
+confirmar el enlace "Ver en el mapa" (`href=/mapa?businessId=...`) →
+tocarlo → navega a `/mapa` → el mapa recentra y abre
+`BusinessSummarySheet` con el mismo negocio, sin necesidad de tocar
+ningún pin → confirmado que ese resumen no ofrece su propio "Ver en el
+mapa" (0 enlaces con ese texto en la página). Cuenta de prueba borrada
+después.
+
+### Gaps conocidos — quedan para la fase siguiente
+
+- Sin búsqueda por familia (categorías nuevas + alias) — Fase 5, la
+  última del plan.
+- Si `businessId` no existe o el negocio no tiene ubicación registrada,
+  el mapa simplemente no centra ni selecciona nada (el `fetch` no
+  encuentra `location` válida) — sin ningún aviso al usuario de "no
+  pudimos encontrar ese negocio". No se pidió, y en la práctica el
+  enlace siempre sale de un negocio que ya se mostró como resultado
+  real, así que este caso solo ocurriría con una URL manipulada a mano.

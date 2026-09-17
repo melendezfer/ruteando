@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CaretDown, CaretUp, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp, MapPin, MapTrifold, Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
@@ -43,6 +43,14 @@ interface BusinessCardProps {
    * muestra precios por accidente.
    */
   showPrices?: boolean;
+  /**
+   * Fase 4 de la fusión de buscadores (sin RF asociado — ver CLAUDE.md
+   * sección 45/49): oculta el enlace "Ver en el mapa" — para cuando esta
+   * tarjeta YA es el resumen que abrió el mapa al tocar un pin
+   * (BusinessSummarySheet), donde ese enlace sería circular (ya estás
+   * viéndolo en el mapa). Default `false`: `/buscar` sí lo ofrece.
+   */
+  hideMapLink?: boolean;
 }
 
 /**
@@ -63,6 +71,7 @@ export function BusinessCard({
   categoryName,
   defaultExpanded = false,
   showPrices = false,
+  hideMapLink = false,
 }: BusinessCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -170,14 +179,29 @@ export function BusinessCard({
                   ? `${profile.averageRating.toFixed(1)} (${profile.reviewCount} reseña${profile.reviewCount === 1 ? "" : "s"})`
                   : "Todavía sin reseñas"}
               </p>
-              {business.id && (
-                <Link
-                  href={`/negocios/${business.id}`}
-                  className="font-sans text-body-sm font-medium text-terracota hover:underline"
-                >
-                  Ver perfil completo
-                </Link>
-              )}
+              <div className="flex items-center gap-4">
+                {business.id && (
+                  <Link
+                    href={`/negocios/${business.id}`}
+                    className="font-sans text-body-sm font-medium text-terracota hover:underline"
+                  >
+                    Ver perfil completo
+                  </Link>
+                )}
+                {/* "Ver en el mapa" (Fase 4, CLAUDE.md sección 49) —
+                    apunta a /mapa (no a "/", que para un vendedor con
+                    negocio activo redirige a su propio perfil en vez de
+                    mostrar el mapa, ver CLAUDE.md sección 38). */}
+                {business.id && !hideMapLink && (
+                  <Link
+                    href={`/mapa?businessId=${business.id}`}
+                    className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"
+                  >
+                    <MapTrifold size={16} weight="bold" />
+                    Ver en el mapa
+                  </Link>
+                )}
+              </div>
             </>
           )}
 

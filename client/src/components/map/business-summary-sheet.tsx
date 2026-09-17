@@ -39,6 +39,7 @@ export function BusinessSummarySheet({ business, categoryName, onClose, showPric
           categoryName={categoryName}
           defaultExpanded
           showPrices={showPrices}
+          hideMapLink
         />
       </div>
     </div>

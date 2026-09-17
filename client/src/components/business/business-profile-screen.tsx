@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Briefcase,
   CookingPot,
+  Gear,
   Moped,
   NavigationArrow,
   Package,
@@ -271,6 +272,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         size={22}
         className="fixed right-3 top-3 z-40 h-10 w-10 border border-border bg-surface/90 shadow-lg backdrop-blur transition-colors hover:bg-background"
       />
+      {isOwner && (
+        <Link
+          href="/cuenta"
+          aria-label="Cuenta"
+          className="fixed right-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface/90 text-text shadow-lg backdrop-blur transition-colors hover:bg-background"
+        >
+          <Gear size={20} weight="bold" />
+        </Link>
+      )}
 
       <div className="relative h-64 w-full bg-border">
         {heroPhoto ? (

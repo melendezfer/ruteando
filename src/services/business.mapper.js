@@ -86,6 +86,34 @@ function aproximarCoordenada(valor) {
   return Math.round(Number(valor) * factor) / factor;
 }
 
+// Búsqueda por texto (RF-010/011): distinguir si un negocio calificó por
+// su propio nombre, por un producto de su catálogo, o por ambos a la
+// vez (petición directa del usuario, sin RF asociado — ver CLAUDE.md).
+// `row.nombre_coincide` (boolean o null) y `row.productos_coincidentes`
+// (array o null) los calcula negocios.repository.js#listar/cercanos vía
+// columnaNombreCoincide()/lateralProductosCoincidentes(), reusando el
+// mismo placeholder de `q` ya ligado — este mapper solo traduce esas dos
+// señales al contrato público, nunca recalcula el match en JS (regla de
+// seguridad #1: la razón de la coincidencia se decide una sola vez, en
+// la consulta que ya decidió si el negocio aparece).
+function resolverMatchType(row) {
+  if (row.nombre_coincide == null) return null; // no hubo búsqueda de texto (sin `q`)
+  if (row.nombre_coincide && row.productos_coincidentes) return 'both';
+  return row.nombre_coincide ? 'business_name' : 'product';
+}
+
+// Forma liviana, no el Product completo (id/businessId/categoryId/etc.)
+// — acá solo importa qué producto coincidió y su precio, para el modo
+// "avanzado" de la búsqueda (mostrar el precio del ítem que hizo match),
+// no un recurso completo que el cliente ya podría pedir aparte.
+function toApiMatchedProduct(row) {
+  return {
+    name: row.nombre,
+    price: Number(row.precio),
+    available: row.disponible,
+  };
+}
+
 function toApiBusiness(row) {
   return {
     id: row.id,
@@ -148,6 +176,13 @@ function toApiBusiness(row) {
         : null,
     // Solo lo llena la consulta de /businesses/nearby.
     distanceMeters: row.distancia_m != null ? Number(row.distancia_m) : null,
+    // Por qué coincidió con `q` (ver resolverMatchType arriba) — null
+    // salvo que la consulta que produjo esta fila haya buscado por texto
+    // (listar/cercanos en negocios.repository.js con `q` presente).
+    matchType: resolverMatchType(row),
+    matchedProducts: row.productos_coincidentes
+      ? row.productos_coincidentes.map(toApiMatchedProduct)
+      : null,
     // Confirmación de disponibilidad en tiempo real (sección 11 de
     // CLAUDE.md) — mismo criterio que latitude/longitude/distanceMeters
     // arriba: solo viene lleno cuando la consulta que produjo esta fila

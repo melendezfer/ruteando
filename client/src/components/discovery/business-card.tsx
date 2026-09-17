@@ -8,6 +8,7 @@ import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
+import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
 
 type Business = components["schemas"]["Business"];
@@ -112,6 +113,10 @@ export function BusinessCard({ business, categoryName, defaultExpanded = false }
                 importar `mobility` (ambulante/local fijo) ni nada más —
                 nunca oculta ni reordena esta tarjeta ni ninguna otra. */}
             <AvailabilityConfirmedBadge confirmedAt={business.availabilityConfirmedAt} />
+            {/* Por qué coincidió con la búsqueda de texto (Fase 2 de la
+                fusión de buscadores, sin RF asociado — ver CLAUDE.md
+                sección 47) — null fuera de una búsqueda por `q`. */}
+            <MatchReasonBadges matchType={business.matchType} matchedProducts={business.matchedProducts} />
           </div>
           {expanded ? (
             <CaretUp size={20} className="shrink-0 text-text-muted" />

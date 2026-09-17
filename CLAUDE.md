@@ -4733,3 +4733,76 @@ perder "Cerca de ti". Cuentas de prueba borradas después.
 - El botón "Limpiar búsqueda" solo existe en el mapa — `/buscar` sigue
   sin una forma de vaciar el campo una vez enviado (mismo límite que ya
   tenía antes de esta fase, no se pidió resolverlo acá).
+
+## 47. Fusión de los dos buscadores — Fase 2 de 6: "por qué coincidió"
+
+Cierra el gap de la sección 45/46 (`matchType`/`matchedProducts`, ya
+calculados por el backend desde la Fase 0, sin ningún consumidor en la
+UI todavía) — propia rama (`feature/busqueda-por-que-coincidio`),
+enteramente de frontend.
+
+### `MatchReasonBadges`
+
+`client/src/components/discovery/match-reason-badges.tsx` (nuevo) —
+traduce `Business.matchType`/`matchedProducts` a chips, sin recalcular
+el match en el cliente (regla de seguridad #1: esa decisión ya la tomó
+la consulta que decidió si el negocio calificó, ver sección 45). `null`
+(sin búsqueda de texto activa) no renderiza nada, mismo criterio que
+`AvailabilityConfirmedBadge`.
+
+- `business_name`/`both` → chip "Nombre del negocio" (ícono
+  `Storefront`).
+- `product`/`both` → un chip por producto coincidente (ícono `Tag`),
+  `nombre · precio` (`formatCOP`) — hasta `MAX_PRODUCT_CHIPS` (2), con
+  "+N más" cuando hay más (ej. "Arepas Doña Rosa" buscando "arepa"
+  matchea 4 productos — mostrar los 4 en la tarjeta colapsada la habría
+  convertido en una lista larga, contra CLAUDE.md sección 17).
+- `product.price` se muestra defensivo (`!== undefined`) en vez de
+  declarar `required` en `MatchedProduct` (`openapi.yaml`) — mismo
+  criterio ya establecido en el proyecto para `Product.price`
+  (`product-row.tsx`), no una inconsistencia nueva.
+
+Montado en los dos lugares donde ya vive un resultado de búsqueda:
+`BusinessCard` (bajo la línea de categoría/distancia, junto a
+`AvailabilityConfirmedBadge` — visible sin expandir la tarjeta, mismo
+criterio que la distancia) y `MapSearchResults` (la lista de texto del
+mapa, Fase 1). Ningún componente nuevo de layout — ambos ya recibían
+`business: Business` completo, así que no hizo falta ningún prop nuevo
+más allá de pasar los dos campos que ya venían en el objeto.
+
+**Precio incluido ya en esta fase, no reservado para la Fase 3**:
+`matchedProducts` ya traía el precio desde la Fase 0, y mostrar "coincide
+por un producto" sin decir cuál ni cuánto cuesta hubiera sido una
+información a medias. La Fase 3 ("modo simple/avanzado") es sobre
+**cuándo** mostrar este nivel de detalle (quizás ocultarlo en el modo
+simple), no sobre construir el dato desde cero — se decidió no bloquear
+esta fase esperando esa decisión.
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del
+backend sin cambios: 536/536 (fase enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real (cuenta de
+consumidor registrada por la UI, geolocalización simulada sobre Ciudad
+Verde), los 3 `matchType` posibles, con los datos reales de demo:
+- `q=arepa` → "Arepas Doña Rosa": chip "Nombre del negocio" + "Arepa
+  boyacense · $ 4.500" + "Arepa con chicharrón · $ 7.000" + "+2 más"
+  (4 productos coincidieron en total) — `both`.
+- `q=boyacense` → "Arepas Doña Rosa": solo "Arepa boyacense · $ 4.500",
+  sin el chip de nombre — `product`.
+- `q=rosa` → "Arepas Doña Rosa": solo "Nombre del negocio", sin ningún
+  chip de producto — `business_name`.
+- Mismos chips confirmados en `/buscar` (`BusinessCard`) con `q=arepa`
+  sobre "Arepas Doña Rosa" y "Arepas j" a la vez, cada una con su propia
+  combinación correcta.
+- Sin `q` ("Cerca de ti"): ninguna tarjeta muestra chips.
+
+Cuentas de prueba borradas después.
+
+### Gaps conocidos — quedan para las fases siguientes
+
+- Sin distinción visual entre "modo simple" (sin precios) y "modo
+  avanzado" — hoy el precio de los productos coincidentes siempre se
+  muestra cuando hay `matchType`. Fase 3.
+- Sin "ver en el mapa" desde `/buscar` — Fase 4.
+- Sin búsqueda por familia — Fase 5.

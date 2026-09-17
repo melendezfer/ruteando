@@ -1,9 +1,10 @@
 "use client";
 
-import { CaretRight } from "@phosphor-icons/react/dist/ssr";
+import { CaretRight, NavigationArrow } from "@phosphor-icons/react/dist/ssr";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
+import { buildDirectionsUrl } from "@/lib/format/directions";
 
 interface MapSearchResultsProps {
   query: string;
@@ -56,31 +57,54 @@ export function MapSearchResults({
           const categoryName =
             business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null;
           return (
-            <button
+            <div
               key={business.id}
-              type="button"
-              onClick={() => onSelect(business)}
-              className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-background"
+              className="flex w-full items-center gap-2 border-b border-border px-4 py-3 last:border-b-0"
             >
-              <div className="flex flex-col gap-0.5">
-                <span className="font-heading text-body font-semibold text-text">{business.name}</span>
-                <span className="font-sans text-body-sm text-text-muted">
-                  {categoryName ?? "Comercio informal"}
-                  {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
-                </span>
-                {/* Por qué coincidió (Fases 2 y 5, CLAUDE.md sección
-                    47/50) — ya viene calculado por el backend sobre
-                    esta misma `q`. */}
-                <MatchReasonBadges
-                  matchType={business.matchType}
-                  matchedProducts={business.matchedProducts}
-                  matchedCategory={business.matchedCategory}
-                  categoryName={categoryName}
-                  showPrices={showPrices}
-                />
-              </div>
-              <CaretRight size={18} className="shrink-0 text-text-muted" />
-            </button>
+              {/* Tocar la fila ya recentra + selecciona (equivalente a
+                  "Ver en el mapa" acá — ya estás en el mapa, no hace
+                  falta un segundo botón redundante para lo mismo). */}
+              <button
+                type="button"
+                onClick={() => onSelect(business)}
+                className="flex flex-1 items-center justify-between gap-3 text-left hover:bg-background"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-heading text-body font-semibold text-text">{business.name}</span>
+                  <span className="font-sans text-body-sm text-text-muted">
+                    {categoryName ?? "Comercio informal"}
+                    {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
+                  </span>
+                  {/* Por qué coincidió (Fases 2 y 5, CLAUDE.md sección
+                      47/50) — ya viene calculado por el backend sobre
+                      esta misma `q`. */}
+                  <MatchReasonBadges
+                    matchType={business.matchType}
+                    matchedProducts={business.matchedProducts}
+                    matchedCategory={business.matchedCategory}
+                    categoryName={categoryName}
+                    showPrices={showPrices}
+                  />
+                </div>
+                <CaretRight size={18} className="shrink-0 text-text-muted" />
+              </button>
+              {/* "Cómo llegar" (retroalimentación sobre el buscador,
+                  Fase A, sin RF asociado — ver CLAUDE.md sección
+                  45/51) — sibling del botón de arriba, no anidado
+                  (un <a> dentro de un <button> es HTML inválido), con
+                  su propio target="_blank" para no interrumpir la
+                  búsqueda en curso. */}
+              <a
+                href={buildDirectionsUrl(business.latitude, business.longitude)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Cómo llegar a ${business.name}`}
+                onClick={(event) => event.stopPropagation()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-terracota hover:bg-background"
+              >
+                <NavigationArrow size={16} weight="bold" />
+              </a>
+            </div>
           );
         })}
     </div>

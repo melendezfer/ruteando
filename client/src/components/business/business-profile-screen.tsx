@@ -45,6 +45,7 @@ import {
   type CatalogType,
 } from "@/lib/catalog/catalog-label";
 import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
+import { buildDirectionsUrl } from "@/lib/format/directions";
 import { uploadBusinessPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
 import { createProduct, updateProduct } from "@/lib/api/products";
 import {
@@ -281,9 +282,10 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
   const itemNoun = resolveItemNoun(catalogType);
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
-  const directionsHref = location
-    ? `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`
-    : null;
+  const directionsHref =
+    location && location.latitude !== undefined && location.longitude !== undefined
+      ? buildDirectionsUrl(location.latitude, location.longitude)
+      : null;
 
   return (
     <div className="flex flex-1 flex-col pb-24">

@@ -5205,3 +5205,94 @@ de prueba borrada después.
   `belowSearchBar`/el offset medido a mano (`top-36`) — vuelven a
   anclarse en `top-3` simple, cerrando la causa raíz del bug de offset
   que ya se repitió dos veces (Fases 1 y 3 de la sección 45/48).
+
+## 52. Retroalimentación sobre el buscador — Fase B de 2 (última): panel unificado
+
+Cierra la retroalimentación de la sección 51 — propia rama
+(`feature/busqueda-panel-unificado`), enteramente de frontend. Plan ya
+acordado con el usuario antes de escribir código (incluida la decisión
+explícita de mantener "Abierto ahora" disponible en los dos modos, ver
+sección 51).
+
+### Dos superficies se convierten en una: `MapSearchSheet`
+
+Reemplaza dos componentes que competían por el mismo espacio:
+- La caja de texto fija arriba del mapa (Fase 1, sección 45).
+- El panel "Filtros" aparte (distancia/precio/abierto-ahora, también
+  Fase 1) — `map-filters.tsx` **se borró**, no quedó como código muerto.
+
+`client/src/components/map/map-search-sheet.tsx` (nuevo) es la única
+superficie ahora: input de texto → `SearchModeToggle` → (solo en
+"Avanzada") distancia + precio mín./máx., con "Abierto ahora" siempre
+presente en los dos modos → resultados de la búsqueda de texto, todo en
+un solo bottom sheet con scroll interno (`max-h-[75vh]`, header+campos
+fijos arriba, resultados en `flex-1 overflow-y-auto`).
+
+Se abre desde un ícono circular "Buscar" (`MagnifyingGlass`) que
+**reemplaza** al secundario "Filtros" en `FloatingActionStack` — mismo
+slot, mismo contrato de 2 botones que ya tenía ese componente (primario
++ secundario, CLAUDE.md sección 20) — no hizo falta tocar
+`FloatingActionStack` en absoluto, solo qué `FloatingAction` le pasa
+`MapScreen`.
+
+### `MapSearchResults` pierde su posicionamiento propio
+
+Hasta esta fase, `MapSearchResults` era una superficie flotante con su
+propio `absolute`/offset (`top-36`, medido a mano con Playwright dos
+veces — Fases 1 y 3, cada vez que la caja de arriba crecía una fila el
+offset se quedaba corto). Ahora es contenido puro (sin `absolute`, sin
+offset) embebido dentro de `MapSearchSheet`, que es la única superficie
+posicionada. Esto no es solo un ajuste estético — cierra la causa raíz
+de un bug que ya se había repetido dos veces: sin una caja fija de la
+que "esquivar", no hay ningún offset que medir ni que se pueda romper
+de nuevo si algo más crece.
+
+`ZoneComparisonCard` recupera su forma original — el prop
+`belowSearchBar` (y su offset condicional `top-36`) ya no tienen razón
+de existir, así que se eliminaron del componente en vez de dejarlos sin
+usar "por si acaso".
+
+### `/buscar`: mismo criterio, sin bottom sheet (no hace falta)
+
+`HomeScreen` no gana ningún ícono circular ni hoja — el pedido del
+usuario de "más compacto" fue específicamente sobre el mapa (una caja
+fija compitiendo con el lienzo del mapa por espacio de pantalla); en
+`/buscar`, que ya es una página normal con scroll, el input+modo+filtros
+inline nunca compitieron con nada. Cambio real ahí: desapareció el botón
+"Filtros" (ícono `SlidersHorizontal`) y su estado `filtersOpen` — antes
+había que abrirlo para ver `PriceOpenNowFields`; ahora esos campos están
+siempre a la vista bajo `SearchModeToggle` (precio condicionado por
+`showPrice=advanced`, "Abierto ahora" incondicional, igual que siempre).
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del
+backend sin cambios: 554/554 (fase enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real, con datos reales
+de demo:
+- Mapa inicial: solo dos círculos (Mi ubicación + Buscar), sin caja fija
+  ni botón "Filtros" visibles en ningún lado.
+- Hoja abierta, modo Sencilla (default): sin campos de precio, sin
+  distancia, "Abierto ahora" presente.
+- Cambiar a Avanzada, misma hoja: distancia + precio aparecen, "Abierto
+  ahora" se mantiene.
+- Buscar "arepa" dentro de la hoja: resultados con precios (modo
+  avanzado) y el ícono de "Cómo llegar" por fila, todo en el mismo
+  panel.
+- Tocar un resultado: la hoja se cierra, el mapa recentra, se abre
+  `BusinessSummarySheet` con el mismo negocio.
+- `/buscar`: sin botón "Filtros", "Abierto ahora" visible sin abrir
+  nada, precio mín. aparece recién al cambiar a "Avanzada".
+
+Cuenta de prueba borrada después.
+
+### Gaps conocidos, no ocultos
+
+- Con esto se cierran las 2 fases de la retroalimentación sobre el
+  buscador (sección 51/52) — no queda ninguna fase pendiente de este
+  pedido.
+- El botón circular "Buscar" no cambia de apariencia cuando hay un
+  filtro activo o una búsqueda de texto en curso (a diferencia del
+  viejo botón "Filtros" de `/buscar`, que sí se resaltaba) —
+  `FloatingActionStack` no expone un estado "activo" distinto del
+  default para sus botones, y extender ese contrato no se pidió.

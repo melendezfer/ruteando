@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
@@ -55,11 +54,13 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   // para no perder "en qué búsqueda estoy" solo porque se ajustó un
   // filtro encima.
   const [lastSearch, setLastSearch] = useState<LastSearch>({ title: "Cerca de ti" });
-  // Precio mín./máx. + "abierto ahora" (Fase 1) — se expanden in-place
-  // bajo la barra de búsqueda (CLAUDE.md sección 17), no como un "bottom
-  // sheet" fijo al viewport como en el mapa: acá no hay un contenedor de
-  // alto fijo del que anclarse, es una página normal con scroll.
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Precio mín./máx. + "abierto ahora" (Fase 1) — siempre visibles
+  // in-place bajo la barra de búsqueda (CLAUDE.md sección 17), sin un
+  // botón "Filtros" aparte que abrir/cerrar (retroalimentación sobre el
+  // buscador, Fase B, sin RF asociado — ver CLAUDE.md sección 51): es la
+  // propia pestaña "Avanzada" la que revela precio mín./máx.
+  // (PriceOpenNowFields#showPrice) — "Abierto ahora" ya estaba disponible
+  // en los dos modos y sigue igual.
   const [filters, setFilters] = useState<PriceOpenNowState>(EMPTY_FILTERS);
   // Sencilla/avanzada (Fase 3, sin RF asociado — ver CLAUDE.md sección
   // 48): decide si se muestran precios — los campos de precio del panel
@@ -189,7 +190,6 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   }, [categories]);
 
   const showLocationHint = geolocation.status !== "granted" && businesses === null && !listLoading;
-  const filtersActive = Boolean(filters.priceMin || filters.priceMax || filters.openNow);
 
   return (
     <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
@@ -197,30 +197,13 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
         Hola, {userFirstName} — ¿qué estás buscando hoy?
       </h1>
 
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <SearchBar onSearch={handleTextSearch} />
-        </div>
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((open) => !open)}
-          aria-label="Filtros de precio y abierto ahora"
-          aria-pressed={filtersOpen || filtersActive}
-          className={`flex h-btn w-btn shrink-0 items-center justify-center rounded-full border ${
-            filtersActive ? "border-terracota bg-terracota text-white" : "border-border bg-surface text-text"
-          }`}
-        >
-          <SlidersHorizontal size={20} weight="bold" />
-        </button>
-      </div>
+      <SearchBar onSearch={handleTextSearch} />
 
       <SearchModeToggle advanced={advanced} onChange={handleModeChange} />
 
-      {filtersOpen && (
-        <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-3">
-          <PriceOpenNowFields value={filters} onChange={refineWithFilters} showPrice={advanced} />
-        </div>
-      )}
+      <div className="flex flex-wrap items-end gap-3">
+        <PriceOpenNowFields value={filters} onChange={refineWithFilters} showPrice={advanced} />
+      </div>
 
       <CategoryChips
         categories={categories}

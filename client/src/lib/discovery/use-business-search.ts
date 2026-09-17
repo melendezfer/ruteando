@@ -17,7 +17,7 @@ export interface BusinessSearchFilters {
 
 interface UseBusinessSearchOptions {
   limit: number;
-  /** Fijo (HomeScreen) o controlado por el usuario (MapScreen, ver MapFiltersSheet) — solo importa con geolocalización concedida. */
+  /** Fijo (HomeScreen) o controlado por el usuario (MapScreen, ver MapSearchSheet) — solo importa con geolocalización concedida. */
   radiusKm: number;
   /**
    * La instancia de useConsumerGeolocation() que ya tiene montada el

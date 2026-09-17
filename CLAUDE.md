@@ -5118,3 +5118,90 @@ Datos y cuentas de prueba borrados después.
 - Con esta fase se cierra el plan de 6 fases de la fusión de
   buscadores (sección 45) — no queda ninguna fase pendiente en este
   plan.
+
+## 51. Retroalimentación sobre el buscador — Fase A de 2: "Cómo llegar" en los resultados
+
+Con el plan de 6 fases ya cerrado (sección 50), el usuario dio
+retroalimentación real usando el buscador — dos pedidos, divididos en 2
+fases nuevas (plan acordado explícitamente antes de tocar código): esta
+sección es la Fase A, chica y de bajo riesgo. La Fase B (rediseño grande
+del panel de búsqueda del mapa — ícono circular flotante en vez de la
+caja fija + el panel de Filtros aparte) queda documentada como pendiente
+al final de esta sección. Propia rama
+(`feature/busqueda-como-llegar`), enteramente de frontend.
+
+### `buildDirectionsUrl` — extraído, no reinventado
+
+`client/src/lib/format/directions.ts` (nuevo) — el enlace externo a
+Google Maps (`https://www.google.com/maps/dir/?api=1&destination=lat,lng`)
+ya existía, pero solo en `business-profile-screen.tsx` (Documento 08
+§5.4.3, CLAUDE.md sección 20), inline, sin extraer. Se movió a un helper
+compartido y `business-profile-screen.tsx` pasó a usarlo — mismo
+comportamiento, sin cambios funcionales ahí.
+
+**Hallazgo real al extraer, no antes**: `Location.latitude`/`longitude`
+no están en la lista `required` del schema (`openapi.yaml`), así que
+`openapi-typescript` los tipa `number | undefined` — la versión inline
+anterior nunca lo notó porque interpolar `undefined` en un template
+string simplemente produce el texto `"undefined"` sin que TypeScript se
+queje; pasarlos como argumentos tipados de una función sí lo exige.
+Corregido con el mismo patrón defensivo (`!== undefined`) ya establecido
+en el proyecto (`product-row.tsx`, `match-reason-badges.tsx`), no
+relajando el tipo del helper.
+
+### Dos acciones por resultado — no las mismas dos en los dos lugares
+
+`BusinessCard` (usada en `/buscar` y en `BusinessSummarySheet`, ya tenía
+"Ver perfil completo"/"Ver en el mapa" desde la Fase 4) suma "Cómo
+llegar" como un tercer enlace — visible siempre que el negocio tenga
+coordenadas (`business.latitude`/`longitude`), **sin** que `hideMapLink`
+lo oculte: a diferencia de "Ver en el mapa" (circular cuando ya estás
+viendo ese negocio en el mapa), navegar afuera de la app con Google Maps
+sigue siendo útil incluso parado justo ahí.
+
+`MapSearchResults` (la lista de texto del propio mapa, Fase 1) **no**
+suma un botón "Ver en el mapa" redundante — tocar la fila ya hace
+exactamente eso (recentra + selecciona, `onSelect`), agregar un segundo
+control para la misma acción habría sido ruido. Solo se agregó "Cómo
+llegar", como un ícono circular pequeño (`NavigationArrow`, `h-9 w-9`)
+sibling del botón de la fila (mismo motivo que `FavoriteButton` en
+`BusinessCard`: un `<a>` dentro de un `<button>` es HTML inválido, y sin
+`stopPropagation()` el clic burbujearía y dispararía la selección de la
+fila también — verificado explícitamente con Playwright que NO abre
+`BusinessSummarySheet` al tocarlo).
+
+### Verificado
+
+`npm run build`/`lint` del frontend en verde. Suite completa del
+backend sin cambios: 554/554 (fase enteramente de frontend). Verificado
+con Playwright contra el servidor de desarrollo real, con datos reales
+de demo: en `/buscar`, "Arepas Doña Rosa" expandida muestra los 3
+enlaces ("Ver perfil completo"/"Ver en el mapa"/"Cómo llegar", con
+`href` real a Google Maps y `target="_blank"`); en el mapa, buscar
+"arepa" muestra el ícono de "Cómo llegar" en cada fila, y tocarlo abre
+una pestaña nueva de Google Maps **sin** abrir el resumen del negocio
+(confirmado que `stopPropagation()` funciona, no solo asumido). Cuenta
+de prueba borrada después.
+
+### Pendiente: Fase B (la grande, plan ya acordado con el usuario)
+
+- El mapa pierde la caja de búsqueda fija de arriba y el panel
+  "Filtros" (distancia/precio/abierto-ahora) como superficie aparte —
+  un ícono circular "Buscar" (mismo lenguaje que "Mi ubicación")
+  reemplaza al secundario "Filtros" en `FloatingActionStack` y abre un
+  solo bottom sheet con: input de texto + `SearchModeToggle` +
+  (solo en "Avanzada") distancia/precio/abierto-ahora + resultados,
+  todo apilado en un único panel.
+- **Decisión confirmada por el usuario, revirtiendo lo que se preguntó
+  al planear**: "Abierto ahora" se queda disponible en los dos modos
+  (Sencilla y Avanzada), igual que hoy — NO se mueve a Avanzada-only
+  pese a que la propuesta original de fases lo sugería.
+- `/buscar` (`HomeScreen`) adopta el mismo criterio de consistencia:
+  sin botón "Filtros" aparte, es la pestaña "Avanzada" la que revela
+  precio/abierto-ahora — mismos componentes ya compartidos
+  (`PriceOpenNowFields`, `SearchModeToggle`).
+- Efecto esperado, no solo estético: al quitar la caja fija del mapa,
+  `MapSearchResults`/`ZoneComparisonCard` dejan de necesitar el prop
+  `belowSearchBar`/el offset medido a mano (`top-36`) — vuelven a
+  anclarse en `top-3` simple, cerrando la causa raíz del bug de offset
+  que ya se repitió dos veces (Fases 1 y 3 de la sección 45/48).

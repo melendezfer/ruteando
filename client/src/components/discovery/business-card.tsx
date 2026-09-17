@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CaretDown, CaretUp, MapPin, MapTrifold, Star } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp, MapPin, MapTrifold, NavigationArrow, Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
@@ -10,6 +10,7 @@ import { FavoriteButton } from "@/components/business/favorite-button";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
 import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
+import { buildDirectionsUrl } from "@/lib/format/directions";
 
 type Business = components["schemas"]["Business"];
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -203,6 +204,25 @@ export function BusinessCard({
                     <MapTrifold size={16} weight="bold" />
                     Ver en el mapa
                   </Link>
+                )}
+                {/* "Cómo llegar" (retroalimentación sobre el buscador,
+                    Fase A, sin RF asociado — ver CLAUDE.md sección
+                    45/51) — mismo enlace externo que ya ofrece el
+                    perfil completo (business-profile-screen.tsx), acá
+                    también aunque `hideMapLink` esté activo: no es
+                    circular como "Ver en el mapa" (navegar afuera de
+                    la app es útil incluso mirando el mismo negocio ya
+                    seleccionado en el mapa). */}
+                {typeof business.latitude === "number" && typeof business.longitude === "number" && (
+                  <a
+                    href={buildDirectionsUrl(business.latitude, business.longitude)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"
+                  >
+                    <NavigationArrow size={16} weight="bold" />
+                    Cómo llegar
+                  </a>
                 )}
               </div>
             </>

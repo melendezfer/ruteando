@@ -246,10 +246,11 @@ components:
           nullable: true
           description: >-
             Coordenada de la ubicación actual del negocio, si tiene una
-            registrada. Solo se llena en GET /businesses y
-            GET /businesses/nearby (evita una llamada aparte a
+            registrada. Se llena en GET /businesses, GET /businesses/nearby
+            y GET /users/me/favorites (evita una llamada aparte a
             GET /businesses/{businessId}/location por cada resultado de
-            una búsqueda) — en el resto de las operaciones queda null.
+            una búsqueda o cada favorito) — en el resto de las
+            operaciones queda null.
         longitude: { type: number, format: double, nullable: true }
         distanceMeters:
           type: number
@@ -1165,6 +1166,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/OpenNowFilter'
       responses:
         '200':
           description: Lista de favoritos

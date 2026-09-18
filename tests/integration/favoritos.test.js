@@ -255,4 +255,78 @@ describe('GET /users/me/favorites', () => {
     expect(porId[confirmado.id].availabilityConfirmedAt).not.toBeNull();
     expect(porId[sinConfirmar.id].availabilityConfirmedAt).toBeNull();
   });
+
+  // openNow (sin RF asociado, petición directa del usuario — banner de
+  // descubrimiento, familia "Favoritos abiertos ahora"): mismo criterio
+  // que /businesses y /businesses/nearby, ver
+  // negocios.repository.js#agregarFiltrosComunes.
+  it('openNow=true filtra los favoritos, dejando solo los abiertos ahora', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const abierto = await crearNegocio(vendor.accessToken, categoryId, 'Abierto Siempre');
+    const sinHorario = await crearNegocio(vendor.accessToken, categoryId, 'Sin Horario');
+
+    await request(app)
+      .post(`/businesses/${abierto.id}/favorite`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+    await request(app)
+      .post(`/businesses/${sinHorario.id}/favorite`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    // "Abierto todos los días, todo el día" — mismo truco que
+    // scripts/seedLoadTest.js/nearbyIndexPlan.test.js para garantizar
+    // "abierto ahora" sin depender de la hora exacta en que corra la
+    // prueba. `sinHorario` no recibe ninguna fila — sin horario
+    // declarado, el filtro lo excluye (correcto: no hay forma de saber
+    // si está abierto).
+    await pool.query(
+      `INSERT INTO horarios (negocio_id, dia, hora_apertura, hora_cierre, cerrado)
+       SELECT $1, d.dia, '00:00', '23:59', false
+       FROM unnest(enum_range(NULL::dia_semana)) AS d(dia)`,
+      [abierto.id],
+    );
+
+    const sinFiltro = await request(app)
+      .get('/users/me/favorites')
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+    expect(sinFiltro.body.data.map((b) => b.name).sort()).toEqual(
+      ['Abierto Siempre', 'Sin Horario'].sort(),
+    );
+
+    const conFiltro = await request(app)
+      .get('/users/me/favorites?openNow=true')
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+    expect(conFiltro.body.data.map((b) => b.name)).toEqual(['Abierto Siempre']);
+  });
+
+  // Bug real encontrado al construir la familia "Favoritos abiertos
+  // ahora" del banner de descubrimiento (sin RF asociado): `SELECT n.*`
+  // solo trae columnas de `negocios`, nunca de `ubicaciones` — sin el
+  // LEFT JOIN LATERAL agregado junto a este endpoint, latitude/longitude
+  // quedaban siempre null acá (a diferencia de /businesses y
+  // /businesses/nearby), y un favorito nunca podía mostrarse como pin en
+  // el mapa ni ofrecer "Cómo llegar".
+  it('incluye latitude/longitude del negocio favorito (antes siempre null)', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId, 'Con Ubicación');
+
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'stall', latitude: 4.6083, longitude: -74.2188, showExactLocation: true });
+    await request(app)
+      .post(`/businesses/${negocio.id}/favorite`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    const res = await request(app)
+      .get('/users/me/favorites')
+      .set('Authorization', `Bearer ${consumer.accessToken}`);
+
+    const favorito = res.body.data.find((b) => b.id === negocio.id);
+    expect(favorito.latitude).toBeCloseTo(4.6083, 4);
+    expect(favorito.longitude).toBeCloseTo(-74.2188, 4);
+  });
 });

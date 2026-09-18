@@ -13,10 +13,12 @@ import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
-import { DiscoveryBanner } from "@/components/map/discovery-banner";
+import { DiscoveryBanner, type DiscoveryFamilyData } from "@/components/map/discovery-banner";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
+
+type Business = components["schemas"]["Business"];
 
 type Category = components["schemas"]["Category"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -187,6 +189,29 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     geolocation,
   });
 
+  // Segunda familia del banner: "Favoritos abiertos ahora" (sin RF
+  // asociado, petición directa del usuario) — GET /users/me/favorites
+  // con el mismo openNow=true, no FavoritesContext (ese solo guarda un
+  // Set de ids, sin coordenadas/distancia/mobility/categoryId que este
+  // banner necesita para renderizar la tarjeta). No depende de
+  // geolocalización — ese endpoint no acepta lat/lng, así que
+  // `distanceMeters` siempre queda null acá (el mismo criterio de
+  // sortAvailableNow ya tolera esto, cae al desempate por confirmación
+  // fresca).
+  const [favoritesOpenNowRaw, setFavoritesOpenNowRaw] = useState<Business[] | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    api
+      .GET("/users/me/favorites", { params: { query: { limit: DISCOVERY_BANNER_LIMIT, openNow: true } } })
+      .then(({ data }) => {
+        if (!ignore) setFavoritesOpenNowRaw(data?.data ?? []);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const businesses = useMemo<BusinessPin[]>(() => {
     const base = (rawBusinesses ?? []).filter(
       (business): business is BusinessPin =>
@@ -219,10 +244,35 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     return sortAvailableNow(withCoords);
   }, [openNowRaw]);
 
+  // Segunda familia: "Favoritos abiertos ahora" — mismo filtro (lat/lng
+  // presentes, orden por distancia/confirmación) que discoveryBusinesses,
+  // sobre la respuesta de GET /users/me/favorites?openNow=true.
+  const favoritesOpenNow = useMemo<BusinessPin[]>(() => {
+    const withCoords = (favoritesOpenNowRaw ?? []).filter(
+      (business): business is BusinessPin =>
+        typeof business.latitude === "number" && typeof business.longitude === "number",
+    );
+    return sortAvailableNow(withCoords);
+  }, [favoritesOpenNowRaw]);
+
+  // Familias del banner (sin RF asociado, petición directa del usuario)
+  // — solo las que de verdad tienen negocios entran acá; una familia
+  // vacía ni siquiera aparece como pestaña (mismo criterio de "sin
+  // negocios, no se muestra nada" de la Fase 1). "Disponibles ahora"
+  // siempre primero cuando ambas tienen datos — es la familia original,
+  // la más orientada a "qué hay cerca ahora mismo".
+  const discoveryFamilies = useMemo<DiscoveryFamilyData[]>(() => {
+    const list: DiscoveryFamilyData[] = [];
+    if (discoveryBusinesses.length > 0) list.push({ id: "available_now", businesses: discoveryBusinesses });
+    if (favoritesOpenNow.length > 0) list.push({ id: "favorites_open_now", businesses: favoritesOpenNow });
+    return list;
+  }, [discoveryBusinesses, favoritesOpenNow]);
+
   // Tarjeta activa del banner: lo último que el usuario deslizó/tocó, o
-  // el primer negocio de la lista por default — sin esto, el banner
-  // arrancaría sin ninguna tarjeta resaltada hasta el primer swipe.
-  const bannerHighlightId = bannerActiveId ?? discoveryBusinesses[0]?.id ?? null;
+  // el primer negocio de la primera familia por default — sin esto, el
+  // banner arrancaría sin ninguna tarjeta resaltada hasta el primer
+  // swipe.
+  const bannerHighlightId = bannerActiveId ?? discoveryFamilies[0]?.businesses[0]?.id ?? null;
 
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
@@ -467,7 +517,7 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           componente mismo no renderiza nada (nada de estado vacío
           forzado). */}
       <DiscoveryBanner
-        businesses={discoveryBusinesses}
+        families={discoveryFamilies}
         categoryTypeById={categoryTypeById}
         activeId={bannerHighlightId}
         onActiveChange={handleBannerActiveChange}

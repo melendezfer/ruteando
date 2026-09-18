@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import type { WheelEvent as ReactWheelEvent } from "react";
 import { MapPin } from "@phosphor-icons/react/dist/ssr";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 import { resolveCatalogIcon } from "@/lib/catalog/catalog-icons";
@@ -84,39 +85,72 @@ export function DiscoveryBanner({
 }: DiscoveryBannerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
-  // `activeId` en un ref (no solo la prop) para que el intervalo de
-  // auto-avance siempre lea la tarjeta activa más reciente sin tener que
-  // recrearse (y por lo tanto reiniciar su cuenta de 4.5s) cada vez que
-  // cambia — ver el efecto de auto-avance más abajo.
-  const activeIdRef = useRef(activeId);
   // Timestamp (Date.now()) hasta el cual el auto-avance está pausado —
   // en un ref, no en estado, porque pausar/reanudar no necesita
   // re-renderizar nada (solo lo lee el propio intervalo).
   const pausedUntilRef = useRef(0);
 
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
-
   const pauseAutoAdvance = useCallback(() => {
     pausedUntilRef.current = Date.now() + RESUME_AFTER_IDLE_MS;
   }, []);
 
+  /**
+   * Bug real (reportado por Jose, no reproducido en celular — ahí el
+   * touch nunca dispara `wheel`): un scroll VERTICAL normal de la
+   * página con el cursor pasando por encima del banner también dispara
+   * `wheel` sobre este contenedor (el evento sigue el cursor, no si el
+   * elemento realmente se desplazó) — pausar ante CUALQUIER wheel
+   * reiniciaba el temporizador de 6s en bucle mientras alguien
+   * simplemente bajaba la página, y el auto-avance nunca llegaba a
+   * dispararse. Solo un wheel con componente HORIZONTAL dominante
+   * (`deltaX` mayor que `deltaY` en magnitud — un gesto de trackpad de
+   * dos dedos hacia los lados, o shift+rueda) indica de verdad "estoy
+   * deslizando el carrusel"; un scroll vertical de la página no debe
+   * pausar nada.
+   */
+  const handleWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) pauseAutoAdvance();
+    },
+    [pauseAutoAdvance],
+  );
+
   useEffect(() => {
-    if (businesses.length <= 1) return;
+    const container = containerRef.current;
+    if (!container || businesses.length <= 1) return;
 
     const intervalId = setInterval(() => {
       if (Date.now() < pausedUntilRef.current) return;
 
-      const currentIndex = businesses.findIndex((b) => b.id === activeIdRef.current);
-      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % businesses.length : 0;
-      const nextBusiness = businesses[nextIndex];
-      const nextEl = nextBusiness?.id ? cardRefs.current.get(nextBusiness.id) : undefined;
-      // scrollIntoView (no scrollBy con un ancho fijo) — el
-      // IntersectionObserver de más abajo detecta el cambio solo, mismo
-      // mecanismo que ya usa el swipe manual, sin duplicar lógica de
-      // "cuál es la tarjeta activa".
-      nextEl?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      // Mueve `scrollLeft` directamente, no `scrollIntoView` sobre "la
+      // siguiente tarjeta" por id — segundo bug real encontrado
+      // verificando esto en vivo en una ventana ancha (no solo el de la
+      // pausa por wheel de arriba): en desktop, varias tarjetas ya están
+      // 100% visibles al mismo tiempo dentro del contenedor, y
+      // `scrollIntoView({inline:"center"})` sobre un elemento que el
+      // navegador ya considera "visible" NO MUEVE NADA (verificado con
+      // `container.scrollLeft` antes/después de llamarlo: se quedaba
+      // fijo en 0 sin importar cuántas veces se disparara el intervalo
+      // — por eso "nunca rotaba sola" en PC, no solo por el wheel).
+      //
+      // El paso se mide en vivo (distancia real entre las primeras dos
+      // tarjetas), no un ancho de tarjeta hardcodeado (`w-64`) ni el
+      // ancho completo del contenedor — lo segundo se probó primero y
+      // tiene su propio bug: si `clientWidth` (lo que se ve) es mayor
+      // que `maxScrollLeft` (lo que falta por recorrer, común quando
+      // caben casi todas las tarjetas a la vez en una ventana ancha),
+      // sumar un contenedor entero SIEMPRE se pasa del máximo y
+      // "avanza" de vuelta al mismo 0 — cero movimiento visible, el
+      // mismo síntoma reportado. Medir el paso real evita las dos cosas.
+      const maxScrollLeft = container.scrollWidth - container.clientWidth;
+      if (maxScrollLeft <= 0) return; // todas las tarjetas caben a la vez, nada que rotar
+
+      const first = container.children.item(0) as HTMLElement | null;
+      const second = container.children.item(1) as HTMLElement | null;
+      const step = first && second ? second.offsetLeft - first.offsetLeft : container.clientWidth;
+
+      const next = container.scrollLeft + step;
+      container.scrollTo({ left: next > maxScrollLeft ? 0 : next, behavior: "smooth" });
     }, AUTO_ADVANCE_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
@@ -155,7 +189,7 @@ export function DiscoveryBanner({
       <div
         ref={containerRef}
         onPointerDown={pauseAutoAdvance}
-        onWheel={pauseAutoAdvance}
+        onWheel={handleWheel}
         className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {businesses.map((business) => {

@@ -37,10 +37,10 @@ async function desmarcar(usuarioId, negocioId) {
   await favoritosRepo.desmarcar(usuarioId, negocioId);
 }
 
-async function listar(usuarioId, { cursor, limit }) {
+async function listar(usuarioId, { cursor, limit, openNow }) {
   const cursorDecodificado = decodificarCursor(cursor);
 
-  const filas = await favoritosRepo.listar({ usuarioId, cursor: cursorDecodificado, limit });
+  const filas = await favoritosRepo.listar({ usuarioId, cursor: cursorDecodificado, limit, openNow });
   const hasMore = filas.length > limit;
   const pagina = hasMore ? filas.slice(0, limit) : filas;
   const ultima = pagina[pagina.length - 1];

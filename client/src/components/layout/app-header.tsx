@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SignOut } from "@phosphor-icons/react/dist/ssr";
 import { useAuth } from "@/lib/auth/auth-context";
-import { Button } from "@/components/ui/button";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 
 /**
@@ -14,6 +14,13 @@ import { RuteandoLogo } from "@/components/ui/ruteando-logo";
  * compitiendo por la misma pregunta ("dónde estoy/a dónde voy"). Por eso
  * ya no recibe `activeTab`: no hay nada acá que dependa de la ruta
  * actual.
+ *
+ * Petición directa del usuario, sin RF asociado: el nombre del usuario
+ * (`user?.fullName`, ya disponible en el contexto de auth — sin pedir
+ * nada nuevo al backend) no se mostraba en ningún lado del header. Se
+ * agrega junto a la acción de cerrar sesión — y, para hacerle espacio,
+ * "Cerrar sesión" pasa de botón de texto a un ícono solo (`SignOut`),
+ * con `aria-label` porque un ícono solo no es autoexplicativo.
  */
 export function AppHeader() {
   const { logout, user } = useAuth();
@@ -31,7 +38,7 @@ export function AppHeader() {
         <RuteandoLogo size={28} />
         Ruteando
       </span>
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
         {canRegisterBusiness && (
           <Link
             href="/negocios/nuevo"
@@ -40,9 +47,19 @@ export function AppHeader() {
             {user?.role === "administrator" ? "Registro asistido" : "Registrar negocio"}
           </Link>
         )}
-        <Button type="button" variant="secondary" onClick={() => logout()}>
-          Cerrar sesión
-        </Button>
+        {user?.fullName && (
+          <span className="max-w-[9rem] truncate font-sans text-body-sm font-medium text-text" title={user.fullName}>
+            {user.fullName}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => logout()}
+          aria-label="Cerrar sesión"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background hover:text-text"
+        >
+          <SignOut size={20} weight="bold" />
+        </button>
       </div>
     </header>
   );

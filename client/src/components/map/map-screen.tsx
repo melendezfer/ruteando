@@ -13,6 +13,8 @@ import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
+import { DiscoveryBanner } from "@/components/map/discovery-banner";
+import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
 
@@ -27,6 +29,11 @@ const DEFAULT_CENTER = { lat: 4.578, lng: -74.217 };
 const MAP_RESULTS_LIMIT = 50;
 const DEFAULT_MAP_RADIUS_KM = 5;
 const LOCATE_ME_ZOOM = 16;
+// Banner de descubrimiento, familia "Disponibles ahora" (Fase 1, sin RF
+// asociado — petición directa del usuario): tope propio, chico a
+// propósito para un carrusel horizontal — no tiene sentido pedir 50
+// negocios como el resto del mapa para mostrarlos deslizando de a uno.
+const DISCOVERY_BANNER_LIMIT = 15;
 // Debe coincidir con la duración de la transición de
 // `.f3-business-pin-inner` en globals.css — el popup de información
 // (BusinessSummarySheet) se abre recién cuando el pin terminó de
@@ -150,6 +157,14 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     return map;
   }, [categories]);
 
+  // Banner de descubrimiento, familia "Disponibles ahora" (Fase 1, sin
+  // RF asociado) — resaltado del pin correspondiente al deslizar entre
+  // tarjetas, ver DiscoveryBanner. `null` mientras no se ha deslizado
+  // ninguna tarjeta todavía; el primer negocio de la lista se usa como
+  // resalte por default (ver `bannerHighlightId` más abajo), sin
+  // necesitar un efecto aparte solo para inicializarlo.
+  const [bannerActiveId, setBannerActiveId] = useState<string | null>(null);
+
   const {
     businesses: rawBusinesses,
     loading,
@@ -157,6 +172,18 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   } = useBusinessSearch({
     limit: MAP_RESULTS_LIMIT,
     radiusKm: filters.radiusKm ?? DEFAULT_MAP_RADIUS_KM,
+    geolocation,
+  });
+
+  // Independiente de la búsqueda principal (misma fuente de datos —
+  // GET /businesses/nearby o /businesses, ya con `openNow` — pero con
+  // su propio radio fijo, sin depender del radio que el usuario haya
+  // elegido en MapSearchSheet para la búsqueda principal): "disponibles
+  // ahora" es su propia familia, no un recorte de lo que el usuario ya
+  // esté buscando por texto/categoría/precio.
+  const { businesses: openNowRaw, search: searchOpenNow } = useBusinessSearch({
+    limit: DISCOVERY_BANNER_LIMIT,
+    radiusKm: DEFAULT_MAP_RADIUS_KM,
     geolocation,
   });
 
@@ -173,6 +200,29 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     }
     return base;
   }, [rawBusinesses, externalPin]);
+
+  // Banner "Disponibles ahora": mismos negocios con coordenadas, ya
+  // ordenados por distancia (con confirmación fresca primero en caso de
+  // empate — ver lib/discovery/available-now.ts). Independiente de
+  // `businesses` (los pines del mapa, sujetos a los filtros que el
+  // usuario haya elegido en MapSearchSheet) — un negocio puede aparecer
+  // en el banner sin ser en este momento uno de los pines visibles (ej.
+  // si el usuario ya filtró por un precio que lo excluye); en ese caso
+  // el detalle (BusinessSummarySheet) sigue abriendo correctamente, solo
+  // no hay un pin de verdad al que resaltar. Caso raro, aceptado — no es
+  // el algoritmo definitivo de esta fase.
+  const discoveryBusinesses = useMemo<BusinessPin[]>(() => {
+    const withCoords = (openNowRaw ?? []).filter(
+      (business): business is BusinessPin =>
+        typeof business.latitude === "number" && typeof business.longitude === "number",
+    );
+    return sortAvailableNow(withCoords);
+  }, [openNowRaw]);
+
+  // Tarjeta activa del banner: lo último que el usuario deslizó/tocó, o
+  // el primer negocio de la lista por default — sin esto, el banner
+  // arrancaría sin ninguna tarjeta resaltada hasta el primer swipe.
+  const bannerHighlightId = bannerActiveId ?? discoveryBusinesses[0]?.id ?? null;
 
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
@@ -239,12 +289,13 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
       if (!ignore) {
         runSearch();
         loadZones();
+        searchOpenNow({ openNow: true });
       }
     });
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, runSearch, loadZones]);
+  }, [geolocation.status, runSearch, loadZones, searchOpenNow]);
 
   /**
    * "Ver en el mapa" (Fase 4, sección 49) — pide el perfil completo en
@@ -353,6 +404,30 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
     };
   }, []);
 
+  /** Cambió la tarjeta más visible del banner (swipe o tap) — solo resalta el pin, sin recentrar ni abrir el resumen (ver DiscoveryBanner). */
+  function handleBannerActiveChange(business: BusinessPin) {
+    setBannerActiveId(business.id ?? null);
+  }
+
+  /** Tocar el CONTENIDO de una tarjeta del banner — nivel 2, mismo BusinessSummarySheet que tocar un pin (sin recentrar, ver handleSelectBusiness). */
+  function handleBannerOpenDetail(business: BusinessPin) {
+    setBannerActiveId(business.id ?? null);
+    handleSelectBusiness(business);
+  }
+
+  /**
+   * "📍 Ver en mapa"/"Ver ubicación"/"Ver zona" del banner — misma
+   * acción técnica sin importar el wording (ver
+   * resolveLocationActionLabel en discovery-banner.tsx): recentra el
+   * mapa sobre ese negocio, mismo criterio que tocar un resultado
+   * dentro de MapSearchSheet (puede estar fuera del encuadre actual o
+   * agrupado en un cluster).
+   */
+  function handleBannerViewOnMap(business: BusinessPin) {
+    setBannerActiveId(business.id ?? null);
+    handleSelectFromSearch(business);
+  }
+
   /** "Ver esa zona" en ZoneComparisonCard — recentra el mapa sobre la zona sugerida, mismo zoom que "Mi ubicación". */
   function handleJumpToZone(zone: BusinessZone) {
     if (mapInstanceRef.current && zone.centerLatitude != null && zone.centerLongitude != null) {
@@ -385,6 +460,20 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           intentar de nuevo.
         </p>
       )}
+
+      {/* Banner de descubrimiento, familia "Disponibles ahora" (Fase 1,
+          sin RF asociado) — apilado debajo del aviso de ubicación si
+          aplica, arriba del mapa. Sin negocios abiertos ahora, el
+          componente mismo no renderiza nada (nada de estado vacío
+          forzado). */}
+      <DiscoveryBanner
+        businesses={discoveryBusinesses}
+        categoryTypeById={categoryTypeById}
+        activeId={bannerHighlightId}
+        onActiveChange={handleBannerActiveChange}
+        onOpenDetail={handleBannerOpenDetail}
+        onViewOnMap={handleBannerViewOnMap}
+      />
 
       <div className="relative min-h-[420px] flex-1">
         {/*
@@ -425,7 +514,7 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
               businesses={businesses}
               categoryTypeById={categoryTypeById}
               zones={zones}
-              selectedBusinessId={pendingSelection?.id ?? selected?.id ?? null}
+              selectedBusinessId={pendingSelection?.id ?? selected?.id ?? bannerHighlightId}
               onSelectBusiness={handleSelectBusiness}
               onMapReady={(map) => {
                 mapInstanceRef.current = map;

@@ -11,6 +11,7 @@ import { AvailabilityConfirmedBadge } from "@/components/business/availability-c
 import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
 import { buildDirectionsUrl } from "@/lib/format/directions";
+import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
 
 type Business = components["schemas"]["Business"];
 type BusinessProfile = components["schemas"]["BusinessProfile"];
@@ -115,6 +116,10 @@ export function BusinessCard({
   const todayDay = TODAY_INDEX_TO_DAY[new Date().getDay()];
   const todaySchedule = profile?.schedule?.find((entry) => entry.day === todayDay);
   const isOpenToday = Boolean(todaySchedule && !todaySchedule.closed && todaySchedule.openTime && todaySchedule.closeTime);
+  // "Foto si tiene" (nivel 2 del banner de descubrimiento, sin RF
+  // asociado) — mismo criterio que business-profile-screen.tsx: la MÁS
+  // RECIENTE, no la primera (pickLatestPhoto).
+  const heroPhoto = pickLatestPhoto(profile?.photos, (p) => p.type === "business");
 
   return (
     <div className="rounded-card border border-border bg-surface">
@@ -173,6 +178,16 @@ export function BusinessCard({
 
           {!loadingProfile && profile && (
             <>
+              {/* Sin foto, la tarjeta expandida se ve exactamente igual
+                  que antes de este agregado — ningún hueco reservado. */}
+              {heroPhoto && (
+                // eslint-disable-next-line @next/next/no-img-element -- foto remota del negocio, sin dominio de next/image configurado todavía
+                <img
+                  src={heroPhoto.url}
+                  alt={business.name ?? "Negocio"}
+                  className="h-32 w-full rounded-input object-cover"
+                />
+              )}
               <p className="flex items-center gap-1.5 font-sans text-body-sm text-text">
                 <MapPin size={16} className="text-terracota" />
                 {isOpenToday ? `Hoy: ${todaySchedule!.openTime} – ${todaySchedule!.closeTime}` : "Cerrado hoy"}

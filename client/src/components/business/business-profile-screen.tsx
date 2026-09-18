@@ -4,16 +4,13 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
-  Briefcase,
-  CookingPot,
   Gear,
   Moped,
   NavigationArrow,
-  Package,
   Plus,
-  Storefront,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
+import { CATALOG_ICON_BY_TYPE, DEFAULT_CATALOG_ICON } from "@/lib/catalog/catalog-icons";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
@@ -78,17 +75,6 @@ interface BusinessProfileScreenProps {
    */
   catalogType: CatalogType | null;
 }
-
-// Ícono de respaldo del banner cuando el negocio no tiene foto — antes
-// de la expansión de alcance (CLAUDE.md sección 31) siempre era
-// CookingPot, asumiendo comida; ahora se elige según el tipo de
-// categoría para no mostrar una olla en el perfil de un abogado o una
-// costurera.
-const HERO_FALLBACK_ICON_BY_TYPE: Record<CatalogType, typeof CookingPot> = {
-  food: CookingPot,
-  goods: Package,
-  services: Briefcase,
-};
 
 // Leaflet toca `window`/`document` al cargarse — mismo motivo exacto que
 // map-screen.tsx documenta para LeafletMap: este componente ("use client")
@@ -277,7 +263,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // depender de eso.
   const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
-  const HeroFallbackIcon = catalogType ? HERO_FALLBACK_ICON_BY_TYPE[catalogType] : Storefront;
+  const HeroFallbackIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
   const catalogSectionLabel = resolveCatalogSectionLabel(catalogType);
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
   const itemNoun = resolveItemNoun(catalogType);

@@ -519,6 +519,7 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
       <DiscoveryBanner
         families={discoveryFamilies}
         categoryTypeById={categoryTypeById}
+        categoryNameById={categoryNameById}
         activeId={bannerHighlightId}
         onActiveChange={handleBannerActiveChange}
         onOpenDetail={handleBannerOpenDetail}

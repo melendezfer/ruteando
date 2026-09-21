@@ -33,6 +33,8 @@ interface DiscoveryBannerProps {
   /** Ya filtradas a las que tienen al menos un negocio — una familia sin negocios no aparece ni como pestaña vacía (mismo criterio que "sin negocios, no se muestra nada" de la Fase 1). */
   families: DiscoveryFamilyData[];
   categoryTypeById: Map<number, CatalogType>;
+  /** Nombre de categoría por id (`GET /categories`, ya resuelto en map-screen.tsx) — el ícono de color solo no comunica de qué categoría se trata, esto agrega el texto en las tarjetas (Nivel 1) y en la vista rápida del ⓘ. */
+  categoryNameById: Map<number, string>;
   /** El pin resaltado en el mapa en este momento — solo para el borde de la tarjeta activa, ver map-screen.tsx. */
   activeId: string | null;
   /** Cambió la tarjeta más visible (swipe o tap) — el padre resalta el pin correspondiente, sin recentrar. */
@@ -80,29 +82,33 @@ const AUTO_ADVANCE_INTERVAL_MS = 4500;
 const RESUME_AFTER_IDLE_MS = 6000;
 
 /**
- * Contenido de una fila de negocio — ícono de categoría, nombre,
- * distancia, estado y los dos accesos ("Ver en mapa/ubicación/zona" +
- * "Cómo llegar") — compartido entre la tarjeta horizontal del carrusel
- * (DiscoveryBusinessCarousel) y la fila vertical de la vista rápida
- * (DiscoveryQuickViewSheet). Solo cambia el contenedor que envuelve esto
- * en cada caso (tarjeta con borde de ancho fijo vs. fila de ancho
- * completo separada por un divisor) — nunca el contenido en sí.
+ * Contenido de una fila de negocio — ícono de categoría, nombre, familia/
+ * categoría en texto (el ícono de color solo no comunica cuál es la
+ * categoría, petición directa del usuario), distancia, estado y los dos
+ * accesos ("Ver en mapa/ubicación/zona" + "Cómo llegar") — usado por la
+ * tarjeta horizontal del carrusel (DiscoveryBusinessCarousel, Nivel 1).
+ * La vista rápida del ⓘ (DiscoveryQuickViewSheet, Nivel "12") usa su
+ * propia fila más liviana (DiscoveryQuickViewRow, sin estos botones) —
+ * ver esa función para el porqué.
  */
 function DiscoveryBusinessRowContent({
   business,
   categoryTypeById,
+  categoryNameById,
   onOpenDetail,
   onViewOnMap,
   onBeforeAction,
 }: {
   business: BusinessPin;
   categoryTypeById: Map<number, CatalogType>;
+  categoryNameById: Map<number, string>;
   onOpenDetail: (business: BusinessPin) => void;
   onViewOnMap: (business: BusinessPin) => void;
   /** Gancho extra antes de cada acción — el carrusel lo usa para pausar el auto-avance; la vista rápida no lo necesita. */
   onBeforeAction?: () => void;
 }) {
   const catalogType = business.categoryId != null ? categoryTypeById.get(business.categoryId) ?? null : null;
+  const categoryName = business.categoryId != null ? categoryNameById.get(business.categoryId) ?? null : null;
   const CategoryIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
   const color = getCategoryPinColor(business.categoryId, catalogType);
   const statusText = business.availabilityConfirmedAt ? "Vendiendo ahora" : "Abierto";
@@ -128,12 +134,13 @@ function DiscoveryBusinessRowContent({
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate font-sans text-body-sm font-semibold text-text">{business.name}</span>
-          <span className="flex items-center gap-1.5 font-sans text-caption text-text-muted">
-            {typeof business.distanceMeters === "number" && <span>{formatDistance(business.distanceMeters)}</span>}
-            <span className="inline-flex items-center gap-1 font-medium text-verde">
-              <span className="h-1.5 w-1.5 rounded-full bg-verde" />
-              {statusText}
-            </span>
+          <span className="truncate font-sans text-caption text-text-muted">
+            {categoryName ?? "Comercio informal"}
+            {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
+          </span>
+          <span className="inline-flex items-center gap-1 font-sans text-caption font-medium text-verde">
+            <span className="h-1.5 w-1.5 rounded-full bg-verde" />
+            {statusText}
           </span>
         </div>
       </button>
@@ -176,6 +183,7 @@ function DiscoveryBusinessRowContent({
 function DiscoveryBusinessCarousel({
   businesses,
   categoryTypeById,
+  categoryNameById,
   activeId,
   onActiveChange,
   onOpenDetail,
@@ -183,6 +191,7 @@ function DiscoveryBusinessCarousel({
 }: {
   businesses: BusinessPin[];
   categoryTypeById: Map<number, CatalogType>;
+  categoryNameById: Map<number, string>;
   activeId: string | null;
   onActiveChange: (business: BusinessPin) => void;
   onOpenDetail: (business: BusinessPin) => void;
@@ -310,6 +319,7 @@ function DiscoveryBusinessCarousel({
             <DiscoveryBusinessRowContent
               business={business}
               categoryTypeById={categoryTypeById}
+              categoryNameById={categoryNameById}
               onOpenDetail={onOpenDetail}
               onViewOnMap={onViewOnMap}
               onBeforeAction={pauseAutoAdvance}
@@ -322,27 +332,88 @@ function DiscoveryBusinessCarousel({
 }
 
 /**
+ * Corregido después de la primera versión (petición explícita del
+ * usuario): esta vista rápida NO es la lista completa con las mismas
+ * filas del carrusel — es un vistazo liviano, una fila por negocio con
+ * solo ícono + nombre + categoría + distancia, sin repetir "Ver
+ * ubicación"/"Cómo llegar" en cada una (esas acciones viven en el
+ * detalle completo, Nivel 2 — tocar la fila abre `BusinessSummarySheet`
+ * vía `onOpenDetail`, ver DiscoveryBanner). Por eso usa su propia fila
+ * (`DiscoveryQuickViewRow`), no `DiscoveryBusinessRowContent` (esa sigue
+ * siendo solo para la tarjeta del carrusel, Nivel 1).
+ */
+function DiscoveryQuickViewRow({
+  business,
+  categoryTypeById,
+  categoryNameById,
+  onOpenDetail,
+}: {
+  business: BusinessPin;
+  categoryTypeById: Map<number, CatalogType>;
+  categoryNameById: Map<number, string>;
+  onOpenDetail: (business: BusinessPin) => void;
+}) {
+  const catalogType = business.categoryId != null ? categoryTypeById.get(business.categoryId) ?? null : null;
+  const categoryName = business.categoryId != null ? categoryNameById.get(business.categoryId) ?? null : null;
+  const CategoryIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
+  const color = getCategoryPinColor(business.categoryId, catalogType);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenDetail(business)}
+      aria-label={`Ver detalle de ${business.name ?? "este negocio"}`}
+      className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+    >
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+        style={{ backgroundColor: color }}
+      >
+        <CategoryIcon size={18} weight="fill" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-sans text-body-sm font-semibold text-text">{business.name}</span>
+        <span className="truncate font-sans text-caption text-text-muted">
+          {categoryName ?? "Comercio informal"}
+          {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// Cuántas filas se muestran de entrada en la vista rápida antes de
+// pedir un toque explícito ("Ver todas") — pedido del usuario: "máximo
+// 4-5 negocios visibles". 5, el techo de ese rango.
+const QUICK_VIEW_PREVIEW_LIMIT = 5;
+
+/**
  * Nivel "12" del spec de Jose — vista rápida con MÁS elementos de la
  * misma familia, en lista vertical (no otro carrusel horizontal más
  * chico). Reusa la MISMA lista ya fetcheada para el carrusel (hasta el
  * límite existente, ver map-screen.tsx) — no dispara un fetch aparte
- * con un límite más alto: mostrarlos en una lista vertical, sin la
- * restricción de "cuántos caben de lado" de una fila horizontal, ya es
- * "más" en el sentido que pedía el spec.
+ * con un límite más alto. Acotada a `QUICK_VIEW_PREVIEW_LIMIT` filas de
+ * entrada — con más disponibles, un botón "Ver todas" las revela
+ * in-place (CLAUDE.md sección 17), sin seguir cargando la lista
+ * completa de una.
  */
 function DiscoveryQuickViewSheet({
   family,
   categoryTypeById,
+  categoryNameById,
   onClose,
   onOpenDetail,
-  onViewOnMap,
 }: {
   family: DiscoveryFamilyData;
   categoryTypeById: Map<number, CatalogType>;
+  categoryNameById: Map<number, string>;
   onClose: () => void;
   onOpenDetail: (business: BusinessPin) => void;
-  onViewOnMap: (business: BusinessPin) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleBusinesses = expanded ? family.businesses : family.businesses.slice(0, QUICK_VIEW_PREVIEW_LIMIT);
+  const hiddenCount = family.businesses.length - visibleBusinesses.length;
+
   return (
     <div
       role="dialog"
@@ -369,16 +440,25 @@ function DiscoveryQuickViewSheet({
           </button>
         </div>
         <div className="flex flex-col divide-y divide-border overflow-y-auto">
-          {family.businesses.map((business) => (
-            <DiscoveryBusinessRowContent
+          {visibleBusinesses.map((business) => (
+            <DiscoveryQuickViewRow
               key={business.id}
               business={business}
               categoryTypeById={categoryTypeById}
+              categoryNameById={categoryNameById}
               onOpenDetail={onOpenDetail}
-              onViewOnMap={onViewOnMap}
             />
           ))}
         </div>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="rounded-input border border-border bg-background py-2 text-center font-sans text-body-sm font-medium text-terracota"
+          >
+            Ver todas ({family.businesses.length})
+          </button>
+        )}
       </div>
     </div>
   );
@@ -411,6 +491,7 @@ function DiscoveryQuickViewSheet({
 export function DiscoveryBanner({
   families,
   categoryTypeById,
+  categoryNameById,
   activeId,
   onActiveChange,
   onOpenDetail,
@@ -519,6 +600,7 @@ export function DiscoveryBanner({
         key={activeFamily.id}
         businesses={activeFamily.businesses}
         categoryTypeById={categoryTypeById}
+        categoryNameById={categoryNameById}
         activeId={activeId}
         onActiveChange={onActiveChange}
         onOpenDetail={onOpenDetail}
@@ -529,14 +611,11 @@ export function DiscoveryBanner({
         <DiscoveryQuickViewSheet
           family={quickViewFamily}
           categoryTypeById={categoryTypeById}
+          categoryNameById={categoryNameById}
           onClose={() => setQuickViewFamilyId(null)}
           onOpenDetail={(business) => {
             setQuickViewFamilyId(null);
             onOpenDetail(business);
-          }}
-          onViewOnMap={(business) => {
-            setQuickViewFamilyId(null);
-            onViewOnMap(business);
           }}
         />
       )}

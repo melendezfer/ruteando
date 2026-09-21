@@ -191,6 +191,165 @@ describe('PATCH /products/{productId}', () => {
   });
 });
 
+// Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+// ver CLAUDE.md, migración productos-tipo-oferta.
+describe('Ofertas con vigencia (offerTypeId / validFrom / validUntil)', () => {
+  async function obtenerTipoOfertaPorNombre(nombre) {
+    const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', [nombre]);
+    if (!rows[0]) throw new Error(`Tipo de oferta "${nombre}" no encontrado — ¿corrió la migración?`);
+    return rows[0].id;
+  }
+
+  it('crea un producto con offerTypeId/validFrom/validUntil y los devuelve tal cual', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+
+    const res = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({
+        name: '2x1 en salchipapas',
+        price: 8500,
+        offerTypeId,
+        validFrom: '2026-01-01T00:00:00.000Z',
+        validUntil: '2026-01-02T00:00:00.000Z',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.offerTypeId).toBe(offerTypeId);
+    expect(res.body.validFrom).toBe('2026-01-01T00:00:00.000Z');
+    expect(res.body.validUntil).toBe('2026-01-02T00:00:00.000Z');
+  });
+
+  it('un producto de catálogo normal deja los tres campos en null', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id);
+    expect(producto.offerTypeId).toBeNull();
+    expect(producto.validFrom).toBeNull();
+    expect(producto.validUntil).toBeNull();
+  });
+
+  it('rechaza un offerTypeId inexistente (422)', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const res = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'X', price: 1000, offerTypeId: 999999 });
+    expect(res.status).toBe(422);
+  });
+
+  it('plan gratis: la segunda oferta con vigencia activa a la vez se rechaza con 409', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    const primera = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 1', price: 10000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(primera.status).toBe(201);
+
+    const segunda = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 2', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(segunda.status).toBe(409);
+  });
+
+  it('plan gratis: una oferta ya vencida no cuenta contra el límite', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    const vencida = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({
+        name: 'Combo vencido',
+        price: 10000,
+        offerTypeId,
+        validFrom: '2020-01-01T00:00:00.000Z',
+        validUntil: '2020-01-02T00:00:00.000Z',
+      });
+    expect(vencida.status).toBe(201);
+
+    const nueva = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo nuevo', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(nueva.status).toBe(201);
+  });
+
+  it('plan gratis: un producto sin vigencia (catálogo normal) no cuenta contra el límite', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    await crearProducto(vendor.accessToken, negocio.id, { name: 'Plato normal' });
+
+    const res = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(res.status).toBe(201);
+  });
+
+  it('plan pago: sin límite de ofertas con vigencia activa', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    await pool.query("UPDATE negocios SET plan = 'pago' WHERE id = $1", [negocio.id]);
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    const primera = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 1', price: 10000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(primera.status).toBe(201);
+
+    const segunda = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 2', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+    expect(segunda.status).toBe(201);
+  });
+
+  it('PATCH que agrega vigencia a un producto existente respeta el límite del plan gratis', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 1', price: 10000, offerTypeId, validFrom: new Date().toISOString() });
+
+    const normal = await crearProducto(vendor.accessToken, negocio.id, { name: 'Plato normal' });
+
+    const res = await request(app)
+      .patch(`/products/${normal.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({
+        name: normal.name,
+        price: normal.price,
+        offerTypeId,
+        validFrom: new Date().toISOString(),
+      });
+    expect(res.status).toBe(409);
+  });
+
+  it('PATCH sobre la propia oferta ya activa no choca consigo misma (no se excluye de más ni de menos)', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+
+    const oferta = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 1', price: 10000, offerTypeId, validFrom: new Date().toISOString() });
+
+    const res = await request(app)
+      .patch(`/products/${oferta.body.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo 1 editado', price: 11000 });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Combo 1 editado');
+  });
+});
+
 describe('DELETE /products/{productId}', () => {
   it('borra el producto de verdad (no es un soft-close como negocios)', async () => {
     const { vendor, negocio } = await registrarVendedorConNegocio();

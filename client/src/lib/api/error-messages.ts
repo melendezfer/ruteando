@@ -154,6 +154,12 @@ export function getProductFormErrorMessage(status: number | undefined): string {
   if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
   if (status === 403) return "No eres el dueño de este negocio.";
   if (status === 404) return "No encontramos este negocio o este ítem. Puede que ya no exista.";
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+  // ver CLAUDE.md, migración productos-tipo-oferta. Plan gratis: máximo
+  // una oferta con vigencia activa a la vez.
+  if (status === 409) {
+    return "Con el plan gratis solo puedes tener una oferta activa a la vez — espera a que la actual venza o pasa al plan pago.";
+  }
   if (status === 422) return "Revisa los datos del formulario.";
   return GENERIC_ERROR;
 }

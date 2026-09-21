@@ -9,6 +9,13 @@ export interface ProductInputBody {
   price: number;
   description?: string;
   available: boolean;
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+  // — ver CLAUDE.md, migración productos-tipo-oferta. Un producto de
+  // catálogo normal omite los tres (undefined, no null — mismo criterio
+  // que description: un PATCH que los omite conserva el valor existente).
+  offerTypeId?: number | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
 }
 
 interface ProductMutationResult {

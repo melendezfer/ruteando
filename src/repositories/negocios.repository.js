@@ -272,10 +272,27 @@ function lateralDisponibilidadFresca(idxFrescura) {
  * `categorias` que ya arman listar()/cercanos()) — más, si `q` matcheó
  * algún alias del diccionario ("tintos" → "Tintos y café"), que la
  * categoría del negocio esté entre los nombres que ese alias resolvió.
+ *
+ * `offerTypeId` (ofertas con vigencia, sin RF asociado — ver CLAUDE.md,
+ * migración productos-tipo-oferta): solo negocios con al menos un
+ * producto de ese tipo de oferta que esté VIGENTE ahora mismo — a
+ * diferencia de la definición literal de "vigencia_fin nula o futura"
+ * usada para el límite del plan gratis (productos.service.js), acá
+ * también se exige `vigencia_inicio` ya haya empezado (o sea null): un
+ * consumidor buscando "promociones" no debería encontrar una que todavía
+ * no arrancó. También exige `p.disponible`, mismo criterio que
+ * priceMin/priceMax abajo — una oferta marcada agotada no debería
+ * aparecer como resultado de descubrimiento aunque su vigencia siga
+ * corriendo.
  */
-function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, priceMax, openNow }) {
+function agregarFiltrosComunes(
+  clausulas,
+  params,
+  { categoryId, q, priceMin, priceMax, openNow, offerTypeId },
+) {
   let idxQ = null;
   let idxCategoriasAlias = null;
+  let idxOfertaTipo = null;
 
   if (categoryId != null) {
     params.push(categoryId);
@@ -331,7 +348,27 @@ function agregarFiltrosComunes(clausulas, params, { categoryId, q, priceMin, pri
     )`);
   }
 
-  return { idxQ, idxCategoriasAlias };
+  if (offerTypeId != null) {
+    params.push(offerTypeId);
+    idxOfertaTipo = params.length;
+    clausulas.push(`EXISTS (${condicionOfertaVigente(idxOfertaTipo)})`);
+  }
+
+  return { idxQ, idxCategoriasAlias, idxOfertaTipo };
+}
+
+/**
+ * Condición compartida por el filtro WHERE (agregarFiltrosComunes) y la
+ * columna `oferta_coincide` (columnaOfertaCoincide) — un solo lugar que
+ * define qué significa "hay un producto vigente de este tipo de oferta",
+ * para que ambos nunca puedan desalinearse entre sí.
+ */
+function condicionOfertaVigente(idxOfertaTipo) {
+  return `SELECT 1 FROM productos p
+     WHERE p.negocio_id = n.id AND p.disponible
+       AND p.tipo_oferta_id = $${idxOfertaTipo}
+       AND (p.vigencia_inicio IS NULL OR p.vigencia_inicio <= now())
+       AND (p.vigencia_fin IS NULL OR p.vigencia_fin > now())`;
 }
 
 /**
@@ -396,6 +433,22 @@ function columnaCategoriaCoincide(idxQ, idxCategoriasAlias) {
 }
 
 /**
+ * Columna compartida por listar() y cercanos() (ofertas con vigencia,
+ * sin RF asociado — ver CLAUDE.md, migración productos-tipo-oferta):
+ * `NULL` sin filtro `offerTypeId`; con el filtro, siempre `true` para
+ * cada fila devuelta — el propio WHERE (agregarFiltrosComunes) ya exige
+ * la misma condición (condicionOfertaVigente) para que el negocio
+ * califique, así que esto nunca puede evaluar `false` en la práctica.
+ * Recalculada (no un literal `true` hardcodeado) para que quede atada a
+ * la misma condición real, nunca a una constante que podría desalinearse
+ * si esa condición cambia.
+ */
+function columnaOfertaCoincide(idxOfertaTipo) {
+  if (idxOfertaTipo == null) return 'NULL';
+  return `(EXISTS (${condicionOfertaVigente(idxOfertaTipo)}))`;
+}
+
+/**
  * GET /users/me/businesses (sin RF asociado — pantalla de inicio por rol,
  * ver CLAUDE.md): los negocios del propio usuario, cualquier estado
  * (a diferencia de listar()/cercanos(), esto NO filtra por
@@ -433,7 +486,7 @@ async function listarPorUsuario({ usuarioId, cursor, limit }) {
  * primero) con `id` como desempate — paginación keyset, no OFFSET (ver
  * src/utils/cursor.js).
  */
-async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limit }) {
+async function listar({ categoryId, q, priceMin, priceMax, openNow, offerTypeId, cursor, limit }) {
   // telefono_verificado = true: verificación de teléfono de vendedores
   // (ver CLAUDE.md) — un negocio 'activo' (aprobado por un administrador)
   // igual no aparece en búsquedas públicas hasta que su dueño verifique
@@ -446,12 +499,13 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
   const params = [AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
   const idxFrescura = params.length;
 
-  const { idxQ, idxCategoriasAlias } = agregarFiltrosComunes(clausulas, params, {
+  const { idxQ, idxCategoriasAlias, idxOfertaTipo } = agregarFiltrosComunes(clausulas, params, {
     categoryId,
     q,
     priceMin,
     priceMax,
     openNow,
+    offerTypeId,
   });
   const productosCoincidentes = lateralProductosCoincidentes(idxQ);
 
@@ -475,6 +529,7 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, cursor, limi
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
+            ${columnaOfertaCoincide(idxOfertaTipo)} AS oferta_coincide,
             ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
      JOIN categorias c ON c.id = n.categoria_id
@@ -517,6 +572,7 @@ function construirConsultaCercanos({
   priceMin,
   priceMax,
   openNow,
+  offerTypeId,
   cursor,
   limit,
 }) {
@@ -529,12 +585,13 @@ function construirConsultaCercanos({
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
 
-  const { idxQ, idxCategoriasAlias } = agregarFiltrosComunes(clausulas, params, {
+  const { idxQ, idxCategoriasAlias, idxOfertaTipo } = agregarFiltrosComunes(clausulas, params, {
     categoryId,
     q,
     priceMin,
     priceMax,
     openNow,
+    offerTypeId,
   });
   const productosCoincidentes = lateralProductosCoincidentes(idxQ);
 
@@ -557,6 +614,7 @@ function construirConsultaCercanos({
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
+            ${columnaOfertaCoincide(idxOfertaTipo)} AS oferta_coincide,
             ${productosCoincidentes.columna} AS productos_coincidentes
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true

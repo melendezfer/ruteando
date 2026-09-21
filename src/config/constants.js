@@ -167,4 +167,14 @@ module.exports = {
   // menos 3 negocios mutuamente cercanos para que se forme una zona.
   ZONE_RADIUS_METERS: 200,
   ZONE_MIN_BUSINESSES: 3,
+
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+  // petición directa del usuario, ver CLAUDE.md migración
+  // productos-tipo-oferta. Plan gratis: cuántos productos con "vigencia
+  // activa" (vigencia_inicio IS NOT NULL, vigencia_fin nula o futura)
+  // puede tener un mismo negocio a la vez — el plan pago
+  // (negocios.plan = 'pago') no aplica este límite. Al vencer o
+  // desactivarse una oferta, el cupo se libera solo (expiración
+  // perezosa) — no hay que llevar ciclos mensuales.
+  FREE_PLAN_MAX_ACTIVE_OFFERS: 1,
 };

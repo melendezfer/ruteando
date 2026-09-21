@@ -1,5 +1,6 @@
 const adminService = require('../services/admin.service');
 const registroAsistidoService = require('../services/registroAsistido.service');
+const tiposOfertaService = require('../services/tiposOferta.service');
 
 async function listPendingBusinesses(req, res) {
   const result = await adminService.listarNegociosPendientes(req.validatedQuery);
@@ -66,6 +67,25 @@ async function resolveAccountDeletionRequest(req, res) {
   res.status(200).json(request);
 }
 
+// Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+// ver CLAUDE.md, migración tipos-oferta. Admin CRUD sobre el catálogo:
+// list (incluye inactivos), create, update (active:false hace las veces
+// de "eliminar" — ver tiposOferta.service.js).
+async function listOfferTypes(req, res) {
+  const tipos = await tiposOfertaService.listarTodos();
+  res.status(200).json(tipos);
+}
+
+async function createOfferType(req, res) {
+  const tipo = await tiposOfertaService.crear(req.body);
+  res.status(201).json(tipo);
+}
+
+async function updateOfferType(req, res) {
+  const tipo = await tiposOfertaService.actualizar(req.params.offerTypeId, req.body);
+  res.status(200).json(tipo);
+}
+
 async function metrics(req, res) {
   const result = await adminService.obtenerMetricas();
   res.status(200).json(result);
@@ -90,6 +110,9 @@ module.exports = {
   resolveOutdatedReport,
   listAccountDeletionRequests,
   resolveAccountDeletionRequest,
+  listOfferTypes,
+  createOfferType,
+  updateOfferType,
   metrics,
   exportReports,
 };

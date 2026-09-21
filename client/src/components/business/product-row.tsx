@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { CaretDown, CaretUp, PencilSimple, Tag, Trash } from "@phosphor-icons/react/dist/ssr";
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { uploadProductPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
 import { deleteProduct } from "@/lib/api/products";
+import { describeOfferValidUntil } from "@/lib/offers/offer-validity-status";
 import {
   getPhotoUploadErrorMessage,
   getPhotoDeleteErrorMessage,
@@ -28,6 +30,17 @@ interface ProductRowProps {
   /** Notifica al padre DESPUÉS de un borrado ya exitoso — este componente hace la llamada a la API y su propio confirm/loading/error, mismo criterio que PhotoUploadControl. */
   onDeleted: (productId: string) => void;
   onExpand: (product: Product) => void;
+  /**
+   * Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+   * — ver CLAUDE.md, migración productos-tipo-oferta. Nombre del tipo de
+   * oferta ya resuelto por business-profile-screen.tsx (GET /offer-types,
+   * una sola vez para todas las filas — mismo criterio que
+   * categoryNameById en map-screen.tsx) contra `product.offerTypeId`.
+   * `null` cuando el producto no tiene tipo elegido (sigue pudiendo ser
+   * una oferta sin tipo — ver `product.validFrom`) o cuando no se
+   * encontró (tipo desactivado después de que el producto ya lo tenía).
+   */
+  offerTypeName: string | null;
 }
 
 /**
@@ -49,6 +62,7 @@ export function ProductRow({
   onEdit,
   onDeleted,
   onExpand,
+  offerTypeName,
 }: ProductRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -79,33 +93,63 @@ export function ProductRow({
     onDeleted(product.id);
   }
 
+  // Ofertas con vigencia, sin RF asociado (ver CLAUDE.md, migración
+  // productos-tipo-oferta): el badge es tappable (navega a "más {tipo}
+  // cerca") solo cuando el producto tiene un offerTypeId elegido — un
+  // <Link>/<button> DENTRO del <button> de expandir/colapsar sería HTML
+  // inválido (interactivo anidado, mismo problema ya resuelto en
+  // business-card.tsx con FavoriteButton) y además el toque burbujearía
+  // al padre, así que vive como hermano del botón, no adentro — con
+  // stopPropagation() como red de seguridad adicional (mismo criterio).
+  const offerBadge = product.validFrom && (
+    <span className="inline-flex items-center gap-1 rounded-full bg-terracota/10 px-2 py-1 font-sans text-caption font-medium text-terracota">
+      <Tag size={12} weight="bold" />
+      {offerTypeName ?? "Oferta"}
+    </span>
+  );
+
   return (
     <div className="rounded-card border border-border bg-surface">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-      >
-        <div className="flex flex-col gap-0.5">
-          <span className="font-heading text-title-2 font-semibold text-text">{product.name}</span>
-          <span className="font-sans text-body-sm text-text-muted">
-            {product.price !== undefined ? formatCOP(product.price) : ""}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {product.available === false && (
-            <span className="rounded-full bg-ambar/20 px-2 py-1 font-sans text-caption font-medium uppercase tracking-wide text-ambar">
-              No disponible
+      <div className="flex w-full items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+        >
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-heading text-title-2 font-semibold text-text">{product.name}</span>
+            <span className="font-sans text-body-sm text-text-muted">
+              {product.price !== undefined ? formatCOP(product.price) : ""}
             </span>
-          )}
-          {expanded ? (
-            <CaretUp size={20} className="text-text-muted" />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {product.available === false && (
+              <span className="rounded-full bg-ambar/20 px-2 py-1 font-sans text-caption font-medium uppercase tracking-wide text-ambar">
+                No disponible
+              </span>
+            )}
+            {expanded ? (
+              <CaretUp size={20} className="text-text-muted" />
+            ) : (
+              <CaretDown size={20} className="text-text-muted" />
+            )}
+          </div>
+        </button>
+        {product.validFrom &&
+          (product.offerTypeId != null ? (
+            <Link
+              href={`/mapa?offerTypeId=${product.offerTypeId}`}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={`Ver más ${offerTypeName ?? "ofertas"} cerca`}
+              className="shrink-0"
+            >
+              {offerBadge}
+            </Link>
           ) : (
-            <CaretDown size={20} className="text-text-muted" />
-          )}
-        </div>
-      </button>
+            <span className="shrink-0">{offerBadge}</span>
+          ))}
+      </div>
 
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
@@ -131,6 +175,11 @@ export function ProductRow({
             </div>
           )}
           {deleteError && <p className="font-sans text-body-sm text-rojo">{deleteError}</p>}
+          {product.validFrom && (
+            <p className="font-sans text-body-sm font-medium text-terracota">
+              {describeOfferValidUntil(product.validUntil)}
+            </p>
+          )}
 
           {isOwner && product.id ? (
             <PhotoUploadControl

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type L from "leaflet";
-import { Crosshair, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { Crosshair, MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
@@ -22,6 +22,7 @@ type Business = components["schemas"]["Business"];
 
 type Category = components["schemas"]["Category"];
 type BusinessZone = components["schemas"]["BusinessZone"];
+type OfferType = components["schemas"]["OfferType"];
 
 // Centro de referencia de Ciudad Verde, Soacha (mismo punto que usa
 // scripts/seedLoadTest.js en el backend) — solo se usa cuando el
@@ -78,9 +79,19 @@ interface MapScreenProps {
    * componente conozca por su cuenta.
    */
   initialBusinessId?: string;
+  /**
+   * Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+   * — ver CLAUDE.md, migración productos-tipo-oferta. Viene de
+   * `?offerTypeId=` en la URL (/mapa/page.tsx) — el tappable "Tag" del
+   * catálogo de un negocio (ProductRow) enlaza acá para mostrar "más
+   * {tipo} cerca". A diferencia de `initialBusinessId` (solo centra el
+   * mapa una vez), esto queda como un FILTRO activo de la búsqueda —
+   * mismo criterio que cualquier otro filtro de MapSearchSheet.
+   */
+  initialOfferTypeId?: number;
 }
 
-export function MapScreen({ initialBusinessId }: MapScreenProps) {
+export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenProps) {
   const geolocation = useConsumerGeolocation();
   const mapInstanceRef = useRef<L.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -95,6 +106,12 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   const handledInitialBusinessIdRef = useRef<string | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
+  // Ofertas con vigencia, sin RF asociado (ver CLAUDE.md, migración
+  // productos-tipo-oferta) — filtro activo de "más {tipo} cerca", con
+  // una salida explícita (botón "×" en el aviso de abajo) para que el
+  // consumidor no quede atrapado viendo solo ofertas de un tipo.
+  const [offerTypeId, setOfferTypeId] = useState<number | undefined>(initialOfferTypeId);
+  const [offerTypes, setOfferTypes] = useState<OfferType[]>([]);
   // Texto libre del buscador del mapa (Fase 1 de la fusión de
   // buscadores, sin RF asociado — ver CLAUDE.md sección 45). `searchKey`
   // fuerza un remount de SearchBar (que maneja su propio input
@@ -137,6 +154,21 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    api.GET("/offer-types").then(({ data }) => {
+      if (!ignore && data) setOfferTypes(data);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const offerTypeName = useMemo(
+    () => offerTypes.find((t) => t.id === offerTypeId)?.name ?? null,
+    [offerTypes, offerTypeId],
+  );
 
   const categoryNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -277,8 +309,12 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
     const priceMax = filters.priceMax ? Number(filters.priceMax) : undefined;
-    search({ q: query || undefined, priceMin, priceMax, openNow: filters.openNow });
-  }, [search, query, filters.priceMin, filters.priceMax, filters.openNow]);
+    search({ q: query || undefined, priceMin, priceMax, openNow: filters.openNow, offerTypeId });
+  }, [search, query, filters.priceMin, filters.priceMax, filters.openNow, offerTypeId]);
+
+  function handleClearOfferTypeFilter() {
+    setOfferTypeId(undefined);
+  }
 
   function handleTextSearch(text: string) {
     setQuery(text);
@@ -509,6 +545,22 @@ export function MapScreen({ initialBusinessId }: MapScreenProps) {
           No pudimos acceder a tu ubicación. Mostrando negocios de Ciudad Verde — toca el botón de ubicación para
           intentar de nuevo.
         </p>
+      )}
+
+      {offerTypeId != null && (
+        <div className="flex items-center justify-between gap-3 bg-terracota/10 px-4 py-2">
+          <p className="font-sans text-body-sm font-medium text-terracota">
+            Más {offerTypeName ?? "de este tipo"} cerca
+          </p>
+          <button
+            type="button"
+            onClick={handleClearOfferTypeFilter}
+            aria-label="Quitar filtro de tipo de oferta"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-terracota hover:bg-terracota/10"
+          >
+            <X size={16} weight="bold" />
+          </button>
+        </div>
       )}
 
       {/* Banner de descubrimiento, familia "Disponibles ahora" (Fase 1,

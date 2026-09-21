@@ -204,6 +204,16 @@ function toApiBusiness(row) {
     // cliente ya lo tiene vía `categoryId` + su propio catálogo de
     // categorías (GET /categories), no hace falta duplicarlo.
     matchedCategory: row.categoria_coincide ?? null,
+    // Ofertas con vigencia (sin RF asociado — ver CLAUDE.md, migración
+    // productos-tipo-oferta): si el negocio calificó para el filtro
+    // `offerTypeId` (al menos un producto vigente de ese tipo) — mismo
+    // patrón que matchedCategory, no un booleano que el cliente deba
+    // recalcular. `null` cuando la consulta no filtró por `offerTypeId`;
+    // cuando sí lo hizo, siempre es `true` para cada fila devuelta (el
+    // propio WHERE ya exige esa condición para que el negocio aparezca)
+    // — el campo existe igual para no obligar al cliente a inferirlo de
+    // que el parámetro estaba presente en su propia petición.
+    matchedOfferType: row.oferta_coincide ?? null,
     // Confirmación de disponibilidad en tiempo real (sección 11 de
     // CLAUDE.md) — mismo criterio que latitude/longitude/distanceMeters
     // arriba: solo viene lleno cuando la consulta que produjo esta fila
@@ -284,6 +294,14 @@ function toApiProduct(row) {
     price: Number(row.precio),
     available: row.disponible,
     createdAt: row.fecha_creacion,
+    // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+    // — ver CLAUDE.md, migración productos-tipo-oferta. Los tres quedan
+    // null para un producto de catálogo normal (el caso de siempre, sin
+    // cambios de comportamiento).
+    offerTypeId: row.tipo_oferta_id ?? null,
+    validFrom: row.vigencia_inicio ?? null,
+    validUntil: row.vigencia_fin ?? null,
+    updatedAt: row.fecha_actualizacion,
   };
 }
 

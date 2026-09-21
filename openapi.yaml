@@ -65,6 +65,12 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    OfferTypeId:
+      name: offerTypeId
+      in: path
+      required: true
+      description: tipos_oferta.id es SERIAL (entero normal), no un UUID.
+      schema: { type: integer }
     Cursor:
       name: cursor
       in: query
@@ -101,6 +107,15 @@ components:
         horario y la hora actual (America/Bogota) — no un campo booleano
         guardado.
       schema: { type: boolean }
+    OfferTypeIdFilter:
+      name: offerTypeId
+      in: query
+      description: >-
+        Ofertas con vigencia (menú/promoción/combo/evento), sin RF
+        asociado — ver CLAUDE.md. Solo negocios con al menos un producto
+        de este tipo de oferta que esté vigente ahora mismo (ya empezó,
+        no venció, y está disponible) — ver Business.matchedOfferType.
+      schema: { type: integer }
     Limit:
       name: limit
       in: query
@@ -176,6 +191,41 @@ components:
             subyacentes (Product sigue siendo nombre/descripción/precio/
             disponible/foto para los tres) — solo cómo se presenta la
             sección de contenido del perfil público.
+
+    OfferType:
+      description: >-
+        Catálogo de tipos de oferta (menú/promoción/combo/evento) — sin
+        RF asociado, ver CLAUDE.md. Administrado por el equipo
+        administrador (GET/POST/PATCH /admin/offer-types); este GET
+        público solo lista los `active`.
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        icon: { type: string, nullable: true }
+        displayOrder: { type: integer }
+        active:
+          type: boolean
+          description: >-
+            "Eliminar" un tipo de oferta es PATCH { active: false } — no
+            hay un DELETE real, mismo criterio que el resto del proyecto
+            con catálogos compartidos que ya tienen productos apuntando
+            a ellos. GET /offer-types (público) solo lista los activos;
+            GET /admin/offer-types lista también los inactivos.
+
+    OfferTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 80 }
+        icon: { type: string, maxLength: 50, nullable: true }
+        displayOrder:
+          type: integer
+          minimum: 0
+          description: Default 0 en creación; un PATCH que lo omite conserva el valor existente.
+        active:
+          type: boolean
+          description: Default true en creación; un PATCH que lo omite conserva el valor existente.
 
     Business:
       type: object
@@ -298,6 +348,17 @@ components:
             la categoría no viaja acá — resolverlo con `categoryId`
             contra GET /categories, que el cliente ya consulta aparte.
             Solo en GET /businesses y GET /businesses/nearby.
+        matchedOfferType:
+          type: boolean
+          nullable: true
+          description: >-
+            Ofertas con vigencia (sin RF asociado — ver CLAUDE.md): si el
+            negocio calificó para el filtro `offerTypeId` (al menos un
+            producto vigente de ese tipo). `null` cuando la búsqueda no
+            incluyó `offerTypeId`; cuando sí lo incluyó, siempre `true`
+            para cada negocio devuelto (el propio filtro ya lo exige
+            para calificar). Solo en GET /businesses y
+            GET /businesses/nearby.
         availabilityConfirmedAt:
           type: string
           format: date-time
@@ -530,6 +591,31 @@ components:
         price: { type: number, format: double, minimum: 0 }
         available: { type: boolean }
         createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        offerTypeId:
+          type: integer
+          nullable: true
+          description: >-
+            Ofertas con vigencia (menú/promoción/combo/evento), sin RF
+            asociado — ver CLAUDE.md, migración productos-tipo-oferta.
+            `null` para un producto de catálogo normal — ver
+            OfferType/GET /offer-types.
+        validFrom:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Desde cuándo esta oferta es vigente. `null` para un producto
+            de catálogo normal — es la señal real de "esto es una
+            oferta" (más que `offerTypeId`, que es opcional incluso
+            sobre una oferta con vigencia).
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Hasta cuándo es vigente. `null` = sin fecha de cierre
+            ("hasta nuevo aviso"), no lo mismo que "ya venció".
 
     ProductInput:
       type: object
@@ -540,6 +626,25 @@ components:
         price: { type: number, minimum: 0 }
         categoryId: { type: integer }
         available: { type: boolean, default: true }
+        offerTypeId:
+          type: integer
+          nullable: true
+          description: >-
+            Ver Product.offerTypeId. Opcional — un producto de catálogo
+            normal lo omite (o lo manda null).
+        validFrom:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Ver Product.validFrom. El plan gratis del negocio permite
+            máximo 1 producto con vigencia activa a la vez (409 si ya
+            tiene una) — el plan pago no tiene ese límite.
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Ver Product.validUntil. Debe ser posterior a validFrom si ambos vienen.
 
     Photo:
       type: object
@@ -1295,6 +1400,24 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Category' }
 
+  /offer-types:
+    get:
+      tags: [Ofertas]
+      summary: Listar tipos de oferta activos (menú, promoción, combo, evento)
+      description: >-
+        Sin RF asociado — ver CLAUDE.md. Solo los `active`; el equipo
+        administrador ve también los inactivos en
+        GET /admin/offer-types.
+      security: []
+      responses:
+        '200':
+          description: Lista de tipos de oferta activos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OfferType' }
+
   /businesses:
     post:
       tags: [Negocios]
@@ -1326,6 +1449,7 @@ paths:
         - { $ref: '#/components/parameters/PriceMinFilter' }
         - { $ref: '#/components/parameters/PriceMaxFilter' }
         - { $ref: '#/components/parameters/OpenNowFilter' }
+        - { $ref: '#/components/parameters/OfferTypeIdFilter' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -1369,6 +1493,7 @@ paths:
         - { $ref: '#/components/parameters/PriceMinFilter' }
         - { $ref: '#/components/parameters/PriceMaxFilter' }
         - { $ref: '#/components/parameters/OpenNowFilter' }
+        - { $ref: '#/components/parameters/OfferTypeIdFilter' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -1622,6 +1747,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Plan gratis: ya existe otro producto con vigencia activa
+            para este negocio (ver ProductInput.validFrom).
+          $ref: '#/components/responses/Conflict'
         '422': { $ref: '#/components/responses/ValidationError' }
     get:
       tags: [Productos]
@@ -1669,6 +1799,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Plan gratis: ya existe otro producto con vigencia activa
+            para este negocio (ver ProductInput.validFrom).
+          $ref: '#/components/responses/Conflict'
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Productos]
@@ -2432,6 +2567,75 @@ paths:
         '409':
           description: La solicitud ya fue atendida
           $ref: '#/components/responses/Conflict'
+
+  /admin/offer-types:
+    get:
+      tags: [Administración]
+      summary: Listar todos los tipos de oferta, incluidos los inactivos
+      description: >-
+        Ofertas con vigencia, sin RF asociado — ver CLAUDE.md. A
+        diferencia de GET /offer-types (público, solo activos), esta
+        lista también los `active: false` — el equipo administrador
+        necesita verlos para poder reactivarlos.
+      responses:
+        '200':
+          description: Lista completa de tipos de oferta
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OfferType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Administración]
+      summary: Crear un tipo de oferta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfferTypeInput' }
+      responses:
+        '201':
+          description: Tipo de oferta creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Ya existe un tipo de oferta con ese nombre
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/offer-types/{offerTypeId}:
+    patch:
+      tags: [Administración]
+      summary: Editar un tipo de oferta
+      description: >-
+        PATCH parcial real (un campo omitido conserva el valor
+        existente) — "eliminar" un tipo de oferta es
+        `{ active: false }`, no hay un DELETE real (ver
+        OfferType.active).
+      parameters: [{ $ref: '#/components/parameters/OfferTypeId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfferTypeInput' }
+      responses:
+        '200':
+          description: Tipo de oferta actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Ya existe otro tipo de oferta con ese nombre
+          $ref: '#/components/responses/Conflict'
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /admin/metrics:
     get:

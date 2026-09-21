@@ -60,4 +60,21 @@ function validateUuidParam(paramName) {
   };
 }
 
-module.exports = { validateBody, validateQuery, validateUuidParam };
+/**
+ * Mismo criterio que validateUuidParam, para un id numérico de un
+ * catálogo entero (ej. tipos_oferta.id, SERIAL) — un valor no numérico
+ * nunca debe llegar a una consulta parametrizada contra una columna
+ * INTEGER (Postgres tiraría "invalid input syntax for type integer", un
+ * 500 sin sentido para el cliente); se trata como 404, igual que un UUID
+ * mal formado.
+ */
+function validateIntParam(paramName) {
+  return (req, res, next) => {
+    if (!/^\d+$/.test(req.params[paramName])) {
+      return next(new NotFoundError('Recurso no encontrado'));
+    }
+    next();
+  };
+}
+
+module.exports = { validateBody, validateQuery, validateUuidParam, validateIntParam };

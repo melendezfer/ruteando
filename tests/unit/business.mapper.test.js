@@ -46,6 +46,7 @@ describe('toApiBusiness', () => {
       matchType: null,
       matchedProducts: null,
       matchedCategory: null,
+      matchedOfferType: null,
       rejectionReason: null,
       availabilityConfirmedAt: null,
     });

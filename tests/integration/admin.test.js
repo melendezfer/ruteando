@@ -7,6 +7,7 @@ const { signAccessToken } = require('../../src/services/token.service');
 
 const usuarioIdsCreados = [];
 const categoriaIdsCreadas = [];
+const tipoOfertaIdsCreados = [];
 
 function correoDePrueba() {
   return `test-${crypto.randomUUID()}@ruteando.test`;
@@ -60,6 +61,9 @@ afterAll(async () => {
   if (categoriaIdsCreadas.length > 0) {
     await pool.query('DELETE FROM categorias WHERE id = ANY($1)', [categoriaIdsCreadas]);
   }
+  if (tipoOfertaIdsCreados.length > 0) {
+    await pool.query('DELETE FROM tipos_oferta WHERE id = ANY($1)', [tipoOfertaIdsCreados]);
+  }
   await pool.end();
 });
 
@@ -78,6 +82,9 @@ describe('autorización a nivel de función en /admin/*', () => {
     ['patch', '/admin/outdated-reports/00000000-0000-0000-0000-000000000000/resolve'],
     ['get', '/admin/account-deletion-requests'],
     ['patch', '/admin/account-deletion-requests/00000000-0000-0000-0000-000000000000/resolve'],
+    ['get', '/admin/offer-types'],
+    ['post', '/admin/offer-types'],
+    ['patch', '/admin/offer-types/1'],
     ['get', '/admin/metrics'],
     ['get', '/admin/reports/export'],
   ];
@@ -554,5 +561,127 @@ describe('GET /admin/metrics y GET /admin/reports/export (RF-021/022)', () => {
         pendingReportedPhotos: expect.any(Array),
       }),
     );
+  });
+});
+
+// Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+// ver CLAUDE.md, migración tipos-oferta. Autorización a nivel de función
+// ya cubierta por el bloque de arriba (rutas[]) — acá solo la lógica de
+// negocio real (create/update/list/duplicado).
+describe('Admin CRUD sobre tipos_oferta (GET/POST/PATCH /admin/offer-types)', () => {
+  function nombreDePrueba() {
+    return `Tipo de prueba ${crypto.randomUUID()}`;
+  }
+
+  it('crea un tipo de oferta con los defaults de creación (displayOrder=0, active=true)', async () => {
+    const nombre = nombreDePrueba();
+    const res = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombre });
+    tipoOfertaIdsCreados.push(res.body.id);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ name: nombre, icon: null, displayOrder: 0, active: true });
+  });
+
+  it('rechaza un nombre duplicado (409)', async () => {
+    const nombre = nombreDePrueba();
+    const primero = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombre });
+    tipoOfertaIdsCreados.push(primero.body.id);
+
+    const segundo = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombre });
+    expect(segundo.status).toBe(409);
+  });
+
+  it('rechaza un body sin name (422)', async () => {
+    const res = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({});
+    expect(res.status).toBe(422);
+  });
+
+  it('GET /offer-types (público) lista solo los activos; GET /admin/offer-types lista también los inactivos', async () => {
+    const activo = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombreDePrueba() });
+    tipoOfertaIdsCreados.push(activo.body.id);
+
+    const inactivo = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombreDePrueba(), active: false });
+    tipoOfertaIdsCreados.push(inactivo.body.id);
+
+    const publico = await request(app).get('/offer-types');
+    expect(publico.status).toBe(200);
+    expect(publico.body.map((t) => t.id)).toContain(activo.body.id);
+    expect(publico.body.map((t) => t.id)).not.toContain(inactivo.body.id);
+
+    const admin = await request(app)
+      .get('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`);
+    expect(admin.status).toBe(200);
+    expect(admin.body.map((t) => t.id)).toEqual(
+      expect.arrayContaining([activo.body.id, inactivo.body.id]),
+    );
+  });
+
+  it('PATCH es un parche parcial real — un campo omitido conserva el valor existente', async () => {
+    const creado = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombreDePrueba(), icon: 'tag', displayOrder: 5 });
+    tipoOfertaIdsCreados.push(creado.body.id);
+
+    const res = await request(app)
+      .patch(`/admin/offer-types/${creado.body.id}`)
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: creado.body.name, active: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.active).toBe(false);
+    expect(res.body.icon).toBe('tag'); // no se borró
+    expect(res.body.displayOrder).toBe(5); // no se borró
+  });
+
+  it('PATCH { active: false } es la forma de "eliminar" — desaparece de GET /offer-types público', async () => {
+    const creado = await request(app)
+      .post('/admin/offer-types')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: nombreDePrueba() });
+    tipoOfertaIdsCreados.push(creado.body.id);
+
+    await request(app)
+      .patch(`/admin/offer-types/${creado.body.id}`)
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: creado.body.name, active: false });
+
+    const publico = await request(app).get('/offer-types');
+    expect(publico.body.map((t) => t.id)).not.toContain(creado.body.id);
+  });
+
+  it('rechaza un id inexistente (404)', async () => {
+    const res = await request(app)
+      .patch('/admin/offer-types/999999')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: 'X' });
+    expect(res.status).toBe(404);
+  });
+
+  it('rechaza un id no numérico (404, no 500)', async () => {
+    const res = await request(app)
+      .patch('/admin/offer-types/esto-no-es-un-id')
+      .set('Authorization', `Bearer ${tokenAdmin()}`)
+      .send({ name: 'X' });
+    expect(res.status).toBe(404);
   });
 });

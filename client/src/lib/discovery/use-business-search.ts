@@ -13,6 +13,13 @@ export interface BusinessSearchFilters {
   priceMin?: number;
   priceMax?: number;
   openNow?: boolean;
+  /**
+   * Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+   * — ver CLAUDE.md, migración productos-tipo-oferta. Solo negocios con
+   * al menos un producto vigente de este tipo — ver
+   * Business.matchedOfferType.
+   */
+  offerTypeId?: number;
 }
 
 interface UseBusinessSearchOptions {
@@ -57,6 +64,7 @@ export function useBusinessSearch({ limit, radiusKm, geolocation }: UseBusinessS
         ...(filters.priceMin !== undefined ? { priceMin: filters.priceMin } : {}),
         ...(filters.priceMax !== undefined ? { priceMax: filters.priceMax } : {}),
         ...(filters.openNow ? { openNow: true } : {}),
+        ...(filters.offerTypeId !== undefined ? { offerTypeId: filters.offerTypeId } : {}),
       };
 
       const { data } = coords

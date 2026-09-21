@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { X } from "@phosphor-icons/react/dist/ssr";
 import { TextField } from "@/components/ui/text-field";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api/client";
+import type { components } from "@/lib/api/schema";
+import { resolveOfferValidityRange, type OfferValidityShortcut } from "@/lib/offers/offer-validity";
+
+type OfferType = components["schemas"]["OfferType"];
 
 export interface ProductFormValues {
   name: string;
@@ -11,6 +16,12 @@ export interface ProductFormValues {
   price: string;
   description: string;
   available: boolean;
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+  // — ver CLAUDE.md, migración productos-tipo-oferta. `null` los tres
+  // para un ítem de catálogo normal (el caso de siempre).
+  offerTypeId: number | null;
+  validFrom: string | null;
+  validUntil: string | null;
 }
 
 interface ProductFormProps {
@@ -25,7 +36,22 @@ interface ProductFormProps {
   onCancel: () => void;
 }
 
-const EMPTY_VALUES: ProductFormValues = { name: "", price: "", description: "", available: true };
+const EMPTY_VALUES: ProductFormValues = {
+  name: "",
+  price: "",
+  description: "",
+  available: true,
+  offerTypeId: null,
+  validFrom: null,
+  validUntil: null,
+};
+
+/** ISO -> valor de un <input type="datetime-local"> en hora LOCAL (no UTC — un vendedor piensa "hasta las 8pm de hoy", no en UTC). */
+function toDatetimeLocalValue(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
  * Gestión del catálogo (agregar/editar, sin épica de frontend asignada
@@ -58,9 +84,70 @@ export function ProductForm({
   const [description, setDescription] = useState(initialValues?.description ?? EMPTY_VALUES.description);
   const [available, setAvailable] = useState(initialValues?.available ?? EMPTY_VALUES.available);
 
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+  // ver CLAUDE.md, migración productos-tipo-oferta. `isOffer` decide si
+  // la sección se muestra en absoluto — la mayoría de los ítems de
+  // catálogo son normales, así que arranca colapsada salvo que
+  // `initialValues` ya traiga una oferta real (editar una existente).
+  const [isOffer, setIsOffer] = useState(
+    Boolean(initialValues?.offerTypeId || initialValues?.validFrom),
+  );
+  const [offerTypes, setOfferTypes] = useState<OfferType[]>([]);
+  const [offerTypeId, setOfferTypeId] = useState<number | null>(initialValues?.offerTypeId ?? null);
+  // Al editar una oferta ya existente, arranca en "custom" (mostrando las
+  // fechas reales tal cual, editables) — no hay forma confiable de
+  // adivinar si esas fechas exactas vinieron de un atajo "solo hoy"/
+  // "este mes" o de un rango personalizado.
+  const [shortcut, setShortcut] = useState<OfferValidityShortcut>(
+    initialValues?.validFrom ? "custom" : "today",
+  );
+  const [customValidFrom, setCustomValidFrom] = useState(
+    initialValues?.validFrom ? toDatetimeLocalValue(initialValues.validFrom) : "",
+  );
+  const [customValidUntil, setCustomValidUntil] = useState(
+    initialValues?.validUntil ? toDatetimeLocalValue(initialValues.validUntil) : "",
+  );
+  const [offerError, setOfferError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    api.GET("/offer-types").then(({ data }) => {
+      if (!ignore && data) setOfferTypes(data);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit({ name, price, description, available });
+    setOfferError(null);
+
+    if (!isOffer) {
+      onSubmit({ name, price, description, available, offerTypeId: null, validFrom: null, validUntil: null });
+      return;
+    }
+
+    let validFrom: string;
+    let validUntil: string | null;
+    if (shortcut === "custom") {
+      if (!customValidFrom) {
+        setOfferError("Elige desde cuándo es vigente la oferta.");
+        return;
+      }
+      validFrom = new Date(customValidFrom).toISOString();
+      validUntil = customValidUntil ? new Date(customValidUntil).toISOString() : null;
+      if (validUntil && new Date(validUntil).getTime() <= new Date(validFrom).getTime()) {
+        setOfferError('"Hasta" debe ser posterior a "Desde".');
+        return;
+      }
+    } else {
+      const range = resolveOfferValidityRange(shortcut);
+      validFrom = range.validFrom;
+      validUntil = range.validUntil;
+    }
+
+    onSubmit({ name, price, description, available, offerTypeId, validFrom, validUntil });
   }
 
   const title = mode === "create" ? `Agregar ${itemNoun}` : `Editar ${itemNoun}`;
@@ -139,6 +226,89 @@ export function ProductForm({
             className="h-5 w-5 accent-terracota"
           />
         </label>
+
+        <label className="flex items-center justify-between gap-3">
+          <span className="font-sans text-body-sm font-medium text-text">Es una oferta con vigencia</span>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={isOffer}
+            checked={isOffer}
+            onChange={(event) => setIsOffer(event.target.checked)}
+            className="h-5 w-5 accent-terracota"
+          />
+        </label>
+
+        {isOffer && (
+          <div className="flex flex-col gap-3 rounded-card border border-border bg-background p-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="product-offer-type" className="font-sans text-body-sm font-medium text-text">
+                Tipo de oferta (opcional)
+              </label>
+              <select
+                id="product-offer-type"
+                value={offerTypeId ?? ""}
+                onChange={(event) => setOfferTypeId(event.target.value ? Number(event.target.value) : null)}
+                className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+              >
+                <option value="">Sin tipo</option>
+                {offerTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="font-sans text-body-sm font-medium text-text">Vigencia</span>
+              <div role="radiogroup" aria-label="Vigencia de la oferta" className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["today", "Solo hoy"],
+                    ["month", "Este mes"],
+                    ["custom", "Personalizado"],
+                  ] as [OfferValidityShortcut, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={shortcut === value}
+                    onClick={() => setShortcut(value)}
+                    className={`rounded-full px-3 py-1.5 font-sans text-body-sm font-medium transition-colors ${
+                      shortcut === value ? "bg-terracota text-white" : "border border-border text-text-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {shortcut === "custom" && (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <TextField
+                  label="Desde"
+                  type="datetime-local"
+                  required
+                  value={customValidFrom}
+                  onChange={(event) => setCustomValidFrom(event.target.value)}
+                  className="flex-1"
+                />
+                <TextField
+                  label="Hasta (opcional)"
+                  type="datetime-local"
+                  value={customValidUntil}
+                  onChange={(event) => setCustomValidUntil(event.target.value)}
+                  className="flex-1"
+                />
+              </div>
+            )}
+
+            {offerError && <p className="font-sans text-body-sm text-rojo">{offerError}</p>}
+          </div>
+        )}
 
         {error && <p className="font-sans text-body-sm text-rojo">{error}</p>}
 

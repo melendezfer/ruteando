@@ -127,6 +127,11 @@ const filtrosNegociosShape = {
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
+  // — ver CLAUDE.md, migración productos-tipo-oferta. tipos_oferta.id es
+  // SERIAL (entero normal), sin el mismo tope de 32767 que categoryId
+  // (categorias.id es SMALLSERIAL).
+  offerTypeId: z.coerce.number().int().positive().optional(),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 };

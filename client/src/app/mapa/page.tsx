@@ -31,13 +31,19 @@ export default function MapaPage() {
 }
 
 function MapaPageContent() {
-  const businessId = useSearchParams().get("businessId") ?? undefined;
+  const searchParams = useSearchParams();
+  const businessId = searchParams.get("businessId") ?? undefined;
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+  // ver CLAUDE.md, migración productos-tipo-oferta. `?offerTypeId=` es
+  // adónde enlaza el badge de oferta de ProductRow ("más {tipo} cerca").
+  const offerTypeIdParam = searchParams.get("offerTypeId");
+  const offerTypeId = offerTypeIdParam ? Number(offerTypeIdParam) : undefined;
 
   return (
     <RequireAuth>
       <main className="flex flex-1 flex-col">
         <AppHeader />
-        <MapScreen initialBusinessId={businessId} />
+        <MapScreen initialBusinessId={businessId} initialOfferTypeId={offerTypeId} />
         <BottomNavBar />
       </main>
     </RequireAuth>

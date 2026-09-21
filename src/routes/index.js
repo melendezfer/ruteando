@@ -8,6 +8,7 @@ router.use('/businesses', require('./businesses.routes'));
 router.use('/products', require('./products.routes'));
 router.use('/photos', require('./photos.routes'));
 router.use('/categories', require('./categories.routes'));
+router.use('/offer-types', require('./offerTypes.routes'));
 router.use('/events', require('./events.routes'));
 router.use('/reviews', require('./reviews.routes'));
 router.use('/consents', require('./consents.routes'));

@@ -1,10 +1,12 @@
 const productosRepo = require('../repositories/productos.repository');
 const categoriasRepo = require('../repositories/categorias.repository');
+const tiposOfertaRepo = require('../repositories/tiposOferta.repository');
 const fotosRepo = require('../repositories/fotos.repository');
 const negociosService = require('./negocios.service');
 const almacenamientoService = require('./almacenamiento.service');
 const { toApiProduct } = require('./business.mapper');
-const { NotFoundError, ValidationError } = require('../errors');
+const { NotFoundError, ValidationError, ConflictError } = require('../errors');
+const { FREE_PLAN_MAX_ACTIVE_OFFERS } = require('../config/constants');
 
 async function validarCategoria(categoryId) {
   if (categoryId == null) return;
@@ -12,6 +14,36 @@ async function validarCategoria(categoryId) {
     throw new ValidationError('La categoría indicada no existe', {
       errors: [{ field: 'categoryId', message: 'No existe una categoría con ese id' }],
     });
+  }
+}
+
+async function validarTipoOferta(offerTypeId) {
+  if (offerTypeId == null) return;
+  if (!(await tiposOfertaRepo.existePorId(offerTypeId))) {
+    throw new ValidationError('El tipo de oferta indicado no existe', {
+      errors: [{ field: 'offerTypeId', message: 'No existe un tipo de oferta con ese id' }],
+    });
+  }
+}
+
+/**
+ * Plan gratis: máximo FREE_PLAN_MAX_ACTIVE_OFFERS productos con vigencia
+ * activa por negocio a la vez (ver CLAUDE.md, migración negocios-plan) —
+ * el plan pago no tiene este límite. `vigenciaInicio` (no `offerTypeId`)
+ * es la señal real de "esto es una oferta que ocupa el cupo" — ver el
+ * comentario completo en la migración productos-tipo-oferta.
+ * `excluirProductoId` deja que un PATCH sobre una oferta ya existente no
+ * choque contra sí misma.
+ */
+async function validarLimiteOfertaGratis(negocio, { vigenciaInicio, excluirProductoId }) {
+  if (vigenciaInicio == null) return;
+  if (negocio.plan !== 'gratis') return;
+
+  const total = await productosRepo.contarOfertasVigentes(negocio.id, { excluirProductoId });
+  if (total >= FREE_PLAN_MAX_ACTIVE_OFFERS) {
+    throw new ConflictError(
+      `El plan gratis permite máximo ${FREE_PLAN_MAX_ACTIVE_OFFERS} oferta(s) con vigencia activa a la vez — espera a que la actual venza o pasa al plan pago`,
+    );
   }
 }
 
@@ -37,6 +69,8 @@ async function crear(usuarioId, negocioId, input) {
   const negocio = await negociosService.obtenerCrudoOFallar(negocioId);
   negociosService.verificarPropietario(negocio, usuarioId);
   await validarCategoria(input.categoryId);
+  await validarTipoOferta(input.offerTypeId);
+  await validarLimiteOfertaGratis(negocio, { vigenciaInicio: input.validFrom });
 
   const producto = await productosRepo.crear({
     negocioId,
@@ -47,6 +81,9 @@ async function crear(usuarioId, negocioId, input) {
     // Sin .default(true) en el schema (ver product.validators.js) — el
     // valor por defecto de creación se aplica aquí, no en el validador.
     disponible: input.available !== undefined ? input.available : true,
+    tipoOfertaId: input.offerTypeId,
+    vigenciaInicio: input.validFrom,
+    vigenciaFin: input.validUntil,
   });
 
   return toApiProduct(producto);
@@ -65,18 +102,27 @@ async function obtener(id) {
 
 async function actualizar(usuarioId, id, input) {
   const producto = await obtenerCrudoOFallar(id);
-  await verificarPropietarioDelProducto(producto, usuarioId);
+  const negocio = await negociosService.obtenerCrudoOFallar(producto.negocio_id);
+  negociosService.verificarPropietario(negocio, usuarioId);
   await validarCategoria(input.categoryId);
+  await validarTipoOferta(input.offerTypeId);
 
   // PATCH parcial de verdad, mismo patrón que negocios.service.js: si el
   // cliente no manda un campo (queda undefined tras zod), se conserva el
   // valor existente en vez de borrarlo.
+  const vigenciaInicio = input.validFrom !== undefined ? input.validFrom : producto.vigencia_inicio;
+
+  await validarLimiteOfertaGratis(negocio, { vigenciaInicio, excluirProductoId: id });
+
   const actualizado = await productosRepo.actualizar(id, {
     categoriaId: input.categoryId !== undefined ? input.categoryId : producto.categoria_id,
     nombre: input.name !== undefined ? input.name : producto.nombre,
     descripcion: input.description !== undefined ? input.description : producto.descripcion,
     precio: input.price !== undefined ? input.price : producto.precio,
     disponible: input.available !== undefined ? input.available : producto.disponible,
+    tipoOfertaId: input.offerTypeId !== undefined ? input.offerTypeId : producto.tipo_oferta_id,
+    vigenciaInicio,
+    vigenciaFin: input.validUntil !== undefined ? input.validUntil : producto.vigencia_fin,
   });
 
   return toApiProduct(actualizado);

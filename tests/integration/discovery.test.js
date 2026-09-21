@@ -588,6 +588,107 @@ describe('Búsqueda por familia — matchedCategory (sin RF asociado — ver CLA
   });
 });
 
+// Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+// ver CLAUDE.md, migración productos-tipo-oferta.
+describe('offerTypeId (ofertas con vigencia, sin RF asociado)', () => {
+  const CENTRO = { lat: 4.578, lng: -74.217 };
+
+  async function obtenerTipoOfertaPorNombre(nombre) {
+    const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', [nombre]);
+    if (!rows[0]) throw new Error(`Tipo de oferta "${nombre}" no encontrado — ¿corrió la migración?`);
+    return rows[0].id;
+  }
+
+  async function crearProducto(accessToken, businessId, overrides = {}) {
+    await request(app)
+      .post(`/businesses/${businessId}/products`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: 'Producto', price: 1000, ...overrides });
+  }
+
+  it('solo devuelve negocios con al menos un producto vigente de ese tipo de oferta', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const conOferta = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, name: 'Con Oferta' });
+    await crearProducto(conOferta.accessToken, conOferta.id, {
+      name: 'Promo',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+    const sinOferta = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, name: 'Sin Oferta' });
+    await crearProducto(sinOferta.accessToken, sinOferta.id, { name: 'Plato normal' });
+
+    for (const url of [
+      `/businesses?offerTypeId=${offerTypeId}`,
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&offerTypeId=${offerTypeId}`,
+    ]) {
+      const res = await request(app).get(url);
+      const ids = res.body.data.map((b) => b.id);
+      expect(ids).toContain(conOferta.id);
+      expect(ids).not.toContain(sinOferta.id);
+    }
+  });
+
+  it('matchedOfferType es true para cada resultado cuando el filtro está activo, y null sin el filtro', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const conFiltro = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    const resultadoConFiltro = conFiltro.body.data.find((b) => b.id === negocio.id);
+    expect(resultadoConFiltro.matchedOfferType).toBe(true);
+
+    const sinFiltro = await request(app).get(`/businesses`);
+    const resultadoSinFiltro = sinFiltro.body.data.find((b) => b.id === negocio.id);
+    expect(resultadoSinFiltro.matchedOfferType).toBeNull();
+  });
+
+  it('una oferta ya vencida no cuenta — el negocio no aparece con ese filtro', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo vencida',
+      offerTypeId,
+      validFrom: '2020-01-01T00:00:00.000Z',
+      validUntil: '2020-01-02T00:00:00.000Z',
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+
+  it('una oferta que todavía no empieza no cuenta — el negocio no aparece con ese filtro', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    const enUnAno = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo futura',
+      offerTypeId,
+      validFrom: enUnAno,
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+
+  it('una oferta marcada no disponible no cuenta — el negocio no aparece con ese filtro', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo agotada',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+      available: false,
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+});
+
 describe('Business.availabilityConfirmedAt en los listados (sección 11 de CLAUDE.md)', () => {
   it('viaja en GET /businesses y GET /businesses/nearby cuando hay una confirmación fresca, y null si no hay ninguna', async () => {
     const categoryId = await crearCategoria();

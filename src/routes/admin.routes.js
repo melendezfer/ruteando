@@ -2,12 +2,18 @@ const { Router } = require('express');
 const controller = require('../controllers/admin.controller');
 const authenticate = require('../middlewares/authenticate');
 const requireRole = require('../middlewares/requireRole');
-const { validateBody, validateQuery, validateUuidParam } = require('../middlewares/validate');
+const {
+  validateBody,
+  validateQuery,
+  validateUuidParam,
+  validateIntParam,
+} = require('../middlewares/validate');
 const {
   adminListQuerySchema,
   rejectBusinessSchema,
   moderationDecisionSchema,
 } = require('../validators/admin.validators');
+const { offerTypeInputSchema } = require('../validators/offerType.validators');
 
 const router = Router();
 
@@ -86,6 +92,19 @@ router.patch(
   '/account-deletion-requests/:requestId/resolve',
   validateUuidParam('requestId'),
   controller.resolveAccountDeletionRequest,
+);
+
+// Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+// admin CRUD sobre el catálogo tipos_oferta (ver CLAUDE.md, migración
+// tipos-oferta). Sin DELETE: "eliminar" un tipo es PATCH { active: false }
+// — mismo criterio que el resto del proyecto con catálogos compartidos.
+router.get('/offer-types', controller.listOfferTypes);
+router.post('/offer-types', validateBody(offerTypeInputSchema), controller.createOfferType);
+router.patch(
+  '/offer-types/:offerTypeId',
+  validateIntParam('offerTypeId'),
+  validateBody(offerTypeInputSchema),
+  controller.updateOfferType,
 );
 
 router.get('/metrics', controller.metrics);

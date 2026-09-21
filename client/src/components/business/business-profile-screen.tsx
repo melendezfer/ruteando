@@ -45,6 +45,7 @@ import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
 import { buildDirectionsUrl } from "@/lib/format/directions";
 import { uploadBusinessPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
 import { createProduct, updateProduct } from "@/lib/api/products";
+import { api } from "@/lib/api/client";
 import {
   getPhotoUploadErrorMessage,
   getPhotoDeleteErrorMessage,
@@ -146,6 +147,23 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // heroPhoto/productPhotos arriba — así la lista se actualiza sola tras
   // crear, editar o borrar, sin recargar la página completa.
   const [products, setProducts] = useState<Product[]>(profile.products ?? []);
+  // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+  // ver CLAUDE.md, migración productos-tipo-oferta. Una sola vez, para
+  // todas las filas del catálogo a la vez — mismo criterio que
+  // categoryNameById en map-screen.tsx: sin esto, cada ProductRow tendría
+  // que pedir su propio nombre de tipo por separado.
+  const [offerTypeNameById, setOfferTypeNameById] = useState<Map<number, string>>(new Map());
+  useEffect(() => {
+    let ignore = false;
+    api.GET("/offer-types").then(({ data }) => {
+      if (!ignore && data) {
+        setOfferTypeNameById(new Map(data.map((t) => [t.id!, t.name!])));
+      }
+    });
+    return () => {
+      ignore = true;
+    };
+  }, []);
   const [productForm, setProductForm] = useState<ProductFormState | null>(null);
   const [productFormSubmitting, setProductFormSubmitting] = useState(false);
   const [productFormError, setProductFormError] = useState<string | null>(null);
@@ -182,6 +200,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       price: priceNumber,
       description: values.description.trim() ? values.description.trim() : undefined,
       available: values.available,
+      offerTypeId: values.offerTypeId,
+      validFrom: values.validFrom,
+      validUntil: values.validUntil,
     };
 
     const result =
@@ -477,6 +498,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             }}
             onEdit={(toEdit) => setProductForm({ mode: "edit", product: toEdit })}
             onDeleted={handleProductDeleted}
+            offerTypeName={
+              product.offerTypeId != null ? (offerTypeNameById.get(product.offerTypeId) ?? null) : null
+            }
             onExpand={(expandedProduct) => {
               if (profile.id && expandedProduct.id) logProductViewEvent(profile.id, expandedProduct.id);
             }}
@@ -495,6 +519,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
                   price: productForm.product.price !== undefined ? String(productForm.product.price) : "",
                   description: productForm.product.description ?? "",
                   available: productForm.product.available !== false,
+                  offerTypeId: productForm.product.offerTypeId ?? null,
+                  validFrom: productForm.product.validFrom ?? null,
+                  validUntil: productForm.product.validUntil ?? null,
                 }
               : undefined
           }

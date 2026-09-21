@@ -34,6 +34,23 @@ services:
 
   # Crea el bucket (ruteando-media-dev) al levantar el stack, ya que MinIO
   # no lo hace por sí solo — se sale apenas termina, no queda corriendo.
+  #
+  # `mc anonymous set download` (bug real, encontrado investigando una
+  # foto rota en /negocios/{id} — ver CLAUDE.md): un bucket nuevo de MinIO
+  # queda PRIVADO por defecto — sin esto, cualquier `fotos.url` que
+  # apunte acá (STORAGE_PUBLIC_URL sin configurar, fallback a
+  # STORAGE_ENDPOINT, ver almacenamiento.service.js) devuelve 403 al
+  # navegador, aunque el objeto se haya subido/recomprimido bien. Vivía
+  # antes como un paso manual (`mc anonymous set download`, nunca
+  # commiteado en ningún script) — se perdía cada vez que se recreaba el
+  # volumen `minio_data`, sin que nadie lo notara hasta la próxima foto
+  # subida de verdad. Puesto acá (no en el backend al arrancar) porque
+  # `minio-init` ya es el único lugar del proyecto dedicado a bootstrap
+  # de MinIO de una sola vez — en staging/producción (R2/B2 real) la
+  # lectura pública se configura del lado del proveedor (bucket público,
+  # dominio custom o CDN, ver STORAGE_PUBLIC_URL), nunca desde código de
+  # aplicación: el backend no debería intentar cambiar permisos de un
+  # bucket real en cada arranque.
   minio-init:
     image: quay.io/minio/mc:latest
     depends_on:
@@ -42,6 +59,7 @@ services:
       /bin/sh -c "
         until mc alias set local http://minio:9000 dev-placeholder dev-placeholder; do sleep 1; done;
         mc mb --ignore-existing local/ruteando-media-dev;
+        mc anonymous set download local/ruteando-media-dev;
       "
 
 volumes:

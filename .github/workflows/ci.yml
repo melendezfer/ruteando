@@ -86,10 +86,17 @@ jobs:
           exit 1
 
       - name: Crear bucket de MinIO para las pruebas
+        # `anonymous set download` (ver docker-compose.yml, mismo bug real
+        # encontrado en desarrollo): un bucket de MinIO nuevo queda
+        # privado por defecto — sin esto, cualquier prueba que de verdad
+        # descargue una fotos.url (no solo suba/borre) recibiría 403.
         run: |
           docker run --rm --network host \
             -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
             quay.io/minio/mc:latest mb --ignore-existing local/ruteando-media-ci
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
+            quay.io/minio/mc:latest anonymous set download local/ruteando-media-ci
 
       - run: npm test
 

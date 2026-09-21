@@ -44,7 +44,11 @@ if [ "${1:-}" = "--prod-frontend" ]; then
   PROD_FRONTEND=1
 fi
 
-LAN_PORTS=(3000 3001)
+# 9000: MinIO (ver paso 4/6 más abajo — bug real, fotos rotas al abrir
+# la app desde el celular, ver CLAUDE.md) — sin reenviar/permitir este
+# puerto también, reescribir STORAGE_PUBLIC_URL a la IP de LAN no
+# serviría de nada: el celular nunca llegaría hasta MinIO.
+LAN_PORTS=(3000 3001 9000)
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33m!! %s\033[0m\n' "$1"; }
@@ -132,6 +136,27 @@ if [ -n "$LAN_IP" ]; then
     sed -i "s#^CORS_ORIGIN=.*#$CORS_LINE#" .env.development
   else
     echo "$CORS_LINE" >>.env.development
+  fi
+
+  # Bug real, encontrado investigando una foto rota al abrir el perfil de
+  # un negocio desde el celular (ver CLAUDE.md): sin STORAGE_PUBLIC_URL,
+  # almacenamiento.service.js arma fotos.url con STORAGE_ENDPOINT
+  # (http://localhost:9000) — correcto solo para un navegador en ESTE
+  # mismo computador; "localhost" en un celular se refiere al celular
+  # mismo. Reescribirla acá, a la IP LAN, es el mismo criterio que ya
+  # aplica NEXT_PUBLIC_API_BASE_URL arriba — un solo valor (no una
+  # lista, a diferencia de CORS_ORIGIN), así que un navegador en este
+  # mismo computador también pasa a usar la IP LAN en vez de localhost
+  # para las fotos (sigue funcionando: la IP LAN es alcanzable desde
+  # este mismo computador). Necesita que el puerto 9000 también esté en
+  # LAN_PORTS (ver arriba) para que el reenvío/Firewall del paso 6 lo
+  # cubra, o el celular nunca llegaría hasta MinIO aunque la URL ya
+  # apunte bien.
+  STORAGE_LINE="STORAGE_PUBLIC_URL=http://$LAN_IP:9000"
+  if grep -q '^STORAGE_PUBLIC_URL=' .env.development; then
+    sed -i "s#^STORAGE_PUBLIC_URL=.*#$STORAGE_LINE#" .env.development
+  else
+    echo "$STORAGE_LINE" >>.env.development
   fi
 fi
 

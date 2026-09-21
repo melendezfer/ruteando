@@ -567,7 +567,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       <FloatingActionStack
-        primary={
+        actions={[
           whatsappHref
             ? {
                 icon: <WhatsappLogo size={32} weight="fill" />,
@@ -577,17 +577,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
                   if (profile.id) logContactClickEvent(profile.id);
                 },
               }
-            : null
-        }
-        secondary={
+            : null,
           directionsHref
             ? {
                 icon: <NavigationArrow size={22} weight="fill" />,
                 label: "Cómo llegar",
                 href: directionsHref,
               }
-            : null
-        }
+            : null,
+        ]}
         aboveBottomNav={Boolean(user)}
       />
 

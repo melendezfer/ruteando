@@ -193,11 +193,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
-      <h1 className="font-heading text-title-1 font-bold text-text">
-        Hola, {userFirstName} — ¿qué estás buscando hoy?
-      </h1>
-
-      <SearchBar onSearch={handleTextSearch} />
+      <SearchBar onSearch={handleTextSearch} userFirstName={userFirstName} />
 
       <SearchModeToggle advanced={advanced} onChange={handleModeChange} />
 

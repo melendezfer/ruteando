@@ -2,8 +2,7 @@
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { RequireAuth } from "@/components/auth/require-auth";
-import { AppHeader } from "@/components/layout/app-header";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { ProfileScreen } from "@/components/profile/profile-screen";
 
 /**
@@ -17,14 +16,13 @@ import { ProfileScreen } from "@/components/profile/profile-screen";
  * (mismo patrón que `/mapa/page.tsx`, que restauró la pantalla real del
  * mapa cuando "/" dejó de serlo siempre).
  *
- * `BottomNavBar` sí se monta acá (a diferencia de lo que se podría
- * suponer por no ser uno de los 4 destinos) — mismo motivo que llevó a
- * agregarla al perfil de negocio en la sección 42: sin ella, esta
- * pantalla sería un callejón sin salida más para un vendedor. Que
- * "Perfil" no quede resaltada acá (ningún href de la barra matchea
- * `/cuenta`) es aceptable, mismo criterio ya documentado en esa sección
- * — y tocar "Perfil" desde acá simplemente devuelve al vendedor a su
- * negocio, comportamiento esperado, no un bug nuevo.
+ * Redediseño de navegación global (sin RF asociado, petición directa
+ * del usuario): `MainFloatingNav` (no `AppHeader`/`BottomNavBar`, que
+ * desaparecieron de las 4 pantallas principales) — conceptualmente esta
+ * ruta ES "Perfil" para un vendedor con negocio activo, así que lleva
+ * la misma navegación que `/perfil`, no la vieja. Tocar "Perfil" desde
+ * acá simplemente devuelve al vendedor a su negocio, comportamiento
+ * esperado (mismo `router.push("/perfil")` de siempre).
  */
 export default function CuentaPage() {
   const { user } = useAuth();
@@ -33,9 +31,8 @@ export default function CuentaPage() {
     <RequireAuth>
       {user && (
         <main className="flex flex-1 flex-col">
-          <AppHeader />
           <ProfileScreen user={user} />
-          <BottomNavBar />
+          <MainFloatingNav />
         </main>
       )}
     </RequireAuth>

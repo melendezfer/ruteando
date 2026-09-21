@@ -4,24 +4,33 @@ export interface FloatingAction {
   icon: ReactNode;
   /** aria-label del botón/enlace — también su nombre accesible para pruebas. */
   label: string;
-  /** Si viene, la acción es un enlace (se abre en una pestaña nueva) — ej. wa.me, Google Maps. */
+  /** Si viene, la acción es un enlace externo (se abre en una pestaña nueva) — ej. wa.me, Google Maps. */
   href?: string;
-  /** Si viene, la acción es un botón local (recentrar el mapa, abrir un panel, etc). */
+  /** Si viene, la acción es un botón local (recentrar el mapa, navegar dentro de la app con el router, abrir un panel, etc). */
   onClick?: () => void;
 }
 
 interface FloatingActionStackProps {
-  /** Acción principal — círculo grande (h-16 w-16), terracota, la más cercana a la esquina. null la oculta sin dejar un hueco. */
-  primary: FloatingAction | null;
-  /** Acción secundaria — círculo más chico (h-12 w-12), con borde, apilada encima de la principal. */
-  secondary?: FloatingAction | null;
+  /**
+   * De la más prominente a la menos prominente — el índice 0 (después de
+   * quitar los `null`) es el círculo grande (h-16 w-16, terracota,
+   * pegado a la esquina); el resto son círculos chicos (h-12 w-12, con
+   * borde), apilados encima en el orden dado. Un `null` en cualquier
+   * posición se omite sin dejar un hueco ni afectar el tamaño de los
+   * demás — así el caller puede condicionar una acción (ej. "centrar
+   * mapa", solo con mapa visible) sin tener que recalcular qué queda
+   * "grande" cuando falta: si el primero no-nulo cambia de una llamada a
+   * otra, automáticamente hereda el tamaño grande.
+   */
+  actions: (FloatingAction | null)[];
   /**
    * true cuando la pantalla que llama también monta `BottomNavBar`
    * (CLAUDE.md sección 27) — sube el stack de `bottom-6` a `bottom-24`
-   * para que la barra fija de navegación no le quede encima. Hoy solo
-   * `MapScreen` combina las dos cosas (el perfil de negocio, el otro
-   * lugar que usa este componente, nunca lleva `BottomNavBar` — ver
-   * `BackButton`/CLAUDE.md sección 27).
+   * para que la barra fija de navegación no le quede encima. Solo
+   * aplica hoy al perfil de negocio (`business-profile-screen.tsx`),
+   * que sigue con su propia `BottomNavBar` condicional — la navegación
+   * global (`MainFloatingNav`) ya no convive con esa barra en ningún
+   * lado, así que no la necesita.
    */
   aboveBottomNav?: boolean;
 }
@@ -29,32 +38,34 @@ interface FloatingActionStackProps {
 /**
  * Ver CLAUDE.md, sección "FloatingActionStack" — esta es la única fuente
  * de verdad de su especificación (props, tamaños, colores); no
- * documentarla aparte. Construido en la Épica F4 para el perfil de
- * negocio (WhatsApp como principal, "Cómo llegar" como secundaria) y
- * generalizado para el Mapa (Épica F3, fix/mapa-floating-action-stack:
- * "Mi ubicación" como principal, "Filtros" como secundaria) — mismo
- * componente en ambos casos, solo cambian los `FloatingAction` que
- * recibe.
+ * documentarla aparte. Nació en la Épica F4 para el perfil de negocio
+ * (WhatsApp como principal, "Cómo llegar" como secundaria, dos acciones
+ * fijas `primary`/`secondary`) y se generalizó después para el Mapa
+ * (Épica F3). Redediseño de navegación global (sin RF asociado, petición
+ * directa del usuario): `primary`/`secondary` (siempre exactamente 2
+ * posiciones) se reemplazó por `actions` (un array de N, hoy hasta 4 en
+ * la navegación global de Mapa/Buscar/Favoritos/Perfil) — mismo lenguaje
+ * visual, sin límite fijo de posiciones.
  */
-export function FloatingActionStack({ primary, secondary, aboveBottomNav = false }: FloatingActionStackProps) {
-  if (!primary && !secondary) return null;
+export function FloatingActionStack({ actions, aboveBottomNav = false }: FloatingActionStackProps) {
+  const visible = actions.filter((action): action is FloatingAction => action != null);
+  if (visible.length === 0) return null;
 
   return (
     <div
-      className={`fixed right-6 z-40 flex flex-col items-center gap-3 ${aboveBottomNav ? "bottom-24" : "bottom-6"}`}
+      className={`fixed right-6 z-40 flex flex-col-reverse items-center gap-3 ${aboveBottomNav ? "bottom-24" : "bottom-6"}`}
     >
-      {secondary && (
+      {visible.map((action, index) => (
         <FloatingActionButton
-          action={secondary}
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg transition-transform hover:scale-105"
+          key={action.label}
+          action={action}
+          className={
+            index === 0
+              ? "flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl transition-transform hover:scale-105"
+              : "flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg transition-transform hover:scale-105"
+          }
         />
-      )}
-      {primary && (
-        <FloatingActionButton
-          action={primary}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl transition-transform hover:scale-105"
-        />
-      )}
+      ))}
     </div>
   );
 }

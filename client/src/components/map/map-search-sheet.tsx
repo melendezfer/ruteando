@@ -16,6 +16,8 @@ export interface MapFiltersState extends PriceOpenNowState {
 interface MapSearchSheetProps {
   searchKey: number;
   query: string;
+  /** Buscador personalizado por contexto (sin RF asociado, petición directa del usuario) — ver SearchBar#userFirstName. */
+  userFirstName?: string;
   onSearch: (text: string) => void;
   onClear: () => void;
   advanced: boolean;
@@ -54,6 +56,7 @@ const RADIUS_OPTIONS = [2, 5, 10];
 export function MapSearchSheet({
   searchKey,
   query,
+  userFirstName,
   onSearch,
   onClear,
   advanced,
@@ -82,7 +85,7 @@ export function MapSearchSheet({
         <div className="flex flex-col gap-3 p-4 pb-3">
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <SearchBar key={searchKey} onSearch={onSearch} />
+              <SearchBar key={searchKey} onSearch={onSearch} userFirstName={userFirstName} />
             </div>
             {query && (
               <button

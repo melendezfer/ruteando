@@ -3,17 +3,19 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type L from "leaflet";
-import { Crosshair, MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
+import { useAuth } from "@/lib/auth/auth-context";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { Skeleton } from "@/components/discovery/skeleton";
-import { FloatingActionStack } from "@/components/ui/floating-action-stack";
+import { RuteandoLogo } from "@/components/ui/ruteando-logo";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
-import { DiscoveryBanner, type DiscoveryFamilyData } from "@/components/map/discovery-banner";
+import { DiscoveryBanner, type DiscoveryFamilyData, type DiscoveryFamilyId } from "@/components/map/discovery-banner";
+import { FilteredListSheet, type DiscoveryListFilter } from "@/components/map/filtered-list-sheet";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
@@ -53,22 +55,23 @@ const LeafletMap = dynamic(() => import("@/components/map/leaflet-map").then((mo
 });
 
 /**
- * Vista de mapa (Épica F3, retrofit fix/mapa-floating-action-stack):
- * pines agrupados contra GET /businesses/nearby (o GET /businesses sin
+ * Vista de mapa (Épica F3, redediseño de navegación global — sin RF
+ * asociado, petición directa del usuario, ver CLAUDE.md): pines
+ * agrupados contra GET /businesses/nearby (o GET /businesses sin
  * geolocalización). Los controles no son una barra fija arriba del mapa
- * — el mismo FloatingActionStack de la Épica F4 (ver CLAUDE.md, sección
- * FloatingActionStack) los agrupa: "Mi ubicación" como acción principal
- * (recentra el mapa, o reintenta el permiso si fue denegado) y "Buscar"
- * como secundaria.
+ * — `MainFloatingNav` (navegación global de las 4 pantallas principales,
+ * reemplaza a `AppHeader`+`BottomNavBar`) los agrupa junto con "centrar
+ * mapa", exclusivo de esta pantalla. El logo "Ruteando", fijo abajo a la
+ * izquierda, es marca estática (sin acción) — también exclusivo de esta
+ * pantalla, no de la navegación global.
  *
- * "Buscar" reemplaza a lo que hasta la Fase B de la retroalimentación
- * sobre el buscador (sin RF asociado — ver CLAUDE.md sección 51) eran
- * DOS superficies separadas: una caja de texto fija arriba del mapa
- * (Fase 1, sección 45) y un botón "Filtros" aparte (distancia/precio/
- * abierto-ahora, también Fase 1) — ahora las dos viven juntas en un
- * solo bottom sheet (`MapSearchSheet`), abierto desde este mismo botón,
- * mismo slot secundario de `FloatingActionStack` que antes ocupaba
- * "Filtros" (sin tocar ese componente, sigue siendo 2 slots fijos).
+ * "Buscar" (dentro de `MainFloatingNav`) abre `MapSearchSheet` en vez de
+ * navegar a `/buscar` — reemplaza a lo que hasta la Fase B de la
+ * retroalimentación sobre el buscador (sin RF asociado — ver CLAUDE.md
+ * sección 51) eran DOS superficies separadas: una caja de texto fija
+ * arriba del mapa (Fase 1, sección 45) y un botón "Filtros" aparte
+ * (distancia/precio/abierto-ahora, también Fase 1) — ahora las dos viven
+ * juntas en un solo bottom sheet.
  */
 interface MapScreenProps {
   /**
@@ -80,18 +83,27 @@ interface MapScreenProps {
    */
   initialBusinessId?: string;
   /**
-   * Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado
-   * — ver CLAUDE.md, migración productos-tipo-oferta. Viene de
-   * `?offerTypeId=` en la URL (/mapa/page.tsx) — el tappable "Tag" del
-   * catálogo de un negocio (ProductRow) enlaza acá para mostrar "más
-   * {tipo} cerca". A diferencia de `initialBusinessId` (solo centra el
-   * mapa una vez), esto queda como un FILTRO activo de la búsqueda —
-   * mismo criterio que cualquier otro filtro de MapSearchSheet.
+   * Redediseño de navegación global (sin RF asociado, petición directa
+   * del usuario): los tres tipos de filtro que puede traer la URL al
+   * llegar desde un ícono tappable — categoría de una fila del banner
+   * (`?categoryId=`), tipo de oferta con vigencia del badge de
+   * `ProductRow` (`?offerTypeId=`, generaliza lo que antes era un filtro
+   * de pines con aviso removible, PR #78) o "todos mis favoritos"
+   * (`?favoritesOnly=true`, ícono de sección del banner o de
+   * `MainFloatingNav`). A diferencia de `initialBusinessId` (solo centra
+   * el mapa una vez), esto abre `FilteredListSheet` — una vista de lista
+   * vertical de pantalla completa, no un filtro sobre los pines.
    */
-  initialOfferTypeId?: number;
+  initialListFilter?: DiscoveryListFilter;
 }
 
-export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenProps) {
+export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenProps) {
+  const { user } = useAuth();
+  // Buscador personalizado por contexto (sin RF asociado, petición
+  // directa del usuario) — mismo criterio que /buscar (home-screen.tsx):
+  // primer nombre, con el correo como respaldo si todavía no hay
+  // fullName resuelto.
+  const userFirstName = (user?.fullName ?? user?.email ?? "").split(" ")[0] || undefined;
   const geolocation = useConsumerGeolocation();
   const mapInstanceRef = useRef<L.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -106,12 +118,13 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   const handledInitialBusinessIdRef = useRef<string | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  // Ofertas con vigencia, sin RF asociado (ver CLAUDE.md, migración
-  // productos-tipo-oferta) — filtro activo de "más {tipo} cerca", con
-  // una salida explícita (botón "×" en el aviso de abajo) para que el
-  // consumidor no quede atrapado viendo solo ofertas de un tipo.
-  const [offerTypeId, setOfferTypeId] = useState<number | undefined>(initialOfferTypeId);
   const [offerTypes, setOfferTypes] = useState<OfferType[]>([]);
+  // Vista de lista filtrada de pantalla completa (redediseño de
+  // navegación global, sin RF asociado — ver CLAUDE.md,
+  // FilteredListSheet) — con salida explícita (botón "Volver" dentro del
+  // propio sheet) para que el consumidor no quede atrapado viendo solo
+  // una lista filtrada.
+  const [listFilter, setListFilter] = useState<DiscoveryListFilter | null>(initialListFilter ?? null);
   // Texto libre del buscador del mapa (Fase 1 de la fusión de
   // buscadores, sin RF asociado — ver CLAUDE.md sección 45). `searchKey`
   // fuerza un remount de SearchBar (que maneja su propio input
@@ -136,7 +149,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   const pendingSelectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Hoja de búsqueda (texto + Sencilla/Avanzada + distancia/precio/
   // abierto-ahora + resultados, todo junto — Fase B, sección 51),
-  // abierta desde el botón "Buscar" de FloatingActionStack.
+  // abierta desde "Buscar" en MainFloatingNav.
   const [searchSheetOpen, setSearchSheetOpen] = useState(false);
   const [filters, setFilters] = useState<MapFiltersState>({
     radiusKm: DEFAULT_MAP_RADIUS_KM,
@@ -165,10 +178,18 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
     };
   }, []);
 
-  const offerTypeName = useMemo(
-    () => offerTypes.find((t) => t.id === offerTypeId)?.name ?? null,
-    [offerTypes, offerTypeId],
-  );
+  // Si la URL cambia a un filtro NUEVO (ej. dos accesos seguidos desde
+  // distintos íconos, sin recargar la página), se refleja acá — pero un
+  // cierre manual (botón "Volver" del sheet, listFilter -> null) no debe
+  // reabrirse solo porque este efecto vuelve a correr con las mismas
+  // props.
+  const lastAppliedInitialFilterRef = useRef(initialListFilter);
+  useEffect(() => {
+    if (initialListFilter !== lastAppliedInitialFilterRef.current) {
+      lastAppliedInitialFilterRef.current = initialListFilter;
+      setListFilter(initialListFilter ?? null);
+    }
+  }, [initialListFilter]);
 
   const categoryNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -190,6 +211,19 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
     });
     return map;
   }, [categories]);
+
+  // Título de FilteredListSheet, ya resuelto acá (categoryNameById/
+  // offerTypes ya están a mano) — el sheet en sí no vuelve a resolverlo.
+  const listFilterTitle = useMemo(() => {
+    if (!listFilter) return "";
+    if (listFilter.type === "favorites") return "Tus favoritos";
+    if (listFilter.type === "category") {
+      const name = categoryNameById.get(listFilter.categoryId);
+      return name ? `Más ${name} cerca` : "Más cerca de ti";
+    }
+    const name = offerTypes.find((t) => t.id === listFilter.offerTypeId)?.name;
+    return name ? `Más ${name} cerca` : "Más de este tipo cerca";
+  }, [listFilter, categoryNameById, offerTypes]);
 
   // Banner de descubrimiento, familia "Disponibles ahora" (Fase 1, sin
   // RF asociado) — resaltado del pin correspondiente al deslizar entre
@@ -309,12 +343,8 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
     const priceMax = filters.priceMax ? Number(filters.priceMax) : undefined;
-    search({ q: query || undefined, priceMin, priceMax, openNow: filters.openNow, offerTypeId });
-  }, [search, query, filters.priceMin, filters.priceMax, filters.openNow, offerTypeId]);
-
-  function handleClearOfferTypeFilter() {
-    setOfferTypeId(undefined);
-  }
+    search({ q: query || undefined, priceMin, priceMax, openNow: filters.openNow });
+  }, [search, query, filters.priceMin, filters.priceMax, filters.openNow]);
 
   function handleTextSearch(text: string) {
     setQuery(text);
@@ -428,7 +458,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   // la hoja abierta tampoco (Fase B, sección 51): mostrar un mensaje
   // flotando detrás de una hoja que ya cubre media pantalla es ruido.
   const showEmptyState =
-    !loading && rawBusinesses !== null && businesses.length === 0 && !query && !searchSheetOpen;
+    !loading && rawBusinesses !== null && businesses.length === 0 && !query && !searchSheetOpen && !listFilter;
 
   let center = DEFAULT_CENTER;
   if (geolocation.status === "granted" && geolocation.coords) {
@@ -439,7 +469,8 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
 
   const userLocation = geolocation.status === "granted" ? geolocation.coords : null;
   const showRadiusFilter = geolocation.status === "granted";
-  const showLocationHint = geolocation.status !== "granted" && geolocation.status !== "loading" && geolocation.status !== "idle";
+  const showLocationHint =
+    !listFilter && geolocation.status !== "granted" && geolocation.status !== "loading" && geolocation.status !== "idle";
 
   function handleLocateMe() {
     if (geolocation.status === "granted" && geolocation.coords && mapInstanceRef.current) {
@@ -456,6 +487,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
 
   function handleSelectBusiness(business: BusinessPin) {
     setSearchSheetOpen(false);
+    setListFilter(null);
     // El pin ya arranca a crecer acá (ver selectedBusinessId más abajo,
     // que combina pendingSelection y selected) — BusinessSummarySheet
     // recién se abre cuando esa animación termina.
@@ -469,11 +501,12 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   }
 
   /**
-   * Tocar un resultado dentro de MapSearchSheet (Fase 1, sección 45) — a
-   * diferencia de tocar un pin ya visible, el negocio puede estar fuera
-   * del encuadre actual o agrupado dentro de un cluster, así que primero
-   * recentra el mapa sobre su coordenada (mismo zoom que "Mi ubicación")
-   * y recién ahí dispara la misma selección que un pin.
+   * Tocar un resultado dentro de MapSearchSheet/FilteredListSheet (Fase
+   * 1, sección 45) — a diferencia de tocar un pin ya visible, el negocio
+   * puede estar fuera del encuadre actual o agrupado dentro de un
+   * cluster, así que primero recentra el mapa sobre su coordenada
+   * (mismo zoom que "Mi ubicación") y recién ahí dispara la misma
+   * selección que un pin.
    */
   function handleSelectFromSearch(business: BusinessPin) {
     if (mapInstanceRef.current) {
@@ -504,7 +537,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   /**
    * "📍 Ver en mapa"/"Ver ubicación"/"Ver zona" del banner — misma
    * acción técnica sin importar el wording (ver
-   * resolveLocationActionLabel en discovery-banner.tsx): recentra el
+   * resolveLocationActionLabel en discovery-row.tsx): recentra el
    * mapa sobre ese negocio, mismo criterio que tocar un resultado
    * dentro de MapSearchSheet (puede estar fuera del encuadre actual o
    * agrupado en un cluster).
@@ -512,6 +545,18 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
   function handleBannerViewOnMap(business: BusinessPin) {
     setBannerActiveId(business.id ?? null);
     handleSelectFromSearch(business);
+  }
+
+  /** Ícono de categoría de una fila del banner/lista filtrada — navega a la lista filtrada por esa categoryId (redediseño de navegación global, sin RF asociado). */
+  function handleCategoryClick(business: BusinessPin) {
+    if (business.categoryId != null) {
+      setListFilter({ type: "category", categoryId: business.categoryId });
+    }
+  }
+
+  /** Ícono de sección "Favoritos abiertos ahora" del banner — ver DiscoveryBanner#onOpenFamilyList. "Disponibles ahora" no llega acá (sigue con su vista rápida interna). */
+  function handleOpenFamilyList(familyId: DiscoveryFamilyId) {
+    if (familyId === "favorites_open_now") setListFilter({ type: "favorites" });
   }
 
   /** "Ver esa zona" en ZoneComparisonCard — recentra el mapa sobre la zona sugerida, mismo zoom que "Mi ubicación". */
@@ -527,19 +572,20 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
     if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
     setPendingSelection(null);
     setSelected(null);
+    setListFilter(null);
     setSearchSheetOpen((open) => !open);
   }
 
+  // "Centrar mapa" se oculta sin mapa visible: con la vista de lista
+  // filtrada activa (aunque la ruta siga siendo /mapa), o con el resumen
+  // de un negocio/la hoja de búsqueda tapando el mapa completo (mismo
+  // criterio que ya regía cuándo se mostraba el FloatingActionStack
+  // viejo, ahora expresado como "onCenterMap ausente" en vez de "no
+  // renderizar nada").
+  const showMap = !selected && !searchSheetOpen && !listFilter;
+
   return (
-    // pb-24 a propósito: BottomNavBar (CLAUDE.md sección 27) es `fixed`,
-    // así que no reserva espacio por sí sola en el flujo normal — sin este
-    // padding, el borde inferior de este contenedor (de donde cuelgan
-    // BusinessSummarySheet/MapSearchSheet con `absolute bottom-0`, y
-    // hasta el propio mapa de Leaflet) quedaría debajo de la barra fija,
-    // no encima. FloatingActionStack no depende de esto — usa su propio
-    // prop `aboveBottomNav` porque es `fixed`, no `absolute` dentro de
-    // este contenedor.
-    <div className="flex flex-1 flex-col pb-24">
+    <div className="flex flex-1 flex-col pb-6">
       {showLocationHint && (
         <p className="bg-ambar/10 px-4 py-2 font-sans text-body-sm text-text-muted">
           No pudimos acceder a tu ubicación. Mostrando negocios de Ciudad Verde — toca el botón de ubicación para
@@ -547,36 +593,25 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
         </p>
       )}
 
-      {offerTypeId != null && (
-        <div className="flex items-center justify-between gap-3 bg-terracota/10 px-4 py-2">
-          <p className="font-sans text-body-sm font-medium text-terracota">
-            Más {offerTypeName ?? "de este tipo"} cerca
-          </p>
-          <button
-            type="button"
-            onClick={handleClearOfferTypeFilter}
-            aria-label="Quitar filtro de tipo de oferta"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-terracota hover:bg-terracota/10"
-          >
-            <X size={16} weight="bold" />
-          </button>
-        </div>
-      )}
-
       {/* Banner de descubrimiento, familia "Disponibles ahora" (Fase 1,
           sin RF asociado) — apilado debajo del aviso de ubicación si
           aplica, arriba del mapa. Sin negocios abiertos ahora, el
           componente mismo no renderiza nada (nada de estado vacío
-          forzado). */}
-      <DiscoveryBanner
-        families={discoveryFamilies}
-        categoryTypeById={categoryTypeById}
-        categoryNameById={categoryNameById}
-        activeId={bannerHighlightId}
-        onActiveChange={handleBannerActiveChange}
-        onOpenDetail={handleBannerOpenDetail}
-        onViewOnMap={handleBannerViewOnMap}
-      />
+          forzado). Oculto con la lista filtrada activa: ver los dos a
+          la vez sería confuso. */}
+      {!listFilter && (
+        <DiscoveryBanner
+          families={discoveryFamilies}
+          categoryTypeById={categoryTypeById}
+          categoryNameById={categoryNameById}
+          activeId={bannerHighlightId}
+          onActiveChange={handleBannerActiveChange}
+          onOpenDetail={handleBannerOpenDetail}
+          onViewOnMap={handleBannerViewOnMap}
+          onCategoryClick={handleCategoryClick}
+          onOpenFamilyList={handleOpenFamilyList}
+        />
+      )}
 
       <div className="relative min-h-[420px] flex-1">
         {/*
@@ -635,9 +670,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
           </div>
         )}
 
-        {!selected && !searchSheetOpen && !query && (
-          <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} />
-        )}
+        {showMap && <ZoneComparisonCard zones={zones} onJumpToZone={handleJumpToZone} />}
 
         {selected && (
           <BusinessSummarySheet
@@ -652,6 +685,7 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
           <MapSearchSheet
             searchKey={searchKey}
             query={query}
+            userFirstName={userFirstName}
             onSearch={handleTextSearch}
             onClear={handleClearSearch}
             advanced={advanced}
@@ -667,21 +701,29 @@ export function MapScreen({ initialBusinessId, initialOfferTypeId }: MapScreenPr
           />
         )}
 
-        {!selected && !searchSheetOpen && (
-          <FloatingActionStack
-            aboveBottomNav
-            primary={{
-              icon: <Crosshair size={26} weight="fill" />,
-              label: "Mi ubicación",
-              onClick: handleLocateMe,
-            }}
-            secondary={{
-              icon: <MagnifyingGlass size={20} weight="bold" />,
-              label: "Buscar",
-              onClick: handleToggleSearchSheet,
-            }}
+        {listFilter && (
+          <FilteredListSheet
+            filter={listFilter}
+            title={listFilterTitle}
+            categoryTypeById={categoryTypeById}
+            categoryNameById={categoryNameById}
+            geolocation={geolocation}
+            onSelectResult={handleSelectFromSearch}
+            onViewOnMap={handleSelectFromSearch}
+            onClose={() => setListFilter(null)}
           />
         )}
+
+        {showMap && (
+          <div className="fixed bottom-6 left-6 z-40">
+            <RuteandoLogo size={32} />
+          </div>
+        )}
+
+        <MainFloatingNav
+          onCenterMap={showMap ? handleLocateMe : undefined}
+          onSearch={handleToggleSearchSheet}
+        />
       </div>
     </div>
   );

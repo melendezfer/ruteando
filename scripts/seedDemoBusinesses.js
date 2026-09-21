@@ -139,6 +139,19 @@
  * desde antes (ver comentarios de `entregaPropia`/`higieneAutodeclarada`
  * arriba) y no hacía falta tocarlo.
  *
+ * Tanda de 5 negocios pedida directamente por el usuario (sin RF
+ * asociado, sección aparte de `NEGOCIOS` al final del arreglo, con su
+ * propio comentario ahí): Arepas Doña Rosa (2ª cuenta, mismo nombre a
+ * propósito), Costurero Martha, Profe Andrés — Matemáticas (categoría
+ * nueva "Clases particulares"), Artesanías Ciudad Verde y Fruver El
+ * Manantial — cubre todos los campos del modelo actual (`plan`, incluido
+ * por primera vez en este script) y las ofertas con vigencia (menú/
+ * promoción/combo/evento, ver CLAUDE.md migración productos-tipo-oferta)
+ * sobre datos reales: un "Menú del día" que vence hoy y una "Promoción"
+ * vigente todo el mes. Ninguna de las 5 lleva fotos (ni de negocio ni de
+ * producto) — a propósito, para ejercitar el ícono-silueta de respaldo
+ * en vez de enmascararlo con un placeholder.
+ *
  * Datos claramente de prueba, fáciles de borrar antes de un piloto real:
  *   node scripts/seedDemoBusinesses.js --clean
  *
@@ -175,6 +188,54 @@ function desplazar(distanciaM, rumboGrados) {
   const deltaLng =
     (distanciaM * Math.sin(rad)) / (111320 * Math.cos((CENTRO.lat * Math.PI) / 180));
   return { lat: CENTRO.lat + deltaLat, lng: CENTRO.lng + deltaLng };
+}
+
+/**
+ * Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
+ * ver CLAUDE.md, migración productos-tipo-oferta. Límites de "hoy"/"este
+ * mes" calculados en hora de Bogotá, no UTC (mismo motivo que
+ * `momentoActualBogota()` en disponibilidad.service.js: "hoy" para un
+ * vendedor en Soacha no es "hoy en UTC"). Bogotá es UTC-5 fijo, sin
+ * horario de verano — a diferencia de `momentoActualBogota()` (que solo
+ * necesita el nombre del día/la hora como texto), acá hace falta
+ * construir un TIMESTAMPTZ real, así que se arma con `Intl.DateTimeFormat`
+ * (para no asumir en qué zona horaria corre el proceso de Node) y
+ * `Date.UTC` con el offset ya sumado — `Date.UTC` normaliza solo los
+ * campos que se pasan de rango (ej. hora 28), así que no hace falta
+ * lógica manual de acarreo de día/mes.
+ */
+const OFFSET_BOGOTA_HORAS = 5;
+
+function partesFechaBogota(ahora = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const [anio, mes, dia] = formatter.format(ahora).split('-').map(Number);
+  return { anio, mes, dia };
+}
+
+function inicioDeHoyBogota(ahora = new Date()) {
+  const { anio, mes, dia } = partesFechaBogota(ahora);
+  return new Date(Date.UTC(anio, mes - 1, dia, OFFSET_BOGOTA_HORAS, 0, 0, 0));
+}
+
+function finDeHoyBogota(ahora = new Date()) {
+  const { anio, mes, dia } = partesFechaBogota(ahora);
+  return new Date(Date.UTC(anio, mes - 1, dia, 23 + OFFSET_BOGOTA_HORAS, 59, 59, 999));
+}
+
+function inicioDeMesBogota(ahora = new Date()) {
+  const { anio, mes } = partesFechaBogota(ahora);
+  return new Date(Date.UTC(anio, mes - 1, 1, OFFSET_BOGOTA_HORAS, 0, 0, 0));
+}
+
+function finDeMesBogota(ahora = new Date()) {
+  const { anio, mes } = partesFechaBogota(ahora);
+  // Día 0 del mes siguiente = último día de este mes (JS normaliza el desbordamiento).
+  return new Date(Date.UTC(anio, mes, 0, 23 + OFFSET_BOGOTA_HORAS, 59, 59, 999));
 }
 
 const { hoyDb } = momentoActualBogota();
@@ -600,6 +661,273 @@ const NEGOCIOS = [
       },
     ],
   },
+  // --- Tanda de 5 negocios pedida directamente por el usuario (sin RF
+  // asociado), para probar de punta a punta el modelo de datos actual
+  // completo (categoría, movilidad, ownDelivery, hygieneSelfDeclared,
+  // contactPhone, ubicación real, horario, plan, phoneVerified) y las
+  // ofertas con vigencia (menú/promoción/combo/evento, ver CLAUDE.md,
+  // migración productos-tipo-oferta) sobre datos reales, no solo en la
+  // suite de pruebas automatizadas.
+  //
+  // `sinFotoNegocio: true` en las 5 — pedido explícito: "no hace falta
+  // subir fotos reales... salvo que quieras aprovechar para probar
+  // también el ícono-silueta cuando no hay foto" — así que, a propósito,
+  // ninguna de las 5 lleva `fotos` de negocio ni de producto (el resto
+  // de NEGOCIOS sí lleva placeholders de picsum.photos), para ejercitar
+  // el fallback real (HeroFallbackIcon/CATALOG_ICON_BY_TYPE en
+  // business-profile-screen.tsx) en vez de enmascararlo con una imagen
+  // de relleno.
+  //
+  // `plan: 'gratis'` explícito en las 5 (mismo valor que el default de
+  // la columna, pero pedido explícitamente como campo a llenar) — ver
+  // negocios-plan. Sin RF-020 ninguna necesita `estado: 'rechazado'`, así
+  // que sigue sin haber un negocio de demo en ese estado.
+  //
+  // Rumbos reusados de los 9 negocios de arriba (0°/90°/180°/270°/160°),
+  // ya verificados por geocodificación inversa (CLAUDE.md secciones 25 y
+  // 31: 0° y 90° seguros hasta 250-350m, 180° hasta 900m, 270° hasta al
+  // menos 1400m, 160° hasta 3000m) — a distancias nuevas, sin pisar
+  // ningún pin existente, para no tener que volver a verificar
+  // geocodificación desde cero.
+  //
+  // "Arepas Doña Rosa" (nueva) reusa el mismo NOMBRE que el negocio ya
+  // sembrado arriba (slug 'arepas-dona-rosa') — a propósito, no un
+  // descuido: el usuario pidió ese nombre exacto con un catálogo y una
+  // categoría distintos ("Comida rápida", no "Arepas"), y dos vendedores
+  // de arepas reales podrían perfectamente compartir un nombre tan
+  // genérico — `negocios.nombre` nunca tuvo restricción de unicidad. Se
+  // le dio un slug/correo propios ('arepas-dona-rosa-2', cuenta de
+  // vendedor separada) para no chocar con el original. Documentado en el
+  // resumen que imprime este script al terminar, para que quien lo corra
+  // no se sorprenda al ver dos pines con el mismo nombre en el mapa.
+  {
+    slug: 'arepas-dona-rosa-2',
+    nombre: 'Arepas Doña Rosa',
+    descripcion: 'Arepas rellenas y chorizo asado, puesto ambulante en las tardes.',
+    categoria: 'Comida rápida',
+    categoriaTipo: 'alimentos',
+    correo: 'demo-arepas-dona-rosa-2@ruteando.test',
+    nombreDueno: 'Rosalba Méndez',
+    telefono: '3001110010',
+    // 0°/norte, ya verificado hasta 250m (Arepas Doña Rosa original) —
+    // 200m es un punto nuevo sobre el mismo rayo, sin pisar ningún pin
+    // existente (150/180/220/250m ya ocupados).
+    distanciaM: 200,
+    rumbo: 0,
+    cerradoHoy: false,
+    entregaPropia: true,
+    higieneAutodeclarada: true,
+    movilidad: 'ambulante',
+    plan: 'gratis',
+    direccionReferencia: 'Carrera 39 con Calle 32, esquina del CAI',
+    sinFotoNegocio: true,
+    productos: [
+      {
+        // Ofertas con vigencia — tipo "Menú" (menú del día), vence hoy a
+        // las 23:59:59.999 hora de Bogotá (ver finDeHoyBogota arriba).
+        nombre: 'Arepa con queso',
+        descripcion: 'Menú del día: arepa asada con queso campesino derretido.',
+        precio: 3500,
+        disponible: true,
+        oferta: 'Menú',
+        vigencia: 'hoy',
+      },
+      {
+        nombre: 'Arepa de choclo',
+        descripcion: 'Arepa dulce de choclo tierno, tamaño grande.',
+        precio: 4000,
+        disponible: true,
+      },
+      {
+        nombre: 'Chorizo asado',
+        descripcion: 'Chorizo santarrosano asado en parrilla, con papa criolla.',
+        precio: 3000,
+        disponible: true,
+      },
+    ],
+  },
+  {
+    slug: 'costurero-martha',
+    nombre: 'Costurero Martha',
+    descripcion: 'Arreglos de ropa y confección a la medida, en el mismo barrio.',
+    categoria: 'Costura y sastrería',
+    categoriaTipo: 'servicios',
+    correo: 'demo-costurero-martha@ruteando.test',
+    nombreDueno: 'Martha Cecilia Rojas',
+    telefono: '3001110011',
+    // 90°/este, ya verificado hasta 350m — 250m es un punto nuevo, sin
+    // pisar Perros El Parche (350m)/Salchipapas Doña Nury (300m)/Jugos
+    // Frutti Verde (320m).
+    distanciaM: 250,
+    rumbo: 90,
+    cerradoHoy: false,
+    entregaPropia: false, // no aplica: es un servicio, no hay producto que entregar a domicilio
+    higieneAutodeclarada: false, // no aplica: no es manejo de alimentos
+    movilidad: 'local_fijo',
+    plan: 'gratis',
+    direccionReferencia: 'Calle 35 #37-20, local de costura',
+    sinFotoNegocio: true,
+    productos: [
+      {
+        nombre: 'Dobladillo de pantalón',
+        descripcion: 'Ajuste de largo, listo el mismo día.',
+        precio: 8000,
+        disponible: true,
+      },
+      {
+        nombre: 'Arreglo de cierre',
+        descripcion: 'Cambio de cremallera en pantalones, chaquetas o bolsos.',
+        precio: 10000,
+        disponible: true,
+      },
+      {
+        // productos.precio es NOT NULL (DECIMAL >= 0) — este esquema no
+        // tiene forma de representar "a cotizar" sin un número, así que
+        // queda en 0 con la aclaración en la descripción (limitación
+        // real del modelo de datos actual, no un valor inventado).
+        nombre: 'Confección de cortina a medida',
+        descripcion: 'Cortina hecha a tu medida — precio a cotizar según tamaño y tela.',
+        precio: 0,
+        disponible: true,
+      },
+    ],
+  },
+  {
+    slug: 'profe-andres-matematicas',
+    nombre: 'Profe Andrés — Matemáticas',
+    descripcion: 'Clases particulares de matemáticas, a domicilio o en el estudio del profe.',
+    // Categoría nueva (no existía "Clases particulares" en el catálogo
+    // hasta este script) — se crea sola en sembrar() vía el mismo
+    // ON CONFLICT (nombre) DO UPDATE que ya usan las categorías nuevas
+    // de arriba, sin necesitar una migración aparte (mismo criterio que
+    // categorías administradas por el equipo del proyecto vía script en
+    // vez de endpoint público).
+    categoria: 'Clases particulares',
+    categoriaTipo: 'servicios',
+    correo: 'demo-profe-andres@ruteando.test',
+    nombreDueno: 'Andrés Felipe Salazar',
+    telefono: '3001110012',
+    // 180°/sur, ya verificado hasta 900m (Dulces La Abuela) — 500m es un
+    // punto nuevo sobre el mismo rayo, más cerca del centro.
+    distanciaM: 500,
+    rumbo: 180,
+    cerradoHoy: false,
+    entregaPropia: false,
+    higieneAutodeclarada: false,
+    movilidad: 'local_fijo',
+    plan: 'gratis',
+    direccionReferencia: 'Carrera 36 #34-08, apartamento 302',
+    sinFotoNegocio: true,
+    productos: [
+      {
+        nombre: 'Clase de matemáticas bachillerato (hora)',
+        descripcion: 'Clase individual, temario del colegio, con ejercicios guiados.',
+        precio: 25000,
+        disponible: true,
+      },
+      {
+        nombre: 'Preparación pre-ICFES (hora)',
+        descripcion: 'Enfocada en el componente matemático de la prueba Saber 11.',
+        precio: 30000,
+        disponible: true,
+      },
+      {
+        nombre: 'Refuerzo primaria (hora)',
+        descripcion: 'Apoyo escolar en matemáticas básicas para primaria.',
+        precio: 20000,
+        disponible: true,
+      },
+    ],
+  },
+  {
+    slug: 'artesanias-ciudad-verde',
+    nombre: 'Artesanías Ciudad Verde',
+    descripcion: 'Bisutería y accesorios artesanales hechos a mano en el barrio.',
+    categoria: 'Artesanías',
+    categoriaTipo: 'productos',
+    correo: 'demo-artesanias-ciudad-verde@ruteando.test',
+    nombreDueno: 'Diana Marcela Ríos',
+    telefono: '3001110013',
+    // 270°/oeste, ya verificado dentro de Soacha hasta al menos 1400m
+    // (CLAUDE.md sección 25: "Bosatama, Corregimiento 2 Norte") — 600m es
+    // un punto nuevo, bien dentro de ese rango, sin pisar ningún pin
+    // existente (nadie más sembrado hacia el oeste).
+    distanciaM: 600,
+    rumbo: 270,
+    cerradoHoy: false,
+    entregaPropia: true, // bien físico, se puede entregar a domicilio
+    higieneAutodeclarada: false, // no aplica: no es manejo de alimentos
+    movilidad: 'local_fijo',
+    plan: 'gratis',
+    direccionReferencia: 'Carrera 40 #33-15, caseta de artesanías',
+    sinFotoNegocio: true,
+    productos: [
+      {
+        nombre: 'Manilla tejida',
+        descripcion: 'Manilla ajustable, tejida a mano en hilo encerado.',
+        precio: 6000,
+        disponible: true,
+      },
+      {
+        nombre: 'Aretes en madera',
+        descripcion: 'Aretes livianos, madera tallada y pulida a mano.',
+        precio: 9000,
+        disponible: true,
+      },
+      {
+        nombre: 'Llavero personalizado',
+        descripcion: 'Llavero con inicial o nombre tallado, para pedir con anticipación.',
+        precio: 5000,
+        disponible: true,
+      },
+    ],
+  },
+  {
+    slug: 'fruver-el-manantial',
+    nombre: 'Fruver El Manantial',
+    descripcion: 'Jugos naturales y ensaladas de fruta, carrito ambulante.',
+    categoria: 'Fruver',
+    categoriaTipo: 'alimentos',
+    correo: 'demo-fruver-el-manantial@ruteando.test',
+    nombreDueno: 'Wilmer Orlando Pardo',
+    telefono: '3001110014',
+    // 160°/sursureste, ya verificado hasta 3000m (Empanadas El Fogón) —
+    // 400m es un punto nuevo, mucho más cerca del centro sobre el mismo
+    // rayo ya confirmado seguro.
+    distanciaM: 400,
+    rumbo: 160,
+    cerradoHoy: false,
+    entregaPropia: true,
+    higieneAutodeclarada: true,
+    movilidad: 'ambulante',
+    plan: 'gratis',
+    direccionReferencia: 'Carrera 37 con Calle 24A, esquina del parque infantil',
+    sinFotoNegocio: true,
+    productos: [
+      {
+        nombre: 'Jugo de guayaba',
+        descripcion: 'Guayaba fresca licuada en agua, sin azúcar añadida.',
+        precio: 3000,
+        disponible: true,
+      },
+      {
+        // Ofertas con vigencia — tipo "Promoción", vigente todo el mes
+        // en curso (ver inicioDeMesBogota/finDeMesBogota arriba).
+        nombre: 'Jugo de mora',
+        descripcion: 'Promoción del mes: mora fresca licuada en agua.',
+        precio: 3000,
+        disponible: true,
+        oferta: 'Promoción',
+        vigencia: 'mes',
+      },
+      {
+        nombre: 'Ensalada de frutas',
+        descripcion: 'Mezcla de frutas de temporada, con queso y crema opcional.',
+        precio: 5000,
+        disponible: true,
+      },
+    ],
+  },
 ];
 
 async function limpiar() {
@@ -623,6 +951,17 @@ async function limpiar() {
 async function sembrar() {
   const contrasenaHash = await argon2.hash(CONTRASENA_DEMO);
   const resumen = [];
+
+  // Ofertas con vigencia (menú/promoción/combo/evento) — mapa nombre->id
+  // de tipos_oferta (sembrados por la migración tipos-oferta, no por este
+  // script), para resolver `producto.oferta` sin hardcodear ids que
+  // podrían diferir entre ambientes.
+  const tiposOferta = await pool.query('SELECT id, nombre FROM tipos_oferta');
+  const idTipoOfertaPorNombre = new Map(tiposOferta.rows.map((t) => [t.nombre, t.id]));
+  const inicioDeHoy = inicioDeHoyBogota();
+  const finDeHoy = finDeHoyBogota();
+  const inicioDeMes = inicioDeMesBogota();
+  const finDeMes = finDeMesBogota();
 
   for (const n of NEGOCIOS) {
     const punto = desplazar(n.distanciaM, n.rumbo);
@@ -662,8 +1001,8 @@ async function sembrar() {
     const categoriaId = categoria.rows[0].id;
 
     const negocio = await pool.query(
-      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia, higiene_autodeclarada, movilidad)
-       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6, $7, $8)
+      `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, estado, telefono_contacto, telefono_verificado, entrega_propia, higiene_autodeclarada, movilidad, plan)
+       VALUES ($1, $2, $3, $4, 'activo', $5, true, $6, $7, $8, $9)
        RETURNING id`,
       [
         usuarioId,
@@ -674,6 +1013,11 @@ async function sembrar() {
         n.entregaPropia,
         n.higieneAutodeclarada,
         n.movilidad ?? 'ambulante',
+        // negocios.plan (ver CLAUDE.md, migración negocios-plan) — mismo
+        // valor que el default de la columna cuando no se especifica,
+        // pero mandado explícito para que este script pueda sembrar un
+        // negocio en plan 'pago' el día que haga falta probar eso.
+        n.plan ?? 'gratis',
       ],
     );
     const negocioId = negocio.rows[0].id;
@@ -718,12 +1062,17 @@ async function sembrar() {
 
     // Foto de relleno vía servicio externo de placeholders (evita tocar
     // el pipeline real de subida/compresión/S3, fuera del alcance de este
-    // script).
-    await pool.query(
-      `INSERT INTO fotos (negocio_id, tipo, url)
-       VALUES ($1, 'negocio', $2)`,
-      [negocioId, `https://picsum.photos/seed/${n.slug}/900/600`],
-    );
+    // script) — salvo `sinFotoNegocio: true` (petición explícita del
+    // usuario para una tanda de negocios, para poder ver/probar el
+    // ícono-silueta real que se muestra cuando un negocio no tiene foto
+    // en vez de enmascararlo siempre con un placeholder).
+    if (!n.sinFotoNegocio) {
+      await pool.query(
+        `INSERT INTO fotos (negocio_id, tipo, url)
+         VALUES ($1, 'negocio', $2)`,
+        [negocioId, `https://picsum.photos/seed/${n.slug}/900/600`],
+      );
+    }
 
     // Ítems de catálogo (expansión de alcance, CLAUDE.md sección 31;
     // menús completos para los 6 negocios de comida agregados después —
@@ -738,11 +1087,45 @@ async function sembrar() {
     // externo que ya usa la foto de negocio de arriba, con una semilla
     // distinta por producto para que no sea la misma imagen repetida.
     for (const [indice, p] of (n.productos ?? []).entries()) {
+      // Ofertas con vigencia (sin RF asociado — ver CLAUDE.md, migración
+      // productos-tipo-oferta): `p.oferta` es el NOMBRE del tipo
+      // ('Menú'/'Promoción'/...), resuelto acá contra `idTipoOfertaPorNombre`
+      // (no un id hardcodeado); `p.vigencia` ('hoy'/'mes') decide el
+      // rango — cualquier otro producto (sin `p.oferta`) sigue sin
+      // vigencia, como el resto del catálogo sembrado por este script.
+      let tipoOfertaId = null;
+      let vigenciaInicio = null;
+      let vigenciaFin = null;
+      if (p.oferta) {
+        tipoOfertaId = idTipoOfertaPorNombre.get(p.oferta) ?? null;
+        if (!tipoOfertaId) {
+          throw new Error(
+            `Tipo de oferta "${p.oferta}" no existe en tipos_oferta — ¿corrió la migración tipos-oferta?`,
+          );
+        }
+        if (p.vigencia === 'hoy') {
+          vigenciaInicio = inicioDeHoy;
+          vigenciaFin = finDeHoy;
+        } else if (p.vigencia === 'mes') {
+          vigenciaInicio = inicioDeMes;
+          vigenciaFin = finDeMes;
+        }
+      }
+
       const producto = await pool.query(
-        `INSERT INTO productos (negocio_id, nombre, descripcion, precio, disponible)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO productos (negocio_id, nombre, descripcion, precio, disponible, tipo_oferta_id, vigencia_inicio, vigencia_fin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
-        [negocioId, p.nombre, p.descripcion ?? null, p.precio, p.disponible],
+        [
+          negocioId,
+          p.nombre,
+          p.descripcion ?? null,
+          p.precio,
+          p.disponible,
+          tipoOfertaId,
+          vigenciaInicio,
+          vigenciaFin,
+        ],
       );
       const productoId = producto.rows[0].id;
 
@@ -755,6 +1138,8 @@ async function sembrar() {
       }
     }
 
+    const productoConOferta = (n.productos ?? []).find((p) => p.oferta);
+
     resumen.push({
       nombre: n.nombre,
       categoria: n.categoria,
@@ -764,7 +1149,12 @@ async function sembrar() {
       entregaPropia: n.entregaPropia,
       higieneAutodeclarada: n.higieneAutodeclarada,
       movilidad: n.movilidad ?? 'ambulante',
+      plan: n.plan ?? 'gratis',
       catalogoItems: (n.productos ?? []).length,
+      sinFotoNegocio: Boolean(n.sinFotoNegocio),
+      oferta: productoConOferta
+        ? `${productoConOferta.nombre} — ${productoConOferta.oferta} (${productoConOferta.vigencia === 'hoy' ? 'vence hoy' : 'vigente todo el mes'})`
+        : null,
       correo: n.correo,
       whatsapp: n.telefono,
     });
@@ -776,16 +1166,18 @@ async function sembrar() {
   console.log('\n=== Negocios de demo sembrados (Ciudad Verde, Soacha) ===\n');
   for (const r of resumen) {
     console.log(
-      `- ${r.nombre} [${r.categoria} · ${r.categoriaTipo}] — ~${r.distanciaM} m, ${r.estadoAhora}, ` +
+      `- ${r.nombre} [${r.categoria} · ${r.categoriaTipo}] — ~${r.distanciaM} m, ${r.estadoAhora}, plan ${r.plan}, ` +
         `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}, ` +
         `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}, ` +
         `${r.movilidad === 'local_fijo' ? 'local fijo' : 'ambulante'}, ` +
-        `${r.catalogoItems} ítem(s) de catálogo\n` +
+        `${r.catalogoItems} ítem(s) de catálogo${r.sinFotoNegocio ? ' (sin fotos — prueba el ícono-silueta)' : ''}\n` +
+        (r.oferta ? `    oferta con vigencia: ${r.oferta}\n` : '') +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,
     );
   }
   console.log(
-    '\nDatos claramente de prueba (correos @ruteando.test) — para borrarlos:\n' +
+    '\n⚠ "Arepas Doña Rosa" aparece DOS VECES (dos cuentas de vendedor distintas, mismo nombre elegido a propósito) — no es un error de este script.\n' +
+      '\nDatos claramente de prueba (correos @ruteando.test) — para borrarlos:\n' +
       '  node scripts/seedDemoBusinesses.js --clean\n',
   );
 }

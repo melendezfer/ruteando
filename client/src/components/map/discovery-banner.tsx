@@ -2,13 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WheelEvent as ReactWheelEvent } from "react";
-import { CheckCircle, Heart, Info, MapPin, X } from "@phosphor-icons/react/dist/ssr";
-import { RuteandoLogo } from "@/components/ui/ruteando-logo";
-import { CATALOG_ICON_BY_TYPE, DEFAULT_CATALOG_ICON } from "@/lib/catalog/catalog-icons";
+import { CheckCircle, Heart, Info, X } from "@phosphor-icons/react/dist/ssr";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
-import { getCategoryPinColor } from "@/lib/map/category-pin-colors";
-import { buildDirectionsUrl } from "@/lib/format/directions";
-import { formatDistance } from "@/lib/format/distance";
+import { DiscoveryRow } from "@/components/discovery/discovery-row";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
 /**
@@ -43,6 +39,27 @@ interface DiscoveryBannerProps {
   onOpenDetail: (business: BusinessPin) => void;
   /** "📍 Ver en mapa"/"Ver ubicación"/"Ver zona" — misma acción técnica sin importar el wording: recentra el mapa y resalta el pin. */
   onViewOnMap: (business: BusinessPin) => void;
+  /**
+   * Redediseño de navegación global (sin RF asociado, petición directa
+   * del usuario) — el ícono de categoría de cada fila navega a la lista
+   * filtrada por esa `categoryId` (ver `FilteredListSheet` en
+   * map-screen.tsx). Esto es lo que le faltaba resolver al defecto
+   * original del banner: antes el único ícono tappable de toda la
+   * tarjeta era el de FAMILIA (ver `onOpenFamilyList` abajo), y ni
+   * siquiera navegaba a ningún lado — solo ciclaba entre familias.
+   */
+  onCategoryClick: (business: BusinessPin) => void;
+  /**
+   * Tocar el ícono de la SECCIÓN "Favoritos abiertos ahora" — a
+   * diferencia de "Disponibles ahora" (que sigue abriendo la vista
+   * rápida ya construida, con los mismos datos ya cargados para el
+   * banner, sin fetch nuevo), Favoritos navega a la lista COMPLETA de
+   * favoritos (no solo los abiertos ahora) — un conjunto más amplio que
+   * lo que este banner tiene cargado, así que necesita su propio fetch
+   * (ver `FilteredListSheet`). Por eso es la única familia que dispara
+   * este callback en vez de la vista rápida interna.
+   */
+  onOpenFamilyList: (familyId: DiscoveryFamilyId) => void;
 }
 
 const FAMILY_NAME: Record<DiscoveryFamilyId, string> = {
@@ -56,21 +73,6 @@ function FamilyIcon({ id, size = 18 }: { id: DiscoveryFamilyId; size?: number })
   return <CheckCircle size={size} weight="fill" className="text-verde" />;
 }
 
-/**
- * Wording de la acción de ubicación por tipo de negocio (petición
- * directa del usuario): un local fijo se "ve en el mapa" (una dirección
- * concreta); un ambulante "se ve" donde esté ahora (misma acción
- * técnica, wording honesto sobre que se mueve); un servicio (mismo
- * criterio que ya usa review-tags.ts para variar según
- * `Category.type`) se enmarca como una zona que atiende, no un punto
- * fijo al que "llegar". Secundario, no bloquea el resto de esta
- * funcionalidad.
- */
-function resolveLocationActionLabel(business: BusinessPin, catalogType: CatalogType | null): string {
-  if (catalogType === "services") return "Ver zona";
-  return business.mobility === "fixed" ? "Ver en mapa" : "Ver ubicación";
-}
-
 // Auto-rotación del carrusel de tarjetas (petición directa del usuario,
 // sin RF asociado): con más de un negocio, avanza solo cada 4.5s —
 // dentro del rango pedido (4-5s). `RESUME_AFTER_IDLE_MS` es una decisión
@@ -82,103 +84,14 @@ const AUTO_ADVANCE_INTERVAL_MS = 4500;
 const RESUME_AFTER_IDLE_MS = 6000;
 
 /**
- * Contenido de una fila de negocio — ícono de categoría, nombre, familia/
- * categoría en texto (el ícono de color solo no comunica cuál es la
- * categoría, petición directa del usuario), distancia, estado y los dos
- * accesos ("Ver en mapa/ubicación/zona" + "Cómo llegar") — usado por la
- * tarjeta horizontal del carrusel (DiscoveryBusinessCarousel, Nivel 1).
- * La vista rápida del ⓘ (DiscoveryQuickViewSheet, Nivel "12") usa su
- * propia fila más liviana (DiscoveryQuickViewRow, sin estos botones) —
- * ver esa función para el porqué.
- */
-function DiscoveryBusinessRowContent({
-  business,
-  categoryTypeById,
-  categoryNameById,
-  onOpenDetail,
-  onViewOnMap,
-  onBeforeAction,
-}: {
-  business: BusinessPin;
-  categoryTypeById: Map<number, CatalogType>;
-  categoryNameById: Map<number, string>;
-  onOpenDetail: (business: BusinessPin) => void;
-  onViewOnMap: (business: BusinessPin) => void;
-  /** Gancho extra antes de cada acción — el carrusel lo usa para pausar el auto-avance; la vista rápida no lo necesita. */
-  onBeforeAction?: () => void;
-}) {
-  const catalogType = business.categoryId != null ? categoryTypeById.get(business.categoryId) ?? null : null;
-  const categoryName = business.categoryId != null ? categoryNameById.get(business.categoryId) ?? null : null;
-  const CategoryIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
-  const color = getCategoryPinColor(business.categoryId, catalogType);
-  const statusText = business.availabilityConfirmedAt ? "Vendiendo ahora" : "Abierto";
-  const locationLabel = resolveLocationActionLabel(business, catalogType);
-  const hasCoords = typeof business.latitude === "number" && typeof business.longitude === "number";
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => {
-          onBeforeAction?.();
-          onOpenDetail(business);
-        }}
-        aria-label={`Ver detalle de ${business.name ?? "este negocio"}`}
-        className="flex w-full items-center gap-2 px-3 pt-2.5 text-left"
-      >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-          style={{ backgroundColor: color }}
-        >
-          <CategoryIcon size={18} weight="fill" />
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-sans text-body-sm font-semibold text-text">{business.name}</span>
-          <span className="truncate font-sans text-caption text-text-muted">
-            {categoryName ?? "Comercio informal"}
-            {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
-          </span>
-          <span className="inline-flex items-center gap-1 font-sans text-caption font-medium text-verde">
-            <span className="h-1.5 w-1.5 rounded-full bg-verde" />
-            {statusText}
-          </span>
-        </div>
-      </button>
-
-      <div className="flex items-center gap-1.5 px-3 pb-2.5 pt-1.5">
-        <button
-          type="button"
-          onClick={() => {
-            onBeforeAction?.();
-            onViewOnMap(business);
-          }}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-sans text-caption font-medium text-terracota"
-        >
-          <MapPin size={14} weight="bold" />
-          {locationLabel}
-        </button>
-        {hasCoords && (
-          <a
-            href={buildDirectionsUrl(business.latitude, business.longitude)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-sans text-caption font-medium text-terracota"
-          >
-            <RuteandoLogo size={14} />
-            Cómo llegar
-          </a>
-        )}
-      </div>
-    </>
-  );
-}
-
-/**
  * Carrusel horizontal de tarjetas de negocio de UNA familia — scroll-snap
  * nativo (sin librería nueva) con auto-rotación cada 4.5s. Montado con
  * `key={family.id}` desde el padre para que cambiar de familia lo
  * remonte entero (auto-avance, pausa e IntersectionObserver arrancan
  * limpios para la nueva lista, sin arrastrar el estado de la anterior).
+ * Cada tarjeta usa `DiscoveryRow` (fila compacta, redediseño de
+ * navegación global) — mismo componente que la vista rápida del ⓘ y la
+ * lista filtrada de pantalla completa (`FilteredListSheet`).
  */
 function DiscoveryBusinessCarousel({
   businesses,
@@ -188,6 +101,7 @@ function DiscoveryBusinessCarousel({
   onActiveChange,
   onOpenDetail,
   onViewOnMap,
+  onCategoryClick,
 }: {
   businesses: BusinessPin[];
   categoryTypeById: Map<number, CatalogType>;
@@ -196,6 +110,7 @@ function DiscoveryBusinessCarousel({
   onActiveChange: (business: BusinessPin) => void;
   onOpenDetail: (business: BusinessPin) => void;
   onViewOnMap: (business: BusinessPin) => void;
+  onCategoryClick: (business: BusinessPin) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
@@ -312,73 +227,23 @@ function DiscoveryBusinessCarousel({
               else cardRefs.current.delete(business.id!);
             }}
             data-business-id={business.id}
-            className={`w-64 shrink-0 snap-center rounded-card border bg-background transition-colors ${
+            className={`w-72 shrink-0 snap-center rounded-card border bg-background transition-colors ${
               isActive ? "border-terracota" : "border-border"
             }`}
           >
-            <DiscoveryBusinessRowContent
+            <DiscoveryRow
               business={business}
-              categoryTypeById={categoryTypeById}
-              categoryNameById={categoryNameById}
+              catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
+              categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
               onOpenDetail={onOpenDetail}
               onViewOnMap={onViewOnMap}
+              onCategoryClick={onCategoryClick}
               onBeforeAction={pauseAutoAdvance}
             />
           </div>
         );
       })}
     </div>
-  );
-}
-
-/**
- * Corregido después de la primera versión (petición explícita del
- * usuario): esta vista rápida NO es la lista completa con las mismas
- * filas del carrusel — es un vistazo liviano, una fila por negocio con
- * solo ícono + nombre + categoría + distancia, sin repetir "Ver
- * ubicación"/"Cómo llegar" en cada una (esas acciones viven en el
- * detalle completo, Nivel 2 — tocar la fila abre `BusinessSummarySheet`
- * vía `onOpenDetail`, ver DiscoveryBanner). Por eso usa su propia fila
- * (`DiscoveryQuickViewRow`), no `DiscoveryBusinessRowContent` (esa sigue
- * siendo solo para la tarjeta del carrusel, Nivel 1).
- */
-function DiscoveryQuickViewRow({
-  business,
-  categoryTypeById,
-  categoryNameById,
-  onOpenDetail,
-}: {
-  business: BusinessPin;
-  categoryTypeById: Map<number, CatalogType>;
-  categoryNameById: Map<number, string>;
-  onOpenDetail: (business: BusinessPin) => void;
-}) {
-  const catalogType = business.categoryId != null ? categoryTypeById.get(business.categoryId) ?? null : null;
-  const categoryName = business.categoryId != null ? categoryNameById.get(business.categoryId) ?? null : null;
-  const CategoryIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
-  const color = getCategoryPinColor(business.categoryId, catalogType);
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpenDetail(business)}
-      aria-label={`Ver detalle de ${business.name ?? "este negocio"}`}
-      className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-    >
-      <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-        style={{ backgroundColor: color }}
-      >
-        <CategoryIcon size={18} weight="fill" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-sans text-body-sm font-semibold text-text">{business.name}</span>
-        <span className="truncate font-sans text-caption text-text-muted">
-          {categoryName ?? "Comercio informal"}
-          {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
-        </span>
-      </div>
-    </button>
   );
 }
 
@@ -395,7 +260,9 @@ const QUICK_VIEW_PREVIEW_LIMIT = 5;
  * con un límite más alto. Acotada a `QUICK_VIEW_PREVIEW_LIMIT` filas de
  * entrada — con más disponibles, un botón "Ver todas" las revela
  * in-place (CLAUDE.md sección 17), sin seguir cargando la lista
- * completa de una.
+ * completa de una. Usa `DiscoveryRow` igual que el carrusel — sin
+ * `onCategoryClick` acá (esta vista ya es "más de la misma familia", no
+ * tiene sentido ofrecer otra navegación adentro de otra navegación).
  */
 function DiscoveryQuickViewSheet({
   family,
@@ -403,12 +270,14 @@ function DiscoveryQuickViewSheet({
   categoryNameById,
   onClose,
   onOpenDetail,
+  onViewOnMap,
 }: {
   family: DiscoveryFamilyData;
   categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
   onClose: () => void;
   onOpenDetail: (business: BusinessPin) => void;
+  onViewOnMap: (business: BusinessPin) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visibleBusinesses = expanded ? family.businesses : family.businesses.slice(0, QUICK_VIEW_PREVIEW_LIMIT);
@@ -441,12 +310,13 @@ function DiscoveryQuickViewSheet({
         </div>
         <div className="flex flex-col divide-y divide-border overflow-y-auto">
           {visibleBusinesses.map((business) => (
-            <DiscoveryQuickViewRow
+            <DiscoveryRow
               key={business.id}
               business={business}
-              categoryTypeById={categoryTypeById}
-              categoryNameById={categoryNameById}
+              catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
+              categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
               onOpenDetail={onOpenDetail}
+              onViewOnMap={onViewOnMap}
             />
           ))}
         </div>
@@ -474,16 +344,21 @@ function DiscoveryQuickViewSheet({
  * Con una sola familia con datos, la fila superior es estática (nombre +
  * ícono de esa familia, sin nada que deslizar). Con dos o más (hoy:
  * "Disponibles ahora" y "Favoritos abiertos ahora"), esa fila se vuelve
- * su propio carrusel scroll-snap — deslizarla cambia de familia sin
- * afectar el carrusel de tarjetas de negocio de abajo, que sigue
- * deslizándose por separado entre los negocios de la familia activa.
- * Tocar el ícono de familia (derecha) también avanza a la siguiente,
- * como atajo accesible sin depender de un gesto de swipe (mouse,
- * teclado). Tocar el ⓘ (izquierda) abre la vista rápida (nivel 12 del
- * spec de Jose) con más elementos de esa misma familia — tocar una
- * tarjeta de negocio, en el carrusel o en la vista rápida, sigue
- * abriendo el detalle de ESE negocio: son tres acciones distintas de la
- * misma fila/carrusel, no una.
+ * su propio carrusel scroll-snap — deslizarla cambia de familia (gesto
+ * de swipe/scroll horizontal, sin depender del ícono) sin afectar el
+ * carrusel de tarjetas de negocio de abajo, que sigue deslizándose por
+ * separado entre los negocios de la familia activa.
+ *
+ * Redediseño de navegación global: el ícono de familia (derecha) YA NO
+ * cicla entre familias (ese gesto sigue disponible con swipe/scroll) —
+ * ahora navega a "ver más" de esa familia (vista rápida para
+ * "Disponibles ahora", lista completa filtrada para "Favoritos", ver
+ * `onOpenFamilyList`). Tocar el ⓘ (izquierda) sigue abriendo la misma
+ * vista rápida que antes. Tocar una tarjeta de negocio, en el carrusel o
+ * en la vista rápida, sigue abriendo el detalle de ESE negocio — y el
+ * ícono de categoría de cada tarjeta ahora navega a la lista filtrada
+ * por esa categoría (`onCategoryClick`, ver DiscoveryRow): cuatro
+ * acciones distintas en la misma fila/carrusel, no una.
  *
  * Sin ninguna familia con negocios, no se muestra nada — nada de estado
  * vacío forzado (pedido explícito desde la Fase 1).
@@ -496,6 +371,8 @@ export function DiscoveryBanner({
   onActiveChange,
   onOpenDetail,
   onViewOnMap,
+  onCategoryClick,
+  onOpenFamilyList,
 }: DiscoveryBannerProps) {
   const [activeFamilyIndex, setActiveFamilyIndex] = useState(0);
   const [quickViewFamilyId, setQuickViewFamilyId] = useState<DiscoveryFamilyId | null>(null);
@@ -531,11 +408,13 @@ export function DiscoveryBanner({
   const activeFamily = families[safeActiveFamilyIndex] ?? null;
   const quickViewFamily = families.find((family) => family.id === quickViewFamilyId) ?? null;
 
-  function goToFamilyIndex(index: number) {
-    familyRefs.current.get(index)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    // No hace falta setActiveFamilyIndex acá — el IntersectionObserver de
-    // arriba lo detecta solo cuando el scroll termine, mismo criterio ya
-    // usado para el swipe manual entre tarjetas de negocio.
+  /** Ícono de familia: "Disponibles ahora" abre la vista rápida (mismos datos ya cargados); "Favoritos" navega a la lista completa (fetch propio, ver onOpenFamilyList). */
+  function handleFamilyIconClick(familyId: DiscoveryFamilyId) {
+    if (familyId === "favorites_open_now") {
+      onOpenFamilyList(familyId);
+    } else {
+      setQuickViewFamilyId(familyId);
+    }
   }
 
   if (families.length === 0 || !activeFamily) return null;
@@ -570,8 +449,8 @@ export function DiscoveryBanner({
               </span>
               <button
                 type="button"
-                onClick={() => goToFamilyIndex((index + 1) % families.length)}
-                aria-label="Cambiar de familia"
+                onClick={() => handleFamilyIconClick(family.id)}
+                aria-label={`Ver todos: ${FAMILY_NAME[family.id]}`}
                 className="flex h-7 w-7 shrink-0 items-center justify-center"
               >
                 <FamilyIcon id={family.id} />
@@ -592,7 +471,14 @@ export function DiscoveryBanner({
           <span className="flex-1 truncate text-center font-sans text-body-sm font-semibold text-text">
             {FAMILY_NAME[activeFamily.id]}
           </span>
-          <FamilyIcon id={activeFamily.id} />
+          <button
+            type="button"
+            onClick={() => handleFamilyIconClick(activeFamily.id)}
+            aria-label={`Ver todos: ${FAMILY_NAME[activeFamily.id]}`}
+            className="flex h-7 w-7 shrink-0 items-center justify-center"
+          >
+            <FamilyIcon id={activeFamily.id} />
+          </button>
         </div>
       )}
 
@@ -605,6 +491,7 @@ export function DiscoveryBanner({
         onActiveChange={onActiveChange}
         onOpenDetail={onOpenDetail}
         onViewOnMap={onViewOnMap}
+        onCategoryClick={onCategoryClick}
       />
 
       {quickViewFamily && (
@@ -616,6 +503,10 @@ export function DiscoveryBanner({
           onOpenDetail={(business) => {
             setQuickViewFamilyId(null);
             onOpenDetail(business);
+          }}
+          onViewOnMap={(business) => {
+            setQuickViewFamilyId(null);
+            onViewOnMap(business);
           }}
         />
       )}

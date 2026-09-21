@@ -2,8 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AppHeader } from "@/components/layout/app-header";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
 import { MapScreen } from "@/components/map/map-screen";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 import { VendorBusinessPicker } from "@/components/discovery/vendor-business-picker";
@@ -39,9 +37,7 @@ export function HomeScreenRouter() {
   if (activeBusinesses?.length === 0) {
     return (
       <main className="flex flex-1 flex-col">
-        <AppHeader />
         <MapScreen />
-        <BottomNavBar />
       </main>
     );
   }

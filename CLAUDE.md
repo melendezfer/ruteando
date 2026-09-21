@@ -1181,47 +1181,67 @@ llegar en el perfil de negocio, sección 5.4.3). Esta sección es la única
 fuente de verdad de su especificación — si el componente cambia, actualizar
 acá también, no dejar que el código y este archivo diverjan.
 
-**Props** (`primary: FloatingAction | null`, `secondary?: FloatingAction | null`):
+**Redediseñado (sin RF asociado, petición directa del usuario — ver
+sección 53) de `primary`/`secondary` fijos (siempre exactamente 2
+posiciones) a un array `actions` de N — necesario para la navegación
+global de 4 accesos (`MainFloatingNav`, sección 53), que no cabía en el
+contrato viejo.**
+
+**Props**:
 
 ```ts
 interface FloatingAction {
   icon: ReactNode;
   label: string;      // aria-label, también el nombre accesible para pruebas
   href?: string;       // si viene, la acción es un enlace externo (target="_blank")
-  onClick?: () => void; // si viene, la acción es un botón local (recentrar, abrir un panel, analítica)
+  onClick?: () => void; // si viene, la acción es un botón local (recentrar, navegar con el router, abrir un panel, analítica)
+}
+
+interface FloatingActionStackProps {
+  actions: (FloatingAction | null)[];
+  aboveBottomNav?: boolean;
 }
 ```
 
-- `primary` es el círculo grande (`h-16 w-16`, `bg-terracota text-white`,
-  `shadow-xl`) — la acción más cercana a la esquina de la pantalla.
-- `secondary` es el círculo más chico (`h-12 w-12`, `border border-border
-  bg-surface text-terracota`, `shadow-lg`), apilado **encima** del
-  principal (mismo orden en el DOM: secundaria primero, principal
-  después, dentro de un `flex flex-col`).
-- El stack completo es `fixed bottom-6 right-6 z-40`, con `gap-3` entre
-  los dos círculos. Si ambas props son `null`, el componente no renderiza
-  nada (sin dejar un contenedor vacío).
+- `actions` va de la más prominente a la menos prominente. El índice 0
+  **después de quitar los `null`** es el círculo grande (`h-16 w-16`,
+  `bg-terracota text-white`, `shadow-xl`, la acción más cercana a la
+  esquina); el resto son círculos chicos (`h-12 w-12`, `border
+  border-border bg-surface text-terracota`, `shadow-lg`), apilados
+  **encima** del grande. Un `null` en cualquier posición se omite sin
+  dejar hueco ni afectar el tamaño de los demás — si el primer elemento
+  no-nulo cambia de una llamada a otra (ej. "centrar mapa" presente vs.
+  ausente), el que quede en esa posición hereda el tamaño grande
+  automáticamente, sin que quien llama tenga que recalcular nada.
+- El stack completo es `fixed bottom-6 right-6 z-40` (o `bottom-24` con
+  `aboveBottomNav`), con `gap-3` entre círculos. Sin ninguna acción
+  no-nula, el componente no renderiza nada (sin dejar un contenedor
+  vacío).
 - Cada acción decide su propio elemento: con `href` es un `<a>` (abre en
-  pestaña nueva, `rel="noopener noreferrer"`); sin `href` es un
-  `<button type="button">`. `onClick` funciona en los dos casos (en el
-  `<a>` no bloquea la navegación — sirve para analítica best-effort antes
-  de que el enlace abra).
+  pestaña nueva, `rel="noopener noreferrer"` — solo para enlaces
+  EXTERNOS, ej. wa.me, Google Maps); sin `href` es un
+  `<button type="button">` (recentrar, o navegación interna vía
+  `router.push()` dentro del `onClick`, nunca `href` para eso). `onClick`
+  funciona en los dos casos (en el `<a>` no bloquea la navegación — sirve
+  para analítica best-effort antes de que el enlace abra).
 - Si falta el dato que una acción necesita (ej. un negocio sin teléfono,
-  o sin ubicación registrada), quien llama pasa `null` en esa posición —
-  el botón correspondiente desaparece por completo, nunca queda un botón
-  que enlaza a nada.
+  sin ubicación registrada, o sin mapa visible en esta pantalla), quien
+  llama pasa `null` en esa posición — el botón correspondiente desaparece
+  por completo, nunca queda un botón que enlaza a nada.
+- Sin resaltado de "acción activa" — a diferencia de la vieja
+  `BottomNavBar` (que sí marcaba la pestaña/ruta actual), este componente
+  no expone ningún estado de "dónde estoy"; no se pidió agregarlo.
 
 **Usos actuales:**
 
-| Pantalla | `primary` (círculo grande) | `secondary` (círculo chico) |
-|---|---|---|
-| Perfil de negocio (Épica F4, `business-profile-screen.tsx`) | WhatsApp — `WhatsappLogo`, `href` a `wa.me` con mensaje prellenado, `onClick` dispara `clic_contacto` | Cómo llegar — `NavigationArrow`, `href` a Google Maps con las coordenadas de la ubicación |
-| Mapa (Épica F3, retrofit `fix/mapa-floating-action-stack`, `map-screen.tsx`) | Mi ubicación — `Crosshair`, `onClick` recentra el mapa sobre la posición del usuario (o reintenta el permiso de geolocalización si todavía no fue concedido) | Filtros — `SlidersHorizontal`, `onClick` abre/cierra el panel de distancia/precio/abierto-ahora como bottom sheet (sección 17) |
+| Pantalla | `actions` (de más a menos prominente) |
+|---|---|
+| Perfil de negocio (Épica F4, `business-profile-screen.tsx`) — sin cambios en este redediseño | `[WhatsApp, Cómo llegar]` — WhatsApp: `WhatsappLogo`, `href` a `wa.me` con mensaje prellenado, `onClick` dispara `clic_contacto`. Cómo llegar: `NavigationArrow`, `href` a Google Maps con las coordenadas de la ubicación. |
+| Navegación global — Mapa/"/", Buscar, Favoritos (vista filtrada) y Perfil/Cuenta (`MainFloatingNav`, sección 53) | `[Centrar mapa (solo con mapa visible), Buscar, Perfil, Favoritos]` — ver sección 53 para el detalle completo de cada acción. |
 
-Cualquier pantalla nueva que necesite dos acciones flotantes (una
-principal, una secundaria opcional) debe reutilizar este componente en
-vez de construir un stack de círculos aparte — es exactamente el motivo
-por el que se generalizó en el retrofit del mapa.
+Cualquier pantalla nueva que necesite acciones flotantes debe reutilizar
+este componente (con el array que corresponda) en vez de construir un
+stack de círculos aparte.
 
 ## 21. Verificación de teléfono de vendedores (SMS OTP)
 
@@ -5387,3 +5407,212 @@ Cuenta de prueba borrada después.
   viejo botón "Filtros" de `/buscar`, que sí se resaltaba) —
   `FloatingActionStack` no expone un estado "activo" distinto del
   default para sus botones, y extender ese contrato no se pidió.
+
+## 53. Redediseño de navegación global — barra fija reemplazada por navegación flotante
+
+Sin RF asociado (fuera de los Documentos 05-15) — petición directa del
+usuario, sobre boceto propio, propia rama
+(`feature/redisenio-navegacion-mapa`). Reemplaza `AppHeader` +
+`BottomNavBar` (CLAUDE.md secciones 27/28) en las 4 pantallas
+principales — Mapa (`/` y `/mapa`), Buscar (`/buscar`), Favoritos (ya no
+una pantalla propia, ver más abajo) y Perfil (`/perfil` y `/cuenta`, que
+es "Perfil" para un vendedor con negocio activo, sección 43) — por
+`MainFloatingNav`, una navegación flotante compartida. Decidido
+explícitamente así con el usuario antes de construir, no asumido: "esa
+decisión era sobre la navegación de toda la app, no solo del mapa —
+dejar la barra fija en unas pantallas y quitarla en otras sería más
+confuso que cualquiera de las dos opciones por separado".
+
+**`business-profile-screen.tsx` (perfil de UN negocio) NO se toca** — no
+es una de las 4 pantallas principales, sigue con su `BackButton` fijo +
+`FloatingActionStack` propio (WhatsApp/Cómo llegar) + `BottomNavBar`
+condicional (sección 42) tal cual estaban.
+
+### `MainFloatingNav` (`client/src/components/layout/main-floating-nav.tsx`)
+
+Un solo `FloatingActionStack` (ver sección 20) con hasta 4 accesos, de
+más a menos prominente:
+
+1. **Centrar mapa** (`Crosshair`) — solo cuando hay mapa visible en esta
+   pantalla/modo (se omite el elemento del array, no se pasa `null`
+   fijo): ausente en Buscar/Perfil/Cuenta/el selector de negocio, y
+   TAMBIÉN ausente dentro de la propia pantalla de Mapa cuando la vista
+   de lista filtrada está activa (`FilteredListSheet`, ver más abajo) —
+   la ruta sigue siendo `/mapa` pero no hay mapa visible en ese momento.
+   Es la única acción realmente exclusiva de `MapScreen` — las otras 3
+   son idénticas en las 4 pantallas.
+2. **Buscar** (`MagnifyingGlass`) — dentro de Mapa, abre `MapSearchSheet`
+   (hoja local, sin cambiar de ruta, comportamiento sin cambios desde la
+   Fase B de la fusión de buscadores); en el resto de las pantallas,
+   navega a `/buscar` (`router.push`, default de `MainFloatingNav`
+   cuando no se pasa `onSearch`).
+3. **Perfil** (`UserCircle`) — siempre `router.push("/perfil")`; esa
+   ruta ya decide sola a dónde aterriza según el rol (sección 38/43).
+4. **Favoritos** (`Heart`) — siempre `router.push("/mapa?favoritesOnly=true")`,
+   la misma vista de lista filtrada que el ícono de sección "Favoritos
+   abiertos ahora" del banner (ver más abajo) — un solo destino para las
+   dos entradas, no dos mecanismos duplicados.
+
+Sin resaltado de "en qué pantalla estoy" — mismo criterio ya documentado
+para `FloatingActionStack`, no se pidió agregarlo.
+
+### Logo "Ruteando" fijo, solo en Mapa
+
+`RuteandoLogo` fijo abajo a la izquierda (`fixed bottom-6 left-6`),
+**exclusivo de la pantalla de mapa** (dentro de `MapScreen`, no de
+`MainFloatingNav`) — marca estática, sin `onClick` ni `href`. Oculto
+junto con el mapa mismo (cuando `BusinessSummarySheet`/`MapSearchSheet`/
+`FilteredListSheet` tapan la pantalla completa), mismo criterio que
+"centrar mapa".
+
+**Hallazgo real en la propia verificación** (`client/next.config.ts`):
+investigando si el indicador de Next.js Dev Tools tapaba este logo (una
+"R" mayúscula en un pin violeta, a 32px, se confundió a simple vista con
+un círculo con "N" — no era el logo tapado, era una lectura errónea de
+la propia captura a esa escala), sí se encontraron choques REALES al
+probar reposicionar ese indicador: `<nextjs-portal>` interceptando el
+clic de verdad en `MainFloatingNav` (bottom-right), el ícono "Cambiar de
+familia" del banner (top-right) y "Volver" de `FilteredListSheet`
+(top-left) — las 4 esquinas del viewport ya tienen algo fijo propio de
+esta pantalla en algún estado. Se apagó del todo (`devIndicators: false`)
+en vez de perseguir una quinta esquina — sin impacto en producción, ese
+indicador nunca existió ahí.
+
+### Favoritos deja de ser una pantalla propia
+
+`/favoritos` (`FavoritesScreen`, con `BusinessCard`) desaparece —
+decisión explícita del usuario ("no se crea una pantalla de 'todos mis
+favoritos'; solo se ven dentro del banner"). La ruta queda como
+`redirect("/mapa?favoritesOnly=true")` (Server Component, mismo patrón
+ya usado con `/mapa` cuando esa ruta cambió de sentido en su momento —
+sección 18) en vez de borrarse del todo, por si algún enlace/marcador
+externo la tenía guardada. `favorites-screen.tsx` se eliminó (sin
+consumidores). `FavoritesContext` (el `Set` de ids compartido que ya
+usan `FavoriteButton`/`business-card.tsx`) no se toca — sigue siendo la
+fuente de verdad de "¿es favorito?" para el corazón de cada tarjeta, algo
+completamente aparte de esta vista de lista.
+
+### `FilteredListSheet` — una sola vista de lista para "tocar ícono → ver más"
+
+`client/src/components/map/filtered-list-sheet.tsx` — vista de lista
+vertical de pantalla completa (`absolute inset-0` dentro del contenedor
+del mapa), reusada para los tres casos que **sí necesitan un fetch
+propio** (a diferencia de "Disponibles ahora", ver más abajo): tocar el
+ícono de categoría de una fila del banner (`{ type: 'category',
+categoryId }`), el ícono de sección "Favoritos abiertos ahora"
+(`{ type: 'favorites' }`, TODOS los favoritos — no solo los abiertos
+ahora, un conjunto más amplio que lo que el banner ya tiene cargado) y
+el badge de oferta con vigencia de `ProductRow` (`{ type: 'offerType',
+offerTypeId }`, generaliza lo que desde el PR #78 vivía como filtro de
+PINES + aviso removible directo en `map-screen.tsx` — mismo destino
+`/mapa?offerTypeId=X`, comportamiento distinto: ahora abre la lista en
+vez de filtrar pines). "No dupliques la lógica tres veces" (petición
+explícita) — un solo componente, un solo tipo `DiscoveryListFilter`.
+
+- `favorites`: `GET /users/me/favorites` (no acepta lat/lng — se ordena
+  del lado del cliente con `sortAvailableNow`, ya tolerante a
+  `distanceMeters` ausente).
+- `category`/`offerType`: mismo patrón que `useBusinessSearch`
+  (`GET /businesses/nearby` con geolocalización, si no `GET /businesses`)
+  pero con su propio fetch (no reusa el hook — este componente vive
+  fuera del árbol de `MapScreen` que ya tiene `useBusinessSearch` para
+  los pines, y mezclar los dos habría acoplado innecesariamente el
+  filtro de pines con el de la lista).
+- URL vía query params en `/mapa` (`?categoryId=`, `?favoritesOnly=true`,
+  `?offerTypeId=`) — sincronizados con el estado interno de `MapScreen`
+  comparando la referencia del objeto `initialListFilter` (memoizado con
+  `useMemo` en `/mapa/page.tsx` sobre los valores primitivos de los
+  params, no reconstruido en cada render): así, cerrar el sheet a mano
+  (botón "Volver") no se reabre solo en el siguiente render, pero
+  navegar de nuevo con un filtro distinto sí actualiza el estado.
+- Reusa exactamente `DiscoveryRow` (ver más abajo) — el mismo componente
+  de fila que el carrusel del banner, en columna.
+
+### `DiscoveryRow` — fila compacta única, reusada en banner + lista filtrada
+
+`client/src/components/discovery/discovery-row.tsx` — reemplaza a
+`DiscoveryBusinessRowContent`/`DiscoveryQuickViewRow` (dos filas
+distintas que vivían dentro de `discovery-banner.tsx`). Una sola línea
+densa (ícono de categoría + nombre + estado + distancia), con el nombre
+de categoría y los accesos ("Ver ubicación"/"Ver en el mapa"/"Ver zona" +
+"Cómo llegar", ícono + texto corto) inmediatamente debajo — más
+compacta que las 3 líneas que tenía la fila vieja del carrusel.
+
+El ícono de categoría (círculo de color, `getCategoryPinColor`) es
+**tappable cuando `onCategoryClick` viene** (hermano del botón de "abrir
+detalle", no anidado — mismo patrón ya establecido en `business-card.tsx`
+con `FavoriteButton`/`product-row.tsx` con el badge de oferta, con
+`stopPropagation()`): navega a la lista filtrada por esa categoría. Sin
+ese prop (ej. dentro de la propia lista ya filtrada por categoría, o en
+la vista rápida del ⓘ), queda como un `<span>` decorativo — tocar el
+ícono de la MISMA categoría en la que ya se está no aporta nada.
+
+### Ícono de familia del banner — de "ciclar" a "ver todos"
+
+**Esto es lo que corrige el defecto original del banner** (ver CLAUDE.md,
+hallazgo previo sobre `discovery-banner.tsx`: el ícono de familia — ✓
+verde/❤️ terracota, en la cabecera de cada sección del carrusel — solo
+ciclaba entre familias, sin navegar a ningún lado). Ahora:
+
+- **"Disponibles ahora"**: sigue abriendo la MISMA vista rápida ya
+  construida (`DiscoveryQuickViewSheet`, mismos datos ya cargados para
+  el banner, sin fetch nuevo) — "sigue mostrando lo que ya muestra hoy",
+  tal como se pidió explícitamente. Redundante con el ⓘ (que abre
+  exactamente lo mismo) — aceptado a propósito, dos entradas al mismo
+  lugar.
+- **"Favoritos abiertos ahora"**: navega a `FilteredListSheet` con
+  `{ type: 'favorites' }` — el conjunto MÁS AMPLIO de "todos mis
+  favoritos", no solo los que el banner ya tiene cargado (abiertos
+  ahora). `DiscoveryBanner` distingue el comportamiento internamente
+  (`onOpenFamilyList` solo se dispara para esta familia).
+- El gesto de **swipe/scroll horizontal** entre familias sigue
+  funcionando exactamente igual que antes (nunca dependió del ícono) —
+  el ícono simplemente se liberó para una función más útil.
+
+### Nombre del usuario — del header fijo al placeholder del buscador
+
+`AppHeader` (con el nombre + "Cerrar sesión") se eliminó por completo
+(sin consumidores — verificado con grep antes de borrar el archivo,
+`app-header.tsx`). El nombre ya no se muestra de forma permanente en
+ninguna de las 4 pantallas:
+
+- **Buscador**: `SearchBar#userFirstName` (nuevo prop opcional) — con
+  nombre, el placeholder pasa de "Nombre del negocio, producto o
+  servicio" a `"¿Qué buscas, {nombre}?"`; sin nombre, cae al genérico de
+  siempre. Aplicado en los DOS lugares que usan `SearchBar`: `/buscar`
+  (quitó el `<h1>Hola, {nombre}...` que tenía antes) y `MapSearchSheet`
+  (dentro de Mapa) — mismo componente, mismo criterio, para que "el
+  buscador" sea una sola idea personalizada por contexto, no dos.
+- **Perfil**: el nombre (`user.fullName`) y "Cerrar sesión" se mueven a
+  `ProfileScreen` (el componente, no la ruta) — como ya se comparte
+  entre `/perfil` y `/cuenta`, mover el logout ahí cubre las dos rutas
+  sin duplicar nada. Antes había un único punto de logout (`AppHeader`);
+  sigue siendo un único punto, solo que ahora vive en `ProfileScreen`.
+
+### Verificado con Playwright, flujo completo pedido por el usuario
+
+Ver el resultado exacto de la verificación en el resumen que acompaña
+esta sección en la conversación/PR — cubre: tocar el ícono de categoría
+de una tarjeta navega y filtra por esa categoría; el botón de centrar
+mapa desaparece dentro de Perfil (y dentro de la propia lista filtrada
+en Mapa); el buscador muestra el placeholder personalizado con el
+nombre correcto en `/buscar` y dentro de `MapSearchSheet`; el ícono de
+la sección "Favoritos abiertos ahora" navega a la lista completa de
+favoritos (no solo los abiertos ahora); "Disponibles ahora" sigue
+abriendo la vista rápida de siempre.
+
+### Gaps conocidos, no ocultos
+
+- La reconstrucción de qué debía pasar exactamente con `/cuenta`,
+  `business-profile-screen.tsx` y la ruta `/favoritos` se decidió con
+  criterio propio, documentada en cada punto de esta sección, no
+  preguntada explícitamente al usuario antes de construir — señalada
+  para revisión en el PR en vez de bloquear con más rondas de preguntas
+  (dos preguntas de alcance ya se habían resuelto antes de empezar).
+- El botón "Buscar" de `MainFloatingNav`, dentro de Mapa, no distingue
+  visualmente si `MapSearchSheet` está abierta o cerrada — mismo
+  criterio ya aceptado para el resto de los botones circulares de este
+  proyecto (sección 20: sin estado "activo" expuesto).
+- `FilteredListSheet` no pagina — mismo límite fijo (`LIST_LIMIT`, no
+  "cargar más") que el resto de las listas sin scroll infinito del
+  proyecto (Documento 08 sección 5.4.1).

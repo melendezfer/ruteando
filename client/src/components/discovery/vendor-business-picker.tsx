@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { CaretRight } from "@phosphor-icons/react/dist/ssr";
-import { AppHeader } from "@/components/layout/app-header";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import type { components } from "@/lib/api/schema";
 
 type Business = components["schemas"]["Business"];
@@ -19,7 +18,6 @@ type Business = components["schemas"]["Business"];
 export function VendorBusinessPicker({ businesses }: { businesses: Business[] }) {
   return (
     <main className="flex flex-1 flex-col">
-      <AppHeader />
       <div className="flex flex-1 flex-col gap-4 px-5 py-6">
         <h1 className="font-heading text-title-1 font-bold text-text">
           ¿Cuál de tus negocios quieres ver?
@@ -37,7 +35,7 @@ export function VendorBusinessPicker({ businesses }: { businesses: Business[] })
           ))}
         </div>
       </div>
-      <BottomNavBar />
+      <MainFloatingNav />
     </main>
   );
 }

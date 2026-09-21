@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
-import { AppHeader } from "@/components/layout/app-header";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { ProfileScreen } from "@/components/profile/profile-screen";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 import { VendorBusinessPicker } from "@/components/discovery/vendor-business-picker";
@@ -47,9 +46,8 @@ export function ProfileScreenRouter() {
     if (!user) return null;
     return (
       <main className="flex flex-1 flex-col">
-        <AppHeader />
         <ProfileScreen user={user} />
-        <BottomNavBar />
+        <MainFloatingNav />
       </main>
     );
   }

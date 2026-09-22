@@ -4,7 +4,23 @@
 // estrategias de actualización en segundo plano más allá de eso ni
 // soporte offline real todavía; eso se aborda junto con las pantallas
 // reales (Épica F10), no acá.
-const CACHE_NAME = "ruteando-shell-v2";
+//
+// Bump CACHE_NAME en cada deploy con cambios visibles de UI (sin RF
+// asociado — petición directa del usuario, ver CLAUDE.md): esta
+// constante solo se había tocado UNA vez en toda la historia del
+// proyecto (v1→v2, Épica F1) y nunca más — verificado con
+// `git log -p -- client/public/sw.js`. No es la causa de "veo una
+// versión vieja" mientras el usuario navega normal (las navegaciones ya
+// van network-first, sin depender de este precache), pero si algo la
+// deja desincronizada del build real, `activate` sí purga cualquier
+// caché con un nombre distinto — mejor tenerla correcta que confiar en
+// que nunca importe. El fix real de "una pestaña/PWA ya abierta se
+// queda en el HTML/JS viejo después de un deploy" vive en
+// service-worker-register.tsx (ver el comentario ahí sobre
+// `controllerchange`), no acá — `skipWaiting()`/`clients.claim()` abajo
+// hacen que el SW nuevo tome control de inmediato, pero eso no fuerza a
+// una pestaña YA RENDERIZADA a recargar por su cuenta.
+const CACHE_NAME = "ruteando-shell-v3";
 const APP_SHELL = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {

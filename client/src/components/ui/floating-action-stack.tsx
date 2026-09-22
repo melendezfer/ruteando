@@ -23,16 +23,6 @@ interface FloatingActionStackProps {
    * otra, automáticamente hereda el tamaño grande.
    */
   actions: (FloatingAction | null)[];
-  /**
-   * true cuando la pantalla que llama también monta `BottomNavBar`
-   * (CLAUDE.md sección 27) — sube el stack de `bottom-6` a `bottom-24`
-   * para que la barra fija de navegación no le quede encima. Solo
-   * aplica hoy al perfil de negocio (`business-profile-screen.tsx`),
-   * que sigue con su propia `BottomNavBar` condicional — la navegación
-   * global (`MainFloatingNav`) ya no convive con esa barra en ningún
-   * lado, así que no la necesita.
-   */
-  aboveBottomNav?: boolean;
 }
 
 /**
@@ -45,16 +35,17 @@ interface FloatingActionStackProps {
  * directa del usuario): `primary`/`secondary` (siempre exactamente 2
  * posiciones) se reemplazó por `actions` (un array de N, hoy hasta 4 en
  * la navegación global de Mapa/Buscar/Favoritos/Perfil) — mismo lenguaje
- * visual, sin límite fijo de posiciones.
+ * visual, sin límite fijo de posiciones. `BottomNavBar` (barra fija
+ * horizontal) ya no existe en ningún lado del proyecto (redediseño de
+ * navegación global) — este stack nunca necesita compensar espacio para
+ * ella.
  */
-export function FloatingActionStack({ actions, aboveBottomNav = false }: FloatingActionStackProps) {
+export function FloatingActionStack({ actions }: FloatingActionStackProps) {
   const visible = actions.filter((action): action is FloatingAction => action != null);
   if (visible.length === 0) return null;
 
   return (
-    <div
-      className={`fixed right-6 z-40 flex flex-col-reverse items-center gap-3 ${aboveBottomNav ? "bottom-24" : "bottom-6"}`}
-    >
+    <div className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-center gap-3">
       {visible.map((action, index) => (
         <FloatingActionButton
           key={action.label}

@@ -4,9 +4,28 @@ import type { components } from "@/lib/api/schema";
 import { OFFER_TYPE_ICON_BY_NAME, DEFAULT_OFFER_TYPE_ICON } from "@/lib/catalog/offer-type-icons";
 import { describeOfferValidUntil } from "@/lib/offers/offer-validity-status";
 import { formatDistance } from "@/lib/format/distance";
-import type { DiscoveryOffer } from "@/components/map/discovery-banner";
+import type { BusinessPin } from "@/components/map/leaflet-map";
 
 type OfferType = components["schemas"]["OfferType"];
+
+/**
+ * Un producto con vigencia activa de un negocio, junto con el negocio
+ * completo al que pertenece (`business`) — reusar el `BusinessPin` tal
+ * cual (en vez de solo `businessId`) es lo que deja que tocar la fila
+ * reutilice `onViewOnMap`/navegar al perfil sin necesitar un fetch
+ * aparte para resolver el negocio. Vive acá (no en discovery-banner.tsx,
+ * que ya no tiene nada que ver con ofertas desde la retroalimentación de
+ * navegación global, sección 54 de CLAUDE.md) porque `OfferRow` es el
+ * componente más directamente dueño de esta forma.
+ */
+export interface DiscoveryOffer {
+  /** `${businessId}-${índice}` — compuesto, nunca un id persistente del backend. */
+  id: string;
+  business: BusinessPin;
+  name: string;
+  offerTypeId: number | null;
+  validUntil: string | null;
+}
 
 interface OfferRowProps {
   offer: DiscoveryOffer;

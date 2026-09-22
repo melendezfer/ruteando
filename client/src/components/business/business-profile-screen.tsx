@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Chair,
+  Compass,
   Gear,
   Moped,
   NavigationArrow,
@@ -16,7 +18,6 @@ import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from 
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
 import { BackButton } from "@/components/ui/back-button";
-import { BottomNavBar } from "@/components/layout/bottom-nav-bar";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
 import { AvailabilityConfirmedBadge } from "@/components/business/availability-confirmed-badge";
@@ -101,6 +102,7 @@ const LocationPinEditor = dynamic(
  */
 export function BusinessProfileScreen({ profile, categoryName, catalogType }: BusinessProfileScreenProps) {
   const { user } = useAuth();
+  const router = useRouter();
   // Estado local aparte de `profile` (inmutable, viene del Server
   // Component) — así, al confirmar el código, el aviso desaparece de
   // inmediato sin depender de recargar la página o volver a pedir el
@@ -324,11 +326,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             <HeroFallbackIcon size={64} weight="duotone" className="text-text-muted" />
           </div>
         )}
-        <span
-          className={`absolute bottom-3 left-3 rounded-full px-3 py-1 font-sans text-caption font-semibold uppercase tracking-wide text-white ${
-            profile.isOpenNow ? "bg-verde" : "bg-text-muted"
-          }`}
-        >
+        {/* Texto neutro, sin punto ni color por estado (sin RF asociado,
+            petición directa del usuario) — antes usaba `bg-verde` para
+            "Abierto ahora" vs. `bg-text-muted` para "Cerrado ahora"; ahora
+            es el mismo fondo oscuro translúcido para los dos estados, el
+            texto es lo único que cambia. */}
+        <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 font-sans text-caption font-semibold uppercase tracking-wide text-white">
           {profile.isOpenNow ? "Abierto ahora" : "Cerrado ahora"}
         </span>
       </div>
@@ -606,11 +609,22 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
                 href: directionsHref,
               }
             : null,
+          // Hallazgo real (sin RF asociado, petición directa del
+          // usuario): esta pantalla seguía montando la vieja
+          // `BottomNavBar` (fija, horizontal) mientras el resto de la
+          // app ya migró a `MainFloatingNav` — quedaba huérfana del
+          // redediseño de navegación global. Se retira esa barra y, en
+          // su lugar, se agrega "Volver al mapa" como tercera acción de
+          // este mismo stack — siempre presente, sin depender de sesión
+          // (a diferencia de WhatsApp/Cómo llegar, que dependen de que
+          // el negocio tenga esos datos).
+          {
+            icon: <Compass size={22} weight="fill" />,
+            label: "Volver al mapa",
+            onClick: () => router.push("/mapa"),
+          },
         ]}
-        aboveBottomNav={Boolean(user)}
       />
-
-      {user && <BottomNavBar />}
     </div>
   );
 }

@@ -1,106 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { WheelEvent as ReactWheelEvent } from "react";
-import { CheckCircle, Heart, Info, Tag, X } from "@phosphor-icons/react/dist/ssr";
-import type { components } from "@/lib/api/schema";
+import { CaretRight } from "@phosphor-icons/react/dist/ssr";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
-import { OfferRow } from "@/components/discovery/offer-row";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
-type OfferType = components["schemas"]["OfferType"];
-
-/**
- * Familias del banner de descubrimiento (sin RF asociado, petición
- * directa del usuario) — "Disponibles ahora" (GET /businesses/nearby u
- * openNow=true, Fase 1), "Favoritos abiertos ahora"
- * (GET /users/me/favorites con el mismo openNow=true) y "Cerca de ti
- * ahora" (GET /businesses/nearby con hasActiveOffer=true, ofertas con
- * vigencia como protagonistas — sin RF asociado, ver CLAUDE.md).
- */
-export type DiscoveryFamilyId = "available_now" | "favorites_open_now" | "active_offers";
-
-/**
- * Un producto con vigencia activa de un negocio, junto con el negocio
- * completo al que pertenece (`business`) — reusar el `BusinessPin` tal
- * cual (en vez de solo `businessId`) es lo que deja que tocar la
- * tarjeta reutilice exactamente `onOpenDetail`/`onViewOnMap`, mismo
- * criterio que las otras dos familias, sin necesitar un fetch aparte
- * para resolver el negocio.
- */
-export interface DiscoveryOffer {
-  /** `${businessId}-${índice}` — compuesto, nunca un id persistente del backend. */
-  id: string;
-  business: BusinessPin;
-  name: string;
-  offerTypeId: number | null;
-  validUntil: string | null;
-}
-
-export type DiscoveryFamilyData =
-  | {
-      kind: "businesses";
-      id: "available_now" | "favorites_open_now";
-      /** Ya filtrados a `openNow=true` y ordenados (ver lib/discovery/available-now.ts) — este componente no vuelve a decidir quién entra ni en qué orden. */
-      businesses: BusinessPin[];
-    }
-  | {
-      kind: "offers";
-      id: "active_offers";
-      offers: DiscoveryOffer[];
-    };
-
 interface DiscoveryBannerProps {
-  /** Ya filtradas a las que tienen al menos un negocio/oferta — una familia vacía no aparece ni como pestaña vacía (mismo criterio que "sin negocios, no se muestra nada" de la Fase 1). */
-  families: DiscoveryFamilyData[];
+  /** "Disponibles ahora" — ya filtrados a `openNow=true` y ordenados (ver lib/discovery/available-now.ts), este componente no vuelve a decidir quién entra ni en qué orden. */
+  businesses: BusinessPin[];
   categoryTypeById: Map<number, CatalogType>;
-  /** Nombre de categoría por id (`GET /categories`, ya resuelto en map-screen.tsx) — el ícono de color solo no comunica de qué categoría se trata, esto agrega el texto en las tarjetas (Nivel 1) y en la vista rápida del ⓘ. */
+  /** Nombre de categoría por id (`GET /categories`, ya resuelto en map-screen.tsx) — el ícono de color solo no comunica de qué categoría se trata, esto agrega el texto en las tarjetas y en la vista rápida del ⓘ. */
   categoryNameById: Map<number, string>;
-  /** Tipo de oferta por id (`GET /offer-types`, ya resuelto en map-screen.tsx) — solo lo usa la familia "active_offers", para el ícono/nombre de cada tarjeta. */
-  offerTypeById: Map<number, OfferType>;
   /** El pin resaltado en el mapa en este momento — solo para el borde de la tarjeta activa, ver map-screen.tsx. */
   activeId: string | null;
   /** Cambió la tarjeta más visible (swipe o tap) — el padre resalta el pin correspondiente, sin recentrar. */
   onActiveChange: (business: BusinessPin) => void;
-  /** Tocar el CONTENIDO de la tarjeta (no un ícono de acción) — abre el nivel 2 (BusinessSummarySheet). */
+  /** Tocar el CONTENIDO de la tarjeta (no un ícono de acción) — abre el resumen (BusinessSummarySheet). */
   onOpenDetail: (business: BusinessPin) => void;
   /** "📍 Ver en mapa"/"Ver ubicación"/"Ver zona" — misma acción técnica sin importar el wording: recentra el mapa y resalta el pin. */
   onViewOnMap: (business: BusinessPin) => void;
-  /**
-   * Redediseño de navegación global (sin RF asociado, petición directa
-   * del usuario) — el ícono de categoría de cada fila navega a la lista
-   * filtrada por esa `categoryId` (ver `FilteredListSheet` en
-   * map-screen.tsx). Esto es lo que le faltaba resolver al defecto
-   * original del banner: antes el único ícono tappable de toda la
-   * tarjeta era el de FAMILIA (ver `onOpenFamilyList` abajo), y ni
-   * siquiera navegaba a ningún lado — solo ciclaba entre familias.
-   */
+  /** El ícono de categoría de cada fila navega a la lista filtrada por esa `categoryId` (ver `FilteredListSheet` en map-screen.tsx). */
   onCategoryClick: (business: BusinessPin) => void;
   /**
-   * Tocar el ícono de la SECCIÓN "Favoritos abiertos ahora" — a
-   * diferencia de "Disponibles ahora" (que sigue abriendo la vista
-   * rápida ya construida, con los mismos datos ya cargados para el
-   * banner, sin fetch nuevo), Favoritos navega a la lista COMPLETA de
-   * favoritos (no solo los abiertos ahora) — un conjunto más amplio que
-   * lo que este banner tiene cargado, así que necesita su propio fetch
-   * (ver `FilteredListSheet`). Por eso es la única familia que dispara
-   * este callback en vez de la vista rápida interna.
+   * Retroalimentación sobre el mapa (sin RF asociado, petición directa
+   * del usuario): reemplaza a la fila-título "Disponibles ahora" que
+   * vivía arriba del carrusel — quitarla le devuelve esa fila de alto al
+   * mapa. La entrada a "ver más disponibles ahora" (antes el ícono ⓘ de
+   * esa fila) ahora es la última tarjeta del propio carrusel, así que no
+   * consume ninguna fila propia.
    */
-  onOpenFamilyList: (familyId: DiscoveryFamilyId) => void;
-}
-
-const FAMILY_NAME: Record<DiscoveryFamilyId, string> = {
-  available_now: "Disponibles ahora",
-  favorites_open_now: "Favoritos abiertos ahora",
-  active_offers: "Cerca de ti ahora",
-};
-
-/** 🟢 disponibles / ❤️ favoritos / 🏷️ ofertas — mismo ícono/color que ya usa el resto de la app para cada concepto (AvailabilityConfirmedBadge, FavoriteButton, el badge de oferta de ProductRow), no uno nuevo inventado acá. */
-function FamilyIcon({ id, size = 18 }: { id: DiscoveryFamilyId; size?: number }) {
-  if (id === "favorites_open_now") return <Heart size={size} weight="fill" className="text-terracota" />;
-  if (id === "active_offers") return <Tag size={size} weight="fill" className="text-mostaza" />;
-  return <CheckCircle size={size} weight="fill" className="text-verde" />;
+  onOpenList: () => void;
 }
 
 // Auto-rotación del carrusel de tarjetas (petición directa del usuario,
@@ -114,14 +45,13 @@ const AUTO_ADVANCE_INTERVAL_MS = 4500;
 const RESUME_AFTER_IDLE_MS = 6000;
 
 /**
- * Carrusel horizontal de tarjetas de negocio de UNA familia — scroll-snap
- * nativo (sin librería nueva) con auto-rotación cada 4.5s. Montado con
- * `key={family.id}` desde el padre para que cambiar de familia lo
- * remonte entero (auto-avance, pausa e IntersectionObserver arrancan
- * limpios para la nueva lista, sin arrastrar el estado de la anterior).
+ * Carrusel horizontal de tarjetas de negocio "Disponibles ahora" —
+ * scroll-snap nativo (sin librería nueva) con auto-rotación cada 4.5s.
  * Cada tarjeta usa `DiscoveryRow` (fila compacta, redediseño de
- * navegación global) — mismo componente que la vista rápida del ⓘ y la
- * lista filtrada de pantalla completa (`FilteredListSheet`).
+ * navegación global) — mismo componente que la lista filtrada de
+ * pantalla completa (`FilteredListSheet`). Termina con una tarjeta
+ * angosta "Ver todas" (no una fila/ícono aparte) que abre la hoja
+ * inferior unificada (ver `onOpenList`).
  */
 function DiscoveryBusinessCarousel({
   businesses,
@@ -132,6 +62,7 @@ function DiscoveryBusinessCarousel({
   onOpenDetail,
   onViewOnMap,
   onCategoryClick,
+  onOpenList,
 }: {
   businesses: BusinessPin[];
   categoryTypeById: Map<number, CatalogType>;
@@ -141,6 +72,7 @@ function DiscoveryBusinessCarousel({
   onOpenDetail: (business: BusinessPin) => void;
   onViewOnMap: (business: BusinessPin) => void;
   onCategoryClick: (business: BusinessPin) => void;
+  onOpenList: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
@@ -273,342 +205,79 @@ function DiscoveryBusinessCarousel({
           </div>
         );
       })}
-    </div>
-  );
-}
 
-/**
- * Carrusel horizontal de tarjetas de OFERTA — familia "Cerca de ti
- * ahora" (sin RF asociado, petición directa del usuario). Deliberadamente
- * SIN la auto-rotación/pausa-por-wheel/resaltado de pin de
- * `DiscoveryBusinessCarousel`: esa maquinaria está pensada para
- * `BusinessPin`/`DiscoveryRow` (y ya es bastante código); una familia
- * nueva con datos de forma distinta (una oferta, no un negocio) no
- * necesita duplicarla para ofrecer lo mismo que pedía esta funcionalidad
- * — un carrusel deslizable con el detalle de la oferta. Scroll-snap
- * nativo, deslizable a mano, sin más.
- */
-function DiscoveryOfferCarousel({
-  offers,
-  offerTypeById,
-  onOpenDetail,
-}: {
-  offers: DiscoveryOffer[];
-  offerTypeById: Map<number, OfferType>;
-  onOpenDetail: (business: BusinessPin) => void;
-}) {
-  if (offers.length === 0) return null;
-
-  return (
-    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {offers.map((offer) => (
-        <div key={offer.id} className="w-72 shrink-0 snap-center">
-          <OfferRow
-            offer={offer}
-            offerType={offer.offerTypeId != null ? (offerTypeById.get(offer.offerTypeId) ?? null) : null}
-            onOpenDetail={(selected) => onOpenDetail(selected.business)}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Cuántas filas se muestran de entrada en la vista rápida antes de
-// pedir un toque explícito ("Ver todas") — pedido del usuario: "máximo
-// 4-5 negocios visibles". 5, el techo de ese rango.
-const QUICK_VIEW_PREVIEW_LIMIT = 5;
-
-/**
- * Nivel "12" del spec de Jose — vista rápida con MÁS elementos de la
- * misma familia, en lista vertical (no otro carrusel horizontal más
- * chico). Reusa la MISMA lista ya fetcheada para el carrusel (hasta el
- * límite existente, ver map-screen.tsx) — no dispara un fetch aparte
- * con un límite más alto. Acotada a `QUICK_VIEW_PREVIEW_LIMIT` filas de
- * entrada — con más disponibles, un botón "Ver todas" las revela
- * in-place (CLAUDE.md sección 17), sin seguir cargando la lista
- * completa de una. Usa `DiscoveryRow` igual que el carrusel — sin
- * `onCategoryClick` acá (esta vista ya es "más de la misma familia", no
- * tiene sentido ofrecer otra navegación adentro de otra navegación).
- */
-function DiscoveryQuickViewSheet({
-  family,
-  categoryTypeById,
-  categoryNameById,
-  offerTypeById,
-  onClose,
-  onOpenDetail,
-  onViewOnMap,
-}: {
-  family: DiscoveryFamilyData;
-  categoryTypeById: Map<number, CatalogType>;
-  categoryNameById: Map<number, string>;
-  offerTypeById: Map<number, OfferType>;
-  onClose: () => void;
-  onOpenDetail: (business: BusinessPin) => void;
-  onViewOnMap: (business: BusinessPin) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const totalCount = family.kind === "businesses" ? family.businesses.length : family.offers.length;
-  const visibleBusinesses =
-    family.kind === "businesses"
-      ? expanded
-        ? family.businesses
-        : family.businesses.slice(0, QUICK_VIEW_PREVIEW_LIMIT)
-      : [];
-  const visibleOffers =
-    family.kind === "offers" ? (expanded ? family.offers : family.offers.slice(0, QUICK_VIEW_PREVIEW_LIMIT)) : [];
-  const hiddenCount = totalCount - (family.kind === "businesses" ? visibleBusinesses.length : visibleOffers.length);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="discovery-quick-view-title"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[75vh] w-full max-w-sm flex-col gap-1 rounded-t-card bg-surface p-4 shadow-xl sm:rounded-card"
-      >
-        <div className="flex items-center justify-between pb-2">
-          <h2 id="discovery-quick-view-title" className="font-heading text-title-2 font-bold text-text">
-            {FAMILY_NAME[family.id]}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background hover:text-text"
-          >
-            <X size={18} weight="bold" />
-          </button>
-        </div>
-        <div className="flex flex-col divide-y divide-border overflow-y-auto">
-          {family.kind === "businesses" &&
-            visibleBusinesses.map((business) => (
-              <DiscoveryRow
-                key={business.id}
-                business={business}
-                catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
-                categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
-                onOpenDetail={onOpenDetail}
-                onViewOnMap={onViewOnMap}
-              />
-            ))}
-          {family.kind === "offers" &&
-            visibleOffers.map((offer) => (
-              <div key={offer.id} className="py-1.5">
-                <OfferRow
-                  offer={offer}
-                  offerType={offer.offerTypeId != null ? (offerTypeById.get(offer.offerTypeId) ?? null) : null}
-                  onOpenDetail={(selected) => onOpenDetail(selected.business)}
-                />
-              </div>
-            ))}
-        </div>
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="rounded-input border border-border bg-background py-2 text-center font-sans text-body-sm font-medium text-terracota"
-          >
-            Ver todas ({totalCount})
-          </button>
-        )}
+      {/* "Ver todas" — la entrada a la hoja inferior unificada
+          (`FilteredListSheet`), como última tarjeta del carrusel en vez
+          de una fila/ícono propio arriba (petición directa del usuario:
+          más espacio vertical para el mapa). */}
+      <div className="flex w-20 shrink-0 snap-center items-center justify-center">
+        <button
+          type="button"
+          onClick={() => {
+            pauseAutoAdvance();
+            onOpenList();
+          }}
+          aria-label="Ver todas: Disponibles ahora"
+          className="flex flex-col items-center gap-1 text-terracota"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface">
+            <CaretRight size={18} weight="bold" />
+          </span>
+          <span className="font-sans text-caption font-medium">Ver todas</span>
+        </button>
       </div>
     </div>
   );
 }
 
 /**
- * Nivel 1 del banner de descubrimiento (sin RF asociado, petición
- * directa del usuario). Vive arriba del mapa, en el mismo lugar que el
- * aviso de "no pudimos acceder a tu ubicación" (map-screen.tsx decide
- * el apilamiento) — nunca dentro del contenedor del mapa, así que no
- * compite con ZoneComparisonCard ni con FloatingActionStack.
+ * Banner de descubrimiento "Disponibles ahora" (sin RF asociado,
+ * petición directa del usuario). Vive arriba del mapa, en el mismo
+ * lugar que el aviso de "no pudimos acceder a tu ubicación"
+ * (map-screen.tsx decide el apilamiento) — nunca dentro del contenedor
+ * del mapa, así que no compite con ZoneComparisonCard ni con
+ * `MainFloatingNav`.
  *
- * Con una sola familia con datos, la fila superior es estática (nombre +
- * ícono de esa familia, sin nada que deslizar). Con dos o más (hoy:
- * "Disponibles ahora" y "Favoritos abiertos ahora"), esa fila se vuelve
- * su propio carrusel scroll-snap — deslizarla cambia de familia (gesto
- * de swipe/scroll horizontal, sin depender del ícono) sin afectar el
- * carrusel de tarjetas de negocio de abajo, que sigue deslizándose por
- * separado entre los negocios de la familia activa.
+ * Retroalimentación sobre el mapa (sin RF asociado): ya NO es un
+ * selector entre familias (antes "Disponibles ahora"/"Favoritos abiertos
+ * ahora" con una fila-título arriba y swipe entre las dos) — esa
+ * navegación entre familias se consolidó dentro de la hoja inferior
+ * unificada (`FilteredListSheet`, ver map-screen.tsx), alcanzable desde
+ * "Ver todas" al final del carrusel, desde "Favoritos" en
+ * `MainFloatingNav`, o desde el ícono de categoría de cualquier fila.
+ * Este banner quedó reducido a solo eso: el carrusel de "Disponibles
+ * ahora", sin ninguna fila propia arriba — más espacio vertical para el
+ * mapa, pedido explícito del usuario.
  *
- * Redediseño de navegación global: el ícono de familia (derecha) YA NO
- * cicla entre familias (ese gesto sigue disponible con swipe/scroll) —
- * ahora navega a "ver más" de esa familia (vista rápida para
- * "Disponibles ahora", lista completa filtrada para "Favoritos", ver
- * `onOpenFamilyList`). Tocar el ⓘ (izquierda) sigue abriendo la misma
- * vista rápida que antes. Tocar una tarjeta de negocio, en el carrusel o
- * en la vista rápida, sigue abriendo el detalle de ESE negocio — y el
- * ícono de categoría de cada tarjeta ahora navega a la lista filtrada
- * por esa categoría (`onCategoryClick`, ver DiscoveryRow): cuatro
- * acciones distintas en la misma fila/carrusel, no una.
- *
- * Sin ninguna familia con negocios, no se muestra nada — nada de estado
+ * Sin negocios abiertos ahora, no se muestra nada — nada de estado
  * vacío forzado (pedido explícito desde la Fase 1).
  */
 export function DiscoveryBanner({
-  families,
+  businesses,
   categoryTypeById,
   categoryNameById,
-  offerTypeById,
   activeId,
   onActiveChange,
   onOpenDetail,
   onViewOnMap,
   onCategoryClick,
-  onOpenFamilyList,
+  onOpenList,
 }: DiscoveryBannerProps) {
-  const [activeFamilyIndex, setActiveFamilyIndex] = useState(0);
-  const [quickViewFamilyId, setQuickViewFamilyId] = useState<DiscoveryFamilyId | null>(null);
-  const familyContainerRef = useRef<HTMLDivElement | null>(null);
-  const familyRefs = useRef(new Map<number, HTMLDivElement>());
-
-  useEffect(() => {
-    const container = familyContainerRef.current;
-    if (!container || families.length <= 1) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const mostVisible = entries.reduce<IntersectionObserverEntry | null>(
-          (best, entry) => (!best || entry.intersectionRatio > best.intersectionRatio ? entry : best),
-          null,
-        );
-        if (!mostVisible || mostVisible.intersectionRatio < 0.5) return;
-        const index = Number(mostVisible.target.getAttribute("data-family-index"));
-        if (!Number.isNaN(index)) setActiveFamilyIndex(index);
-      },
-      { root: container, threshold: [0.5, 0.75, 1] },
-    );
-
-    familyRefs.current.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [families.length]);
-
-  // Si la familia activa desaparece (ej. ya no quedan favoritos abiertos
-  // ahora mismo) y el índice queda fuera de rango, cae a la primera
-  // disponible — sin esto, un índice obsoleto dejaría el carrusel de
-  // tarjetas vacío aunque sí haya otra familia con negocios.
-  const safeActiveFamilyIndex = activeFamilyIndex < families.length ? activeFamilyIndex : 0;
-  const activeFamily = families[safeActiveFamilyIndex] ?? null;
-  const quickViewFamily = families.find((family) => family.id === quickViewFamilyId) ?? null;
-
-  /** Ícono de familia: "Disponibles ahora" abre la vista rápida (mismos datos ya cargados); "Favoritos" navega a la lista completa (fetch propio, ver onOpenFamilyList). */
-  function handleFamilyIconClick(familyId: DiscoveryFamilyId) {
-    if (familyId === "favorites_open_now") {
-      onOpenFamilyList(familyId);
-    } else {
-      setQuickViewFamilyId(familyId);
-    }
-  }
-
-  if (families.length === 0 || !activeFamily) return null;
+  if (businesses.length === 0) return null;
 
   return (
     <div className="border-b border-border bg-surface">
-      {families.length > 1 ? (
-        <div
-          ref={familyContainerRef}
-          className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {families.map((family, index) => (
-            <div
-              key={family.id}
-              ref={(el) => {
-                if (el) familyRefs.current.set(index, el);
-                else familyRefs.current.delete(index);
-              }}
-              data-family-index={index}
-              className="flex w-full shrink-0 snap-center items-center justify-between gap-2 px-3 py-2"
-            >
-              <button
-                type="button"
-                onClick={() => setQuickViewFamilyId(family.id)}
-                aria-label={`Ver más de ${FAMILY_NAME[family.id]}`}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background hover:text-text"
-              >
-                <Info size={18} weight="bold" />
-              </button>
-              <span className="flex-1 truncate text-center font-sans text-body-sm font-semibold text-text">
-                {FAMILY_NAME[family.id]}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleFamilyIconClick(family.id)}
-                aria-label={`Ver todos: ${FAMILY_NAME[family.id]}`}
-                className="flex h-7 w-7 shrink-0 items-center justify-center"
-              >
-                <FamilyIcon id={family.id} />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          <button
-            type="button"
-            onClick={() => setQuickViewFamilyId(activeFamily.id)}
-            aria-label={`Ver más de ${FAMILY_NAME[activeFamily.id]}`}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background hover:text-text"
-          >
-            <Info size={18} weight="bold" />
-          </button>
-          <span className="flex-1 truncate text-center font-sans text-body-sm font-semibold text-text">
-            {FAMILY_NAME[activeFamily.id]}
-          </span>
-          <button
-            type="button"
-            onClick={() => handleFamilyIconClick(activeFamily.id)}
-            aria-label={`Ver todos: ${FAMILY_NAME[activeFamily.id]}`}
-            className="flex h-7 w-7 shrink-0 items-center justify-center"
-          >
-            <FamilyIcon id={activeFamily.id} />
-          </button>
-        </div>
-      )}
-
-      {activeFamily.kind === "businesses" ? (
-        <DiscoveryBusinessCarousel
-          key={activeFamily.id}
-          businesses={activeFamily.businesses}
-          categoryTypeById={categoryTypeById}
-          categoryNameById={categoryNameById}
-          activeId={activeId}
-          onActiveChange={onActiveChange}
-          onOpenDetail={onOpenDetail}
-          onViewOnMap={onViewOnMap}
-          onCategoryClick={onCategoryClick}
-        />
-      ) : (
-        <DiscoveryOfferCarousel
-          key={activeFamily.id}
-          offers={activeFamily.offers}
-          offerTypeById={offerTypeById}
-          onOpenDetail={onOpenDetail}
-        />
-      )}
-
-      {quickViewFamily && (
-        <DiscoveryQuickViewSheet
-          family={quickViewFamily}
-          categoryTypeById={categoryTypeById}
-          categoryNameById={categoryNameById}
-          offerTypeById={offerTypeById}
-          onClose={() => setQuickViewFamilyId(null)}
-          onOpenDetail={(business) => {
-            setQuickViewFamilyId(null);
-            onOpenDetail(business);
-          }}
-          onViewOnMap={(business) => {
-            setQuickViewFamilyId(null);
-            onViewOnMap(business);
-          }}
-        />
-      )}
+      <DiscoveryBusinessCarousel
+        businesses={businesses}
+        categoryTypeById={categoryTypeById}
+        categoryNameById={categoryNameById}
+        activeId={activeId}
+        onActiveChange={onActiveChange}
+        onOpenDetail={onOpenDetail}
+        onViewOnMap={onViewOnMap}
+        onCategoryClick={onCategoryClick}
+        onOpenList={onOpenList}
+      />
     </div>
   );
 }

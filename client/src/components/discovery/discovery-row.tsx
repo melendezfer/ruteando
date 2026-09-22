@@ -113,8 +113,17 @@ export function DiscoveryRow({
           className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
         >
           <span className="truncate font-sans text-body-sm font-semibold text-text">{business.name}</span>
-          <span className="shrink-0 font-sans text-caption text-text-muted">
-            {statusText}
+          <span className="flex shrink-0 items-center gap-1 font-sans text-caption text-text-muted">
+            {/* Punto verde de "Abierto" — a pedido explícito del usuario:
+                este componente nunca lo había tenido (nació neutro en el
+                redediseño de navegación global, CLAUDE.md sección 53/54),
+                pero acá SIEMPRE es una fila de un negocio ya filtrado
+                como abierto ahora mismo (esta fila solo vive dentro de
+                "Disponibles ahora"/"Cerca de ti ahora"/"Favoritos"), así
+                que el punto es válido en el 100% de los casos, no solo
+                una parte. */}
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-verde" aria-hidden="true" />
+            <span className="text-verde">{statusText}</span>
             {typeof business.distanceMeters === "number" ? ` · ${formatDistance(business.distanceMeters)}` : ""}
           </span>
         </button>

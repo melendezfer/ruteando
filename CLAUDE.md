@@ -6080,7 +6080,53 @@ contra una arquitectura que ya no existe).
   gratis no se verificó contra esos datos (los negocios de demo tienen
   pocos productos, muy por debajo de 3). No se pidió para esta tanda.
 
-## 56. Panel de administrador — Fase 1 de 5: la base
+## 56. Reversión: vuelve el verde de "Abierto" (revierte sección 54, punto 7)
+
+Petición directa del usuario, sin RF asociado, propia rama
+(`revert/verde-abierto-ahora`): la retroalimentación sobre el
+redediseño de navegación global (sección 54, punto 7 — "Sin verde en
+'Abierto', auditoría completa") había quitado el color verde de marca
+de todo indicador de "abierto" en la app, a pedido explícito del
+usuario en ese momento. El mismo usuario pidió después volver a esa
+versión con color.
+
+**`business-profile-screen.tsx`**: reversión real y literal — el
+badge sobre la foto de portada vuelve a `bg-verde` (Abierto ahora) /
+`bg-text-muted` (Cerrado ahora), en vez del `bg-black/60` único que
+dejó la sección 54.
+
+**`discovery-row.tsx`**: **esto NO es una reversión, aunque el pedido
+lo haya descrito como tal** — la propia sección 54 (punto 7) ya dejaba
+escrito, explícitamente, que este componente "ya era neutro desde que
+se escribió (sección 53) — nunca tuvo punto ni color por estado". No
+había nada que revertir ahí; se agregó un punto verde + texto en verde
+como funcionalidad NUEVA, no como vuelta a un estado anterior real —
+señalado así al usuario en vez de fingir silenciosamente que existía
+antes. Como esta fila SOLO se usa dentro de familias ya pre-filtradas a
+"abierto ahora" (Disponibles ahora / Cerca de ti ahora / Favoritos —
+nunca hay un caso "Cerrado" en este componente, `statusText` no tiene
+esa rama), el punto verde es válido en el 100% de las filas que
+renderiza, no una fracción.
+
+### Verificado
+
+`tsc --noEmit`, `next build`, `eslint` en verde. Sin pruebas de
+Playwright nuevas para este cambio — es un ajuste puramente visual
+(clases de Tailwind), mismo criterio que otros cambios de solo color ya
+documentados en este archivo (ej. sección 54 punto 7 en su momento sí
+verificó con Playwright porque estaba QUITANDO un color de tres
+superficies a la vez y quería confirmar cero coincidencias; acá es
+agregar/revertir un color ya conocido, con el mismo componente
+`Button`/`span` de siempre).
+
+### Gaps conocidos, no ocultos
+
+- El resto de los lugares que la sección 54 tocó (banner sin
+  fila-título, hoja inferior unificada, "Volver al mapa") **no se
+  revirtieron** — el pedido fue específicamente sobre el verde de
+  "Abierto", no sobre el resto de esa retroalimentación.
+
+## 57. Panel de administrador — Fase 1 de 5: la base
 
 Petición directa del usuario, dividida explícitamente en 5 fases (esta
 sección documenta solo la Fase 1 — arquitectura y login, sin ninguna

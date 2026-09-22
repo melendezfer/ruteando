@@ -13,6 +13,7 @@ export interface BusinessDetailsValues {
   categoryId: number | "";
   contactPhone: string;
   ownDelivery: boolean;
+  seatingAvailable: boolean;
 }
 
 interface DetailsStepProps {
@@ -59,10 +60,11 @@ export function DetailsStep({
   const [categoryId, setCategoryId] = useState<number | "">(initialValues.categoryId);
   const [contactPhone, setContactPhone] = useState(initialValues.contactPhone);
   const [ownDelivery, setOwnDelivery] = useState(initialValues.ownDelivery);
+  const [seatingAvailable, setSeatingAvailable] = useState(initialValues.seatingAvailable);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit({ name, description, categoryId, contactPhone, ownDelivery });
+    onSubmit({ name, description, categoryId, contactPhone, ownDelivery, seatingAvailable });
   }
 
   return (
@@ -142,6 +144,19 @@ export function DetailsStep({
         <span>
           <span className="font-medium">Hago domicilios propios</span> — yo mismo entrego mi producto a
           domicilio (Ruteando no gestiona ni cobra esa entrega).
+        </span>
+      </label>
+
+      <label className="flex items-start gap-2 font-sans text-body-sm text-text">
+        <input
+          type="checkbox"
+          checked={seatingAvailable}
+          onChange={(event) => setSeatingAvailable(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">Tengo bancas/asientos</span> — mis clientes pueden comer o esperar
+          en el sitio.
         </span>
       </label>
 

@@ -95,6 +95,7 @@ async function crear(usuarioId, input) {
     entregaPropia: input.ownDelivery ?? false,
     higieneAutodeclarada: input.hygieneSelfDeclared ?? false,
     movilidad: MOBILITY_API_TO_DB[input.mobility ?? 'itinerant'],
+    asientosDisponibles: input.seatingAvailable ?? false,
   });
 
   return toApiBusiness(negocio);
@@ -123,6 +124,10 @@ async function actualizar(usuarioId, id, input) {
         : negocio.higiene_autodeclarada,
     movilidad:
       input.mobility !== undefined ? MOBILITY_API_TO_DB[input.mobility] : negocio.movilidad,
+    asientosDisponibles:
+      input.seatingAvailable !== undefined
+        ? input.seatingAvailable
+        : negocio.asientos_disponibles,
   });
 
   return toApiBusiness(actualizado);

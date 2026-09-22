@@ -124,6 +124,21 @@ function toApiMatchedProduct(row) {
   };
 }
 
+// "Cerca de ti ahora" (sin RF asociado, petición directa del usuario —
+// banner de descubrimiento): forma liviana de un producto con vigencia
+// activa de ESTE negocio, mismo criterio que toApiMatchedProduct — acá
+// además interesa qué tipo de oferta es (para el ícono) y hasta cuándo
+// vale (para "cuánto le queda de vigencia").
+function toApiActiveOffer(row) {
+  return {
+    name: row.nombre,
+    price: Number(row.precio),
+    available: row.disponible,
+    offerTypeId: row.tipo_oferta_id ?? null,
+    validUntil: row.vigencia_fin ?? null,
+  };
+}
+
 function toApiBusiness(row) {
   return {
     id: row.id,
@@ -160,6 +175,10 @@ function toApiBusiness(row) {
     // cualquiera. El mapa la usa para elegir la FORMA del pin (gota vs.
     // ícono distinto), nunca el color (eso sigue siendo por categoría).
     mobility: MOBILITY_DB_TO_API[row.movilidad],
+    // Bancas/asientos disponibles (petición directa del usuario, sin RF
+    // asociado — ver CLAUDE.md). Mismo criterio que ownDelivery/mobility:
+    // no es un dato sensible, visible para cualquiera.
+    seatingAvailable: Boolean(row.asientos_disponibles),
     createdAt: row.fecha_creacion,
     updatedAt: row.fecha_actualizacion,
     // Presentes solo cuando la consulta que produjo esta fila hizo el
@@ -193,6 +212,12 @@ function toApiBusiness(row) {
     matchedProducts: row.productos_coincidentes
       ? row.productos_coincidentes.map(toApiMatchedProduct)
       : null,
+    // "Cerca de ti ahora" (sin RF asociado, petición directa del usuario)
+    // — los productos con vigencia activa de este negocio, solo cuando
+    // la consulta que produjo esta fila pidió `hasActiveOffer=true`
+    // (listar/cercanos en este archivo); en el resto de los callers
+    // queda null, igual que matchedProducts/matchedOfferType.
+    activeOffers: row.ofertas_vigentes ? row.ofertas_vigentes.map(toApiActiveOffer) : null,
     // Búsqueda por familia (Fase 5, sin RF asociado — ver CLAUDE.md
     // sección 50): el negocio calificó por su CATEGORÍA (nombre literal
     // o vía el diccionario de alias — "tintos" → "Tintos y café"), no
@@ -302,6 +327,14 @@ function toApiProduct(row) {
     validFrom: row.vigencia_inicio ?? null,
     validUntil: row.vigencia_fin ?? null,
     updatedAt: row.fecha_actualizacion,
+    // Sin RF asociado, petición directa del usuario (ver CLAUDE.md):
+    // desde cuándo `available` tiene su valor actual — a diferencia de
+    // `updatedAt` (que se mueve con CUALQUIER edición del producto:
+    // precio, nombre, descripción...), esta columna solo se mueve cuando
+    // `disponible` de verdad cambia de valor (ver
+    // productos.repository.js#actualizar). En la creación, coincide con
+    // `createdAt` — es el primer valor que tuvo.
+    availabilityUpdatedAt: row.disponibilidad_actualizada_en,
   };
 }
 

@@ -2,35 +2,63 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WheelEvent as ReactWheelEvent } from "react";
-import { CheckCircle, Heart, Info, X } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, Heart, Info, Tag, X } from "@phosphor-icons/react/dist/ssr";
+import type { components } from "@/lib/api/schema";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
+import { OfferRow } from "@/components/discovery/offer-row";
 import type { BusinessPin } from "@/components/map/leaflet-map";
+
+type OfferType = components["schemas"]["OfferType"];
 
 /**
  * Familias del banner de descubrimiento (sin RF asociado, petición
- * directa del usuario) — hoy solo estas dos tienen datos reales
- * detrás: "Disponibles ahora" (GET /businesses/nearby u openNow=true,
- * Fase 1) y "Favoritos abiertos ahora" (GET /users/me/favorites con el
- * mismo openNow=true). Promociones y Eventos no aparecen todavía —
- * ni siquiera como "próximamente" — porque no tienen ningún endpoint ni
- * dato detrás; se agregan solos cuando sus propios PRs de backend
- * existan, sin tocar este archivo más que para sumar un valor al enum.
+ * directa del usuario) — "Disponibles ahora" (GET /businesses/nearby u
+ * openNow=true, Fase 1), "Favoritos abiertos ahora"
+ * (GET /users/me/favorites con el mismo openNow=true) y "Cerca de ti
+ * ahora" (GET /businesses/nearby con hasActiveOffer=true, ofertas con
+ * vigencia como protagonistas — sin RF asociado, ver CLAUDE.md).
  */
-export type DiscoveryFamilyId = "available_now" | "favorites_open_now";
+export type DiscoveryFamilyId = "available_now" | "favorites_open_now" | "active_offers";
 
-export interface DiscoveryFamilyData {
-  id: DiscoveryFamilyId;
-  /** Ya filtrados a `openNow=true` y ordenados (ver lib/discovery/available-now.ts) — este componente no vuelve a decidir quién entra ni en qué orden. */
-  businesses: BusinessPin[];
+/**
+ * Un producto con vigencia activa de un negocio, junto con el negocio
+ * completo al que pertenece (`business`) — reusar el `BusinessPin` tal
+ * cual (en vez de solo `businessId`) es lo que deja que tocar la
+ * tarjeta reutilice exactamente `onOpenDetail`/`onViewOnMap`, mismo
+ * criterio que las otras dos familias, sin necesitar un fetch aparte
+ * para resolver el negocio.
+ */
+export interface DiscoveryOffer {
+  /** `${businessId}-${índice}` — compuesto, nunca un id persistente del backend. */
+  id: string;
+  business: BusinessPin;
+  name: string;
+  offerTypeId: number | null;
+  validUntil: string | null;
 }
 
+export type DiscoveryFamilyData =
+  | {
+      kind: "businesses";
+      id: "available_now" | "favorites_open_now";
+      /** Ya filtrados a `openNow=true` y ordenados (ver lib/discovery/available-now.ts) — este componente no vuelve a decidir quién entra ni en qué orden. */
+      businesses: BusinessPin[];
+    }
+  | {
+      kind: "offers";
+      id: "active_offers";
+      offers: DiscoveryOffer[];
+    };
+
 interface DiscoveryBannerProps {
-  /** Ya filtradas a las que tienen al menos un negocio — una familia sin negocios no aparece ni como pestaña vacía (mismo criterio que "sin negocios, no se muestra nada" de la Fase 1). */
+  /** Ya filtradas a las que tienen al menos un negocio/oferta — una familia vacía no aparece ni como pestaña vacía (mismo criterio que "sin negocios, no se muestra nada" de la Fase 1). */
   families: DiscoveryFamilyData[];
   categoryTypeById: Map<number, CatalogType>;
   /** Nombre de categoría por id (`GET /categories`, ya resuelto en map-screen.tsx) — el ícono de color solo no comunica de qué categoría se trata, esto agrega el texto en las tarjetas (Nivel 1) y en la vista rápida del ⓘ. */
   categoryNameById: Map<number, string>;
+  /** Tipo de oferta por id (`GET /offer-types`, ya resuelto en map-screen.tsx) — solo lo usa la familia "active_offers", para el ícono/nombre de cada tarjeta. */
+  offerTypeById: Map<number, OfferType>;
   /** El pin resaltado en el mapa en este momento — solo para el borde de la tarjeta activa, ver map-screen.tsx. */
   activeId: string | null;
   /** Cambió la tarjeta más visible (swipe o tap) — el padre resalta el pin correspondiente, sin recentrar. */
@@ -65,11 +93,13 @@ interface DiscoveryBannerProps {
 const FAMILY_NAME: Record<DiscoveryFamilyId, string> = {
   available_now: "Disponibles ahora",
   favorites_open_now: "Favoritos abiertos ahora",
+  active_offers: "Cerca de ti ahora",
 };
 
-/** 🟢 disponibles / ❤️ favoritos — mismo ícono/color que ya usa el resto de la app para cada concepto (AvailabilityConfirmedBadge, FavoriteButton), no uno nuevo inventado acá. */
+/** 🟢 disponibles / ❤️ favoritos / 🏷️ ofertas — mismo ícono/color que ya usa el resto de la app para cada concepto (AvailabilityConfirmedBadge, FavoriteButton, el badge de oferta de ProductRow), no uno nuevo inventado acá. */
 function FamilyIcon({ id, size = 18 }: { id: DiscoveryFamilyId; size?: number }) {
   if (id === "favorites_open_now") return <Heart size={size} weight="fill" className="text-terracota" />;
+  if (id === "active_offers") return <Tag size={size} weight="fill" className="text-mostaza" />;
   return <CheckCircle size={size} weight="fill" className="text-verde" />;
 }
 
@@ -247,6 +277,43 @@ function DiscoveryBusinessCarousel({
   );
 }
 
+/**
+ * Carrusel horizontal de tarjetas de OFERTA — familia "Cerca de ti
+ * ahora" (sin RF asociado, petición directa del usuario). Deliberadamente
+ * SIN la auto-rotación/pausa-por-wheel/resaltado de pin de
+ * `DiscoveryBusinessCarousel`: esa maquinaria está pensada para
+ * `BusinessPin`/`DiscoveryRow` (y ya es bastante código); una familia
+ * nueva con datos de forma distinta (una oferta, no un negocio) no
+ * necesita duplicarla para ofrecer lo mismo que pedía esta funcionalidad
+ * — un carrusel deslizable con el detalle de la oferta. Scroll-snap
+ * nativo, deslizable a mano, sin más.
+ */
+function DiscoveryOfferCarousel({
+  offers,
+  offerTypeById,
+  onOpenDetail,
+}: {
+  offers: DiscoveryOffer[];
+  offerTypeById: Map<number, OfferType>;
+  onOpenDetail: (business: BusinessPin) => void;
+}) {
+  if (offers.length === 0) return null;
+
+  return (
+    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {offers.map((offer) => (
+        <div key={offer.id} className="w-72 shrink-0 snap-center">
+          <OfferRow
+            offer={offer}
+            offerType={offer.offerTypeId != null ? (offerTypeById.get(offer.offerTypeId) ?? null) : null}
+            onOpenDetail={(selected) => onOpenDetail(selected.business)}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Cuántas filas se muestran de entrada en la vista rápida antes de
 // pedir un toque explícito ("Ver todas") — pedido del usuario: "máximo
 // 4-5 negocios visibles". 5, el techo de ese rango.
@@ -268,6 +335,7 @@ function DiscoveryQuickViewSheet({
   family,
   categoryTypeById,
   categoryNameById,
+  offerTypeById,
   onClose,
   onOpenDetail,
   onViewOnMap,
@@ -275,13 +343,22 @@ function DiscoveryQuickViewSheet({
   family: DiscoveryFamilyData;
   categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
+  offerTypeById: Map<number, OfferType>;
   onClose: () => void;
   onOpenDetail: (business: BusinessPin) => void;
   onViewOnMap: (business: BusinessPin) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const visibleBusinesses = expanded ? family.businesses : family.businesses.slice(0, QUICK_VIEW_PREVIEW_LIMIT);
-  const hiddenCount = family.businesses.length - visibleBusinesses.length;
+  const totalCount = family.kind === "businesses" ? family.businesses.length : family.offers.length;
+  const visibleBusinesses =
+    family.kind === "businesses"
+      ? expanded
+        ? family.businesses
+        : family.businesses.slice(0, QUICK_VIEW_PREVIEW_LIMIT)
+      : [];
+  const visibleOffers =
+    family.kind === "offers" ? (expanded ? family.offers : family.offers.slice(0, QUICK_VIEW_PREVIEW_LIMIT)) : [];
+  const hiddenCount = totalCount - (family.kind === "businesses" ? visibleBusinesses.length : visibleOffers.length);
 
   return (
     <div
@@ -309,16 +386,27 @@ function DiscoveryQuickViewSheet({
           </button>
         </div>
         <div className="flex flex-col divide-y divide-border overflow-y-auto">
-          {visibleBusinesses.map((business) => (
-            <DiscoveryRow
-              key={business.id}
-              business={business}
-              catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
-              categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
-              onOpenDetail={onOpenDetail}
-              onViewOnMap={onViewOnMap}
-            />
-          ))}
+          {family.kind === "businesses" &&
+            visibleBusinesses.map((business) => (
+              <DiscoveryRow
+                key={business.id}
+                business={business}
+                catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
+                categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
+                onOpenDetail={onOpenDetail}
+                onViewOnMap={onViewOnMap}
+              />
+            ))}
+          {family.kind === "offers" &&
+            visibleOffers.map((offer) => (
+              <div key={offer.id} className="py-1.5">
+                <OfferRow
+                  offer={offer}
+                  offerType={offer.offerTypeId != null ? (offerTypeById.get(offer.offerTypeId) ?? null) : null}
+                  onOpenDetail={(selected) => onOpenDetail(selected.business)}
+                />
+              </div>
+            ))}
         </div>
         {hiddenCount > 0 && (
           <button
@@ -326,7 +414,7 @@ function DiscoveryQuickViewSheet({
             onClick={() => setExpanded(true)}
             className="rounded-input border border-border bg-background py-2 text-center font-sans text-body-sm font-medium text-terracota"
           >
-            Ver todas ({family.businesses.length})
+            Ver todas ({totalCount})
           </button>
         )}
       </div>
@@ -367,6 +455,7 @@ export function DiscoveryBanner({
   families,
   categoryTypeById,
   categoryNameById,
+  offerTypeById,
   activeId,
   onActiveChange,
   onOpenDetail,
@@ -482,23 +571,33 @@ export function DiscoveryBanner({
         </div>
       )}
 
-      <DiscoveryBusinessCarousel
-        key={activeFamily.id}
-        businesses={activeFamily.businesses}
-        categoryTypeById={categoryTypeById}
-        categoryNameById={categoryNameById}
-        activeId={activeId}
-        onActiveChange={onActiveChange}
-        onOpenDetail={onOpenDetail}
-        onViewOnMap={onViewOnMap}
-        onCategoryClick={onCategoryClick}
-      />
+      {activeFamily.kind === "businesses" ? (
+        <DiscoveryBusinessCarousel
+          key={activeFamily.id}
+          businesses={activeFamily.businesses}
+          categoryTypeById={categoryTypeById}
+          categoryNameById={categoryNameById}
+          activeId={activeId}
+          onActiveChange={onActiveChange}
+          onOpenDetail={onOpenDetail}
+          onViewOnMap={onViewOnMap}
+          onCategoryClick={onCategoryClick}
+        />
+      ) : (
+        <DiscoveryOfferCarousel
+          key={activeFamily.id}
+          offers={activeFamily.offers}
+          offerTypeById={offerTypeById}
+          onOpenDetail={onOpenDetail}
+        />
+      )}
 
       {quickViewFamily && (
         <DiscoveryQuickViewSheet
           family={quickViewFamily}
           categoryTypeById={categoryTypeById}
           categoryNameById={categoryNameById}
+          offerTypeById={offerTypeById}
           onClose={() => setQuickViewFamilyId(null)}
           onOpenDetail={(business) => {
             setQuickViewFamilyId(null);

@@ -77,6 +77,17 @@ describe('POST /businesses', () => {
     expect(conCampo.ownDelivery).toBe(true);
   });
 
+  it('seatingAvailable: default false si no se manda, true si se manda explícito', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+
+    const sinCampo = await crearNegocio(vendor.accessToken, categoryId);
+    expect(sinCampo.seatingAvailable).toBe(false);
+
+    const conCampo = await crearNegocio(vendor.accessToken, categoryId, { seatingAvailable: true });
+    expect(conCampo.seatingAvailable).toBe(true);
+  });
+
   it('hygieneSelfDeclared: default false si no se manda, true si se manda explícito', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
@@ -197,6 +208,26 @@ describe('PATCH /businesses/{businessId}', () => {
       .send({ name: negocio.name, categoryId, ownDelivery: false });
     expect(desactivado.status).toBe(200);
     expect(desactivado.body.ownDelivery).toBe(false);
+  });
+
+  it('seatingAvailable: se conserva si el PATCH no lo menciona, y se puede cambiar explícitamente', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId, { seatingAvailable: true });
+
+    const sinMencionar = await request(app)
+      .patch(`/businesses/${negocio.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: negocio.name, categoryId });
+    expect(sinMencionar.status).toBe(200);
+    expect(sinMencionar.body.seatingAvailable).toBe(true); // no se restablece a false en silencio
+
+    const desactivado = await request(app)
+      .patch(`/businesses/${negocio.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: negocio.name, categoryId, seatingAvailable: false });
+    expect(desactivado.status).toBe(200);
+    expect(desactivado.body.seatingAvailable).toBe(false);
   });
 
   it('hygieneSelfDeclared: se conserva si el PATCH no lo menciona, y se puede cambiar explícitamente', async () => {

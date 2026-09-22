@@ -26,6 +26,12 @@ const businessInputSchema = z.object({
   // en vez de resetearlo en silencio. El default real de creación
   // ('itinerant', ver negocios.service.js#crear) se aplica ahí, no acá.
   mobility: z.enum(['itinerant', 'fixed']).optional(),
+  // Bancas/asientos disponibles (petición directa del usuario, sin RF
+  // asociado — ver CLAUDE.md). Mismo criterio que ownDelivery: sin
+  // `.default()` a propósito — un PATCH que no lo menciona conserva el
+  // valor existente en vez de resetearlo en silencio. El default real de
+  // creación (false) se aplica en negocios.service.js#crear.
+  seatingAvailable: z.boolean().optional(),
 });
 
 // Caja envolvente de Cundinamarca (regla de seguridad #6: "idealmente un
@@ -132,6 +138,14 @@ const filtrosNegociosShape = {
   // SERIAL (entero normal), sin el mismo tope de 32767 que categoryId
   // (categorias.id es SMALLSERIAL).
   offerTypeId: z.coerce.number().int().positive().optional(),
+  // "Cerca de ti ahora" (sin RF asociado, petición directa del usuario) —
+  // igual que `offerTypeId`, pero sin fijar un tipo: cualquier producto
+  // con vigencia activa cuenta. Mismo patrón de enum explícito que
+  // `openNow` (z.coerce.boolean() no sirve: Boolean("false") es true).
+  hasActiveOffer: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 };

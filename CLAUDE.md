@@ -5616,3 +5616,202 @@ abriendo la vista rápida de siempre.
 - `FilteredListSheet` no pagina — mismo límite fijo (`LIST_LIMIT`, no
   "cargar más") que el resto de las listas sin scroll infinito del
   proyecto (Documento 08 sección 5.4.1).
+
+## 54. Bancas/asientos, "hace cuánto" de disponibilidad, y ofertas con
+##     horario/límite de catálogo/"Cerca de ti ahora"
+
+Tres pedidos sin RF asociado, planeados juntos en una misma conversación
+— dos chicos (bancas/asientos, badge de disponibilidad) y uno grande
+(requiere_horario_negocio + límite de catálogo gratis + nueva sección
+del banner), este último con un error real de alcance en el pedido
+original (ver abajo). Una sola rama
+(`feature/bancas-badge-ofertas-horario`).
+
+### Bancas/asientos disponibles
+
+Mismo patrón exacto que `ownDelivery` (sección 20/CLAUDE.md): campo
+nuevo `negocios.asientos_disponibles` (migración
+`bancas-asientos-negocio`), API `Business.seatingAvailable`/
+`BusinessInput.seatingAvailable` (sin `.default()`, mismo criterio que
+`ownDelivery`), `SeatingToggle` (calco de `OwnDeliveryToggle`, ícono
+`Chair`) en el perfil del negocio, insignia pública "Tiene
+bancas/asientos" junto a "Hace domicilios propios", y checkbox nuevo en
+el paso de detalles del asistente de registro (`details-step.tsx`).
+
+### "Desde cuándo" disponible/no disponible (`ProductRow`)
+
+**Alcance acotado tras auditar el código, no asumido**: el pedido
+original decía "muestra en su fila (banner, hoja filtrada, perfil del
+negocio)" — se auditó `DiscoveryRow`/`FilteredListSheet` antes de
+programar y se confirmó que esos dos SOLO renderizan negocios, nunca
+productos individuales; la única fila de un producto específico en todo
+el proyecto es `ProductRow`, dentro del catálogo del perfil. Confirmado
+con el usuario antes de implementar — el badge vive solo ahí.
+
+`productos.disponibilidad_actualizada_en` (migración
+`productos-disponibilidad-actualizada-en`, TIMESTAMPTZ NOT NULL DEFAULT
+now()) — a diferencia de `fecha_actualizacion` (se mueve con CUALQUIER
+edición del producto: precio, nombre, descripción...), esta columna
+solo se mueve cuando `disponible` de verdad cambia de valor.
+`productos.repository.js#actualizar` lo resuelve en la misma sentencia
+SQL, sin round-trip: `CASE WHEN disponible IS DISTINCT FROM $6 THEN
+now() ELSE disponibilidad_actualizada_en END` — `IS DISTINCT FROM`
+compara contra el valor VIEJO de la fila (las expresiones del `SET`, en
+Postgres, se evalúan contra la fila antes del UPDATE, no
+secuencialmente entre sí). API: `Product.availabilityUpdatedAt`; en la
+creación coincide con `createdAt`.
+
+`ProductRow` muestra "Disponible hace X"/"No disponible hace X" como
+una tercera línea bajo el precio (visible sin expandir, "en su fila" tal
+como se pidió) — `formatRelativeTimeShort`
+(`client/src/lib/format/relative-time.ts`, nuevo) es un "hace X"
+genérico con rama de días, a diferencia de
+`formatConfirmedAgo`/`formatAskedAgo` (sección 11/37, acotados a
+minutos/horas porque su dato de origen expira rápido — un producto
+puede quedar en el mismo estado semanas sin que nadie lo toque).
+
+### Ofertas: `requiere_horario_negocio`, límite de catálogo gratis, "Cerca de ti ahora"
+
+**Corrección de alcance real, ocurrida en esta misma conversación**: el
+pedido grande original incluía mostrarle un precio fijo al vendedor y
+marcar un producto/oferta como "pendiente de pago" cuando excede el
+plan gratis — el propio usuario lo retiró al notar que choca con la
+regla explícita de la sección 15 ("no crear ninguna UI de
+precios/planes ni facturación mientras dure el piloto"). Lo que seguía
+en pie: bloquear con un mensaje que señala el plan pago, **sin mostrar
+costo ni flujo de pago**.
+
+**`tipos_oferta.requiere_horario_negocio`** (migración
+`tipos-oferta-requiere-horario-negocio`, BOOLEAN NOT NULL DEFAULT true;
+solo 'Evento' sembrado en `false`) — si `true`, una oferta de ese tipo
+solo cuenta como vigente (para `offerTypeId`/`matchedOfferType` Y para
+`hasActiveOffer`/`activeOffers`, ver abajo) cuando el negocio está
+dentro de su horario declarado ahora mismo — un menú de almuerzo no
+debería aparecer a las 9am aunque su `validUntil` siga lejos. `false`
+deja la oferta vigente solo según `validFrom`/`validUntil`, sin cruzar
+contra el horario — un evento no está atado a cuándo el negocio abre
+para vender su catálogo normal. API: `OfferType.requiresBusinessSchedule`
+(GET/POST/PATCH /admin/offer-types, mismo patrón sin `.default()` que
+`active`) — sin UI de administración todavía (el CRUD de tipos de
+oferta nunca tuvo pantalla propia, solo API).
+
+Implementación en `negocios.repository.js` (compartida por `listar()` y
+`cercanos()`, RF-010/011): `condicionHorarioSQL(idxHorario)` extrae la
+condición de horario que ya usaba el filtro `openNow` (turno nocturno
+cruzando medianoche incluido) para reusarla también acá.
+`fromWhereOfertaVigente({ idxOfertaTipo, idxHorario })` es la única
+fuente de verdad de "qué es un producto vigente" — con `idxOfertaTipo`
+(filtro `offerTypeId` puntual) conserva el criterio original sin
+cambios (`vigencia_inicio IS NULL` también cuenta — un producto
+categorizado con ese tipo, sin fecha de inicio propia, sigue siendo
+válido); sin tipo puntual (`hasActiveOffer`, ver abajo),
+`vigencia_inicio IS NOT NULL` es obligatorio — es la señal real de
+"esto es una oferta" (migración productos-tipo-oferta). `idxHorario` se
+calcula una sola vez por consulta (cuando `openNow`, `offerTypeId` o
+`hasActiveOffer` lo necesitan) y se reusa entre el `WHERE`, la columna
+`oferta_coincide` y el `LATERAL` de `activeOffers`, sin volver a ligar
+los mismos tres parámetros dos veces.
+
+**Límite de catálogo gratis** (`FREE_PLAN_MAX_CATALOG_PRODUCTS = 3`,
+`src/config/constants.js`) — máximo 3 productos de CATÁLOGO NORMAL
+(`vigencia_inicio IS NULL`) por negocio en plan gratis, cupo
+**independiente** del de ofertas (`FREE_PLAN_MAX_ACTIVE_OFFERS = 1`, ya
+existente): un producto con vigencia nunca ocupa el cupo de catálogo, y
+viceversa (`productos.repository.js#contarProductosCatalogo`,
+`productos.service.js#validarLimiteCatalogoGratis`, mismo patrón
+espejo que `validarLimiteOfertaGratis`). Al intentar crear/convertir un
+4to producto de catálogo: 409, `"Disponible en el plan pago — el plan
+gratis permite máximo 3 productos en el catálogo (sin contar ofertas
+con vigencia)"` — sin `$`, sin costo, sin flujo de pago, verificado
+también con una prueba de integración que confirma que el mensaje no
+menciona precio.
+
+**"Cerca de ti ahora"** (`GET /businesses`/`GET /businesses/nearby` con
+`hasActiveOffer=true`, `Business.activeOffers: ActiveOffer[] | null`) —
+igual que `offerTypeId`, pero sin fijar un tipo: cualquier producto con
+vigencia vigente cuenta. `negocios.repository.js#lateralOfertasVigentes`
+trae, solo cuando `hasActiveOffer` está activo, los productos vigentes
+de cada negocio (`json_agg` de nombre/precio/disponible/tipo/vigencia)
+— reusa `fromWhereOfertaVigente` tal cual, así que nunca puede
+desalinearse de qué cuenta como "vigente" en el filtro. Frontend: en
+vez de un endpoint nuevo dedicado, se reusó la infraestructura de
+`useBusinessSearch` ya existente (mismo hook que ya arma "Disponibles
+ahora") con `hasActiveOffer: true` — cada negocio devuelto trae su
+propio `BusinessPin` completo (lat/lng/mobility/etc.), así que "aplanar"
+sus `activeOffers` en tarjetas de oferta (`map-screen.tsx#discoveryOffers`,
+`id` compuesto `${businessId}-${índice}`, nunca persistente) reusa
+`onOpenDetail`/`onViewOnMap` sin ningún fetch aparte por producto.
+
+`DiscoveryBanner`/`discovery-banner.tsx` se generalizó de "una lista de
+negocios por familia" a un tipo unión `DiscoveryFamilyData` (`kind:
+"businesses" | "offers"`) — la familia nueva `active_offers` ("Cerca de
+ti ahora", ícono `Tag` en `text-mostaza`, el único color de familia
+todavía libre) usa `DiscoveryOfferCarousel` (nuevo) en vez de
+`DiscoveryBusinessCarousel`. **Decisión deliberada de alcance**: el
+carrusel de ofertas NO tiene la auto-rotación/pausa-por-wheel/resaltado
+de pin del carrusel de negocios — esa maquinaria está pensada para
+`BusinessPin`/`DiscoveryRow` y ya es bastante código; un scroll-snap
+deslizable a mano alcanza para lo que pedía esta funcionalidad. El
+ícono de la familia sigue el mismo criterio ya establecido
+(`handleFamilyIconClick`): como no es `"favorites_open_now"`, cae solo
+en el `else` (abre la vista rápida interna, `DiscoveryQuickViewSheet`,
+generalizada de la misma forma) — no hizo falta ningún caso nuevo ahí.
+
+`OfferRow` (`client/src/components/discovery/offer-row.tsx`, nuevo):
+ícono del tipo + nombre del plato/promoción/evento + negocio + distancia
++ "cuánto le queda de vigencia" (`describeOfferValidUntil`, ya
+existente). **Hallazgo de lint real**: `resolveOfferTypeIcon(...)`
+(función que resuelve un ícono desde una tabla) llamada directo en el
+cuerpo de este componente disparaba `react-hooks/static-components`
+("Cannot create components during render") — regla ya documentada en
+`catalog-icons.tsx#resolveCatalogIcon` para el mismo problema con
+`Category.type`: la regla no distingue que la función siempre devuelve
+la misma referencia estable, solo ve "una función llamada en el cuerpo
+de un componente, asignada a una variable con mayúscula usada como
+tag JSX". Se exportó `OFFER_TYPE_ICON_BY_NAME` (antes privado) y
+`OfferRow` hace el lookup directo contra la tabla — mismo criterio ya
+establecido, no una excepción nueva. `resolveOfferTypeIcon` se conserva
+para un futuro uso dentro de un `.map()` (ahí la regla no se dispara).
+
+### Verificado
+
+Backend: suite completa (616/616, incluye pruebas nuevas para las 5
+piezas — `seatingAvailable`, `availabilityUpdatedAt`,
+`requiere_horario_negocio` con horario abierto/cerrado real vía
+`horarios`, `hasActiveOffer`/`activeOffers`, y el límite de catálogo
+gratis) y en vivo contra el servidor de desarrollo real (`curl`): un
+negocio creado con `seatingAvailable: true` lo devuelve tal cual; un
+producto recién creado tiene `availabilityUpdatedAt === createdAt`, un
+PATCH que solo cambia el precio no lo mueve, uno que cambia
+`available` sí; un tipo que exige horario (Promoción) deja de contar
+apenas el negocio se marca cerrado todo el día y un Evento en el mismo
+negocio cerrado sigue contando; el 4to producto de catálogo da 409 con
+el mensaje esperado, sin `$` ni "pago"/"costo"/"precio". Frontend:
+`tsc`/`build`/`lint` en verde, y verificado con Playwright contra el
+servidor de desarrollo real (entorno sin las libs nativas de Chromium
+instaladas — mismo desbloqueo ya documentado en la sección 30, `.deb`
+descargados con `apt-get download` sin sudo y extraídos a un prefijo
+local): la insignia y el interruptor "Tengo bancas/asientos" visibles
+en el perfil del dueño; "Disponible hace X min"/"No disponible hace X
+min" visibles sin expandir en las 3 filas del catálogo de un negocio de
+prueba (uno disponible, uno recién marcado agotado); la familia "Cerca
+de ti ahora" aparece en el banner del mapa (`/mapa`, no `/` — el
+vendedor de prueba tiene un negocio activo y `/` lo redirige a su
+propio perfil, sección 38) con la oferta creada para la prueba, y
+**también con una oferta real ya sembrada de antes** ("Jugo de mora",
+Fruver El Manantial) — confirma que la consulta no depende de datos
+armados a mano para esta verificación puntual. Datos de prueba
+borrados después.
+
+### Gaps conocidos, no ocultos
+
+- `DiscoveryOfferCarousel` no resalta ningún pin del mapa al deslizar
+  entre ofertas (a diferencia del carrusel de negocios) — decisión de
+  alcance explícita arriba, no un olvido.
+- Sin panel de administración para `requiresBusinessSchedule` (ni para
+  el resto de `tipos_oferta`) — mismo límite ya documentado para el
+  resto del catálogo de tipos de oferta, API-only.
+- `scripts/seedDemoBusinesses.js` no se tocó — ningún negocio de demo
+  quedó sembrado con `seatingAvailable: true`, y el límite de catálogo
+  gratis no se verificó contra esos datos (los negocios de demo tienen
+  pocos productos, muy por debajo de 3). No se pidió para esta tanda.

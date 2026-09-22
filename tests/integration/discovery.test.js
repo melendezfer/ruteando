@@ -606,9 +606,26 @@ describe('offerTypeId (ofertas con vigencia, sin RF asociado)', () => {
       .send({ name: 'Producto', price: 1000, ...overrides });
   }
 
+  // 'Promoción' tiene requiere_horario_negocio = true de fábrica (ver
+  // migración tipos-oferta-requiere-horario-negocio) — sin ningún
+  // horario declarado, el negocio nunca pasa el cruce de horario. Estas
+  // pruebas no son sobre esa funcionalidad (ver el describe aparte más
+  // abajo), así que "abren" el negocio todo el día, todos los días —
+  // mismo truco que favoritos.test.js/seedLoadTest.js, para que el
+  // horario nunca sea un factor de confusión acá.
+  async function abrirTodoElDia(negocioId) {
+    await pool.query(
+      `INSERT INTO horarios (negocio_id, dia, hora_apertura, hora_cierre, cerrado)
+       SELECT $1, d.dia, '00:00', '23:59', false
+       FROM unnest(enum_range(NULL::dia_semana)) AS d(dia)`,
+      [negocioId],
+    );
+  }
+
   it('solo devuelve negocios con al menos un producto vigente de ese tipo de oferta', async () => {
     const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
     const conOferta = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, name: 'Con Oferta' });
+    await abrirTodoElDia(conOferta.id);
     await crearProducto(conOferta.accessToken, conOferta.id, {
       name: 'Promo',
       offerTypeId,
@@ -631,6 +648,7 @@ describe('offerTypeId (ofertas con vigencia, sin RF asociado)', () => {
   it('matchedOfferType es true para cada resultado cuando el filtro está activo, y null sin el filtro', async () => {
     const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
     const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await abrirTodoElDia(negocio.id);
     await crearProducto(negocio.accessToken, negocio.id, {
       name: 'Promo',
       offerTypeId,
@@ -685,6 +703,190 @@ describe('offerTypeId (ofertas con vigencia, sin RF asociado)', () => {
     });
 
     const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+});
+
+// requiere_horario_negocio (sin RF asociado, petición directa del
+// usuario — ver CLAUDE.md, migración
+// tipos-oferta-requiere-horario-negocio): un tipo de oferta que exige
+// horario (menú/promoción/combo, default true) solo cuenta como vigente
+// si el negocio está dentro de su horario declarado ahora mismo; uno que
+// no lo exige ('Evento', sembrado en false) cuenta sin cruzar contra el
+// horario.
+describe('requiere_horario_negocio (sin RF asociado)', () => {
+  const CENTRO = { lat: 4.578, lng: -74.217 };
+
+  async function obtenerTipoOfertaPorNombre(nombre) {
+    const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', [nombre]);
+    if (!rows[0]) throw new Error(`Tipo de oferta "${nombre}" no encontrado — ¿corrió la migración?`);
+    return rows[0].id;
+  }
+
+  // Cerrado todos los días — mismo truco invertido de "abrirTodoElDia"
+  // (describe de arriba): cerrado=true no exige hora_apertura/hora_cierre
+  // (chk_horarios_rango de schema.sql).
+  async function cerrarTodoElDia(negocioId) {
+    await pool.query(
+      `INSERT INTO horarios (negocio_id, dia, cerrado)
+       SELECT $1, d.dia, true
+       FROM unnest(enum_range(NULL::dia_semana)) AS d(dia)`,
+      [negocioId],
+    );
+  }
+
+  async function crearProducto(accessToken, businessId, overrides = {}) {
+    await request(app)
+      .post(`/businesses/${businessId}/products`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: 'Producto', price: 1000, ...overrides });
+  }
+
+  it('un tipo que exige horario (Promoción) no cuenta si el negocio está cerrado ahora', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await cerrarTodoElDia(negocio.id);
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+
+  it('un tipo que NO exige horario (Evento) cuenta aunque el negocio esté cerrado ahora', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Evento');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await cerrarTodoElDia(negocio.id);
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Concierto',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    expect(res.body.data.map((b) => b.id)).toContain(negocio.id);
+  });
+
+  it('matchedOfferType sigue siendo true para el resultado (Evento, cerrado ahora)', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Evento');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await cerrarTodoElDia(negocio.id);
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Feria',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const res = await request(app).get(`/businesses?offerTypeId=${offerTypeId}`);
+    const resultado = res.body.data.find((b) => b.id === negocio.id);
+    expect(resultado.matchedOfferType).toBe(true);
+  });
+});
+
+// "Cerca de ti ahora" (sin RF asociado, petición directa del usuario) —
+// GET /businesses?hasActiveOffer=true y Business.activeOffers.
+describe('hasActiveOffer / Business.activeOffers ("Cerca de ti ahora", sin RF asociado)', () => {
+  const CENTRO = { lat: 4.578, lng: -74.217 };
+
+  async function obtenerTipoOfertaPorNombre(nombre) {
+    const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', [nombre]);
+    if (!rows[0]) throw new Error(`Tipo de oferta "${nombre}" no encontrado — ¿corrió la migración?`);
+    return rows[0].id;
+  }
+
+  async function abrirTodoElDia(negocioId) {
+    await pool.query(
+      `INSERT INTO horarios (negocio_id, dia, hora_apertura, hora_cierre, cerrado)
+       SELECT $1, d.dia, '00:00', '23:59', false
+       FROM unnest(enum_range(NULL::dia_semana)) AS d(dia)`,
+      [negocioId],
+    );
+  }
+
+  async function cerrarTodoElDia(negocioId) {
+    await pool.query(
+      `INSERT INTO horarios (negocio_id, dia, cerrado)
+       SELECT $1, d.dia, true
+       FROM unnest(enum_range(NULL::dia_semana)) AS d(dia)`,
+      [negocioId],
+    );
+  }
+
+  async function crearProducto(accessToken, businessId, overrides = {}) {
+    await request(app)
+      .post(`/businesses/${businessId}/products`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: 'Producto', price: 1000, ...overrides });
+  }
+
+  it('solo devuelve negocios con al menos una oferta vigente, de cualquier tipo', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+    const conOferta = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, name: 'Con Combo' });
+    await abrirTodoElDia(conOferta.id);
+    await crearProducto(conOferta.accessToken, conOferta.id, {
+      name: 'Combo 2x1',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+    const sinOferta = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng, name: 'Sin Combo' });
+    await crearProducto(sinOferta.accessToken, sinOferta.id, { name: 'Plato normal' });
+
+    for (const url of [
+      '/businesses?hasActiveOffer=true',
+      `/businesses/nearby?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radiusKm=5&hasActiveOffer=true`,
+    ]) {
+      const res = await request(app).get(url);
+      const ids = res.body.data.map((b) => b.id);
+      expect(ids).toContain(conOferta.id);
+      expect(ids).not.toContain(sinOferta.id);
+    }
+  });
+
+  it('un producto sin ninguna vigencia (catálogo normal) no cuenta, aunque tenga un offerTypeId elegido', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await crearProducto(negocio.accessToken, negocio.id, { name: 'Combo sin vigencia', offerTypeId });
+
+    const res = await request(app).get('/businesses?hasActiveOffer=true');
+    expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
+  });
+
+  it('activeOffers trae el/los producto(s) vigentes, y queda null sin el filtro', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Combo');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await abrirTodoElDia(negocio.id);
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Combo 2x1',
+      price: 20000,
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const conFiltro = await request(app).get('/businesses?hasActiveOffer=true');
+    const resultado = conFiltro.body.data.find((b) => b.id === negocio.id);
+    expect(resultado.activeOffers).toEqual([
+      expect.objectContaining({ name: 'Combo 2x1', price: 20000, offerTypeId }),
+    ]);
+
+    const sinFiltro = await request(app).get('/businesses');
+    const resultadoSinFiltro = sinFiltro.body.data.find((b) => b.id === negocio.id);
+    expect(resultadoSinFiltro.activeOffers).toBeNull();
+  });
+
+  it('respeta requiere_horario_negocio también acá: Promoción no cuenta si el negocio está cerrado ahora', async () => {
+    const offerTypeId = await obtenerTipoOfertaPorNombre('Promoción');
+    const negocio = await crearNegocioActivo({ lat: CENTRO.lat, lng: CENTRO.lng });
+    await cerrarTodoElDia(negocio.id);
+    await crearProducto(negocio.accessToken, negocio.id, {
+      name: 'Promo',
+      offerTypeId,
+      validFrom: new Date().toISOString(),
+    });
+
+    const res = await request(app).get('/businesses?hasActiveOffer=true');
     expect(res.body.data.map((b) => b.id)).not.toContain(negocio.id);
   });
 });

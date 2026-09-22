@@ -14,7 +14,12 @@ import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
-import { DiscoveryBanner, type DiscoveryFamilyData, type DiscoveryFamilyId } from "@/components/map/discovery-banner";
+import {
+  DiscoveryBanner,
+  type DiscoveryFamilyData,
+  type DiscoveryFamilyId,
+  type DiscoveryOffer,
+} from "@/components/map/discovery-banner";
 import { FilteredListSheet, type DiscoveryListFilter } from "@/components/map/filtered-list-sheet";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
@@ -212,6 +217,16 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     return map;
   }, [categories]);
 
+  // "Cerca de ti ahora" (sin RF asociado, petición directa del usuario)
+  // — ícono/nombre del tipo de oferta por id, ver DiscoveryBanner/OfferRow.
+  const offerTypeById = useMemo(() => {
+    const map = new Map<number, OfferType>();
+    offerTypes.forEach((type) => {
+      if (type.id !== undefined) map.set(type.id, type);
+    });
+    return map;
+  }, [offerTypes]);
+
   // Título de FilteredListSheet, ya resuelto acá (categoryNameById/
   // offerTypes ya están a mano) — el sheet en sí no vuelve a resolverlo.
   const listFilterTitle = useMemo(() => {
@@ -265,6 +280,17 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
   // sortAvailableNow ya tolera esto, cae al desempate por confirmación
   // fresca).
   const [favoritesOpenNowRaw, setFavoritesOpenNowRaw] = useState<Business[] | null>(null);
+
+  // Tercera familia del banner: "Cerca de ti ahora" (sin RF asociado,
+  // petición directa del usuario) — mismo criterio que "Disponibles
+  // ahora" (misma fuente, su propio radio fijo, independiente de lo que
+  // el usuario esté buscando en MapSearchSheet), con `hasActiveOffer`
+  // en vez de `openNow`.
+  const { businesses: activeOffersRaw, search: searchActiveOffers } = useBusinessSearch({
+    limit: DISCOVERY_BANNER_LIMIT,
+    radiusKm: DEFAULT_MAP_RADIUS_KM,
+    geolocation,
+  });
 
   useEffect(() => {
     let ignore = false;
@@ -321,24 +347,63 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     return sortAvailableNow(withCoords);
   }, [favoritesOpenNowRaw]);
 
+  // Tercera familia: "Cerca de ti ahora" — un producto vigente de cada
+  // negocio se vuelve una tarjeta propia (no una fila de negocio), así
+  // que acá se APLANA: un negocio con 2 ofertas vigentes produce 2
+  // entradas. `id` compuesto (`${businessId}-${índice}`), nunca un id
+  // persistente del backend. Ya vienen ordenados por distancia (misma
+  // consulta que discoveryBusinesses) — dentro de cada negocio, por
+  // vigencia ascendente (ver negocios.repository.js#lateralOfertasVigentes).
+  const discoveryOffers = useMemo<DiscoveryOffer[]>(() => {
+    const withCoords = (activeOffersRaw ?? []).filter(
+      (business): business is BusinessPin =>
+        typeof business.latitude === "number" && typeof business.longitude === "number",
+    );
+    const offers: DiscoveryOffer[] = [];
+    for (const business of withCoords) {
+      if (!business.id) continue;
+      (business.activeOffers ?? []).forEach((offer, index) => {
+        if (!offer.name) return;
+        offers.push({
+          id: `${business.id}-${index}`,
+          business,
+          name: offer.name,
+          offerTypeId: offer.offerTypeId ?? null,
+          validUntil: offer.validUntil ?? null,
+        });
+      });
+    }
+    return offers;
+  }, [activeOffersRaw]);
+
   // Familias del banner (sin RF asociado, petición directa del usuario)
-  // — solo las que de verdad tienen negocios entran acá; una familia
-  // vacía ni siquiera aparece como pestaña (mismo criterio de "sin
-  // negocios, no se muestra nada" de la Fase 1). "Disponibles ahora"
-  // siempre primero cuando ambas tienen datos — es la familia original,
-  // la más orientada a "qué hay cerca ahora mismo".
+  // — solo las que de verdad tienen negocios/ofertas entran acá; una
+  // familia vacía ni siquiera aparece como pestaña (mismo criterio de
+  // "sin negocios, no se muestra nada" de la Fase 1). "Disponibles
+  // ahora" siempre primero cuando hay datos — es la familia original, la
+  // más orientada a "qué hay cerca ahora mismo".
   const discoveryFamilies = useMemo<DiscoveryFamilyData[]>(() => {
     const list: DiscoveryFamilyData[] = [];
-    if (discoveryBusinesses.length > 0) list.push({ id: "available_now", businesses: discoveryBusinesses });
-    if (favoritesOpenNow.length > 0) list.push({ id: "favorites_open_now", businesses: favoritesOpenNow });
+    if (discoveryBusinesses.length > 0) {
+      list.push({ kind: "businesses", id: "available_now", businesses: discoveryBusinesses });
+    }
+    if (discoveryOffers.length > 0) {
+      list.push({ kind: "offers", id: "active_offers", offers: discoveryOffers });
+    }
+    if (favoritesOpenNow.length > 0) {
+      list.push({ kind: "businesses", id: "favorites_open_now", businesses: favoritesOpenNow });
+    }
     return list;
-  }, [discoveryBusinesses, favoritesOpenNow]);
+  }, [discoveryBusinesses, discoveryOffers, favoritesOpenNow]);
 
   // Tarjeta activa del banner: lo último que el usuario deslizó/tocó, o
-  // el primer negocio de la primera familia por default — sin esto, el
-  // banner arrancaría sin ninguna tarjeta resaltada hasta el primer
-  // swipe.
-  const bannerHighlightId = bannerActiveId ?? discoveryFamilies[0]?.businesses[0]?.id ?? null;
+  // el primer negocio de la primera familia de NEGOCIOS por default (la
+  // familia de ofertas no resalta ningún pin, ver DiscoveryOfferCarousel
+  // — buscar la primera con `kind: "businesses"` en vez de asumir que
+  // `discoveryFamilies[0]` siempre lo es) — sin esto, el banner arrancaría
+  // sin ninguna tarjeta resaltada hasta el primer swipe.
+  const firstBusinessFamily = discoveryFamilies.find((family) => family.kind === "businesses");
+  const bannerHighlightId = bannerActiveId ?? firstBusinessFamily?.businesses[0]?.id ?? null;
 
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
@@ -406,12 +471,13 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         runSearch();
         loadZones();
         searchOpenNow({ openNow: true });
+        searchActiveOffers({ hasActiveOffer: true });
       }
     });
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, runSearch, loadZones, searchOpenNow]);
+  }, [geolocation.status, runSearch, loadZones, searchOpenNow, searchActiveOffers]);
 
   /**
    * "Ver en el mapa" (Fase 4, sección 49) — pide el perfil completo en
@@ -604,6 +670,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           families={discoveryFamilies}
           categoryTypeById={categoryTypeById}
           categoryNameById={categoryNameById}
+          offerTypeById={offerTypeById}
           activeId={bannerHighlightId}
           onActiveChange={handleBannerActiveChange}
           onOpenDetail={handleBannerOpenDetail}

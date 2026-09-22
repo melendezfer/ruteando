@@ -1,5 +1,6 @@
 const {
   toApiBusiness,
+  toApiProduct,
   toApiLocation,
   toApiScheduleDay,
   toApiBusinessProfile,
@@ -38,6 +39,7 @@ describe('toApiBusiness', () => {
       phoneVerified: true,
       ownDelivery: true,
       hygieneSelfDeclared: true,
+      seatingAvailable: false,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
       latitude: null,
@@ -47,6 +49,7 @@ describe('toApiBusiness', () => {
       matchedProducts: null,
       matchedCategory: null,
       matchedOfferType: null,
+      activeOffers: null,
       rejectionReason: null,
       availabilityConfirmedAt: null,
     });
@@ -200,6 +203,52 @@ describe('toApiBusiness', () => {
     });
   });
 
+  // "Cerca de ti ahora" (sin RF asociado, petición directa del usuario)
+  // — `ofertas_vigentes` es independiente de `matchType`/`nombre_coincide`
+  // (solo depende de `hasActiveOffer`, ver negocios.repository.js).
+  describe('activeOffers ("Cerca de ti ahora")', () => {
+    const filaBase = {
+      id: 'b-1',
+      usuario_id: 'u-1',
+      categoria_id: 2,
+      nombre: 'Arepas Doña Rosa',
+      descripcion: null,
+      estado: 'activo',
+      telefono_contacto: null,
+      fecha_creacion: '2026-01-01T00:00:00.000Z',
+      fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('sin hasActiveOffer (ofertas_vigentes ausente): activeOffers queda null', () => {
+      const resultado = toApiBusiness(filaBase);
+      expect(resultado.activeOffers).toBeNull();
+    });
+
+    it('con ofertas_vigentes: traduce nombre/precio/disponible/tipo/vigencia', () => {
+      const resultado = toApiBusiness({
+        ...filaBase,
+        ofertas_vigentes: [
+          {
+            nombre: 'Combo 2x1',
+            precio: '20000.00',
+            disponible: true,
+            tipo_oferta_id: 3,
+            vigencia_fin: '2026-02-01T00:00:00.000Z',
+          },
+        ],
+      });
+      expect(resultado.activeOffers).toEqual([
+        {
+          name: 'Combo 2x1',
+          price: 20000,
+          available: true,
+          offerTypeId: 3,
+          validUntil: '2026-02-01T00:00:00.000Z',
+        },
+      ]);
+    });
+  });
+
   // Búsqueda por familia (Fase 5, sin RF asociado — ver CLAUDE.md sección
   // 50): `categoria_coincide` es independiente de matchType — un negocio
   // puede coincidir por categoría Y por nombre/producto a la vez.
@@ -251,6 +300,36 @@ describe('toApiBusiness', () => {
       });
       expect(resultado.matchedCategory).toBe(false);
     });
+  });
+});
+
+describe('toApiProduct', () => {
+  const filaBase = {
+    id: 'p-1',
+    negocio_id: 'b-1',
+    categoria_id: null,
+    nombre: 'Arepa de queso',
+    descripcion: null,
+    precio: '5000.00',
+    disponible: true,
+    fecha_creacion: '2026-01-01T00:00:00.000Z',
+    fecha_actualizacion: '2026-01-01T00:00:00.000Z',
+  };
+
+  // Sin RF asociado, petición directa del usuario (ver CLAUDE.md,
+  // migración productos-disponibilidad-actualizada-en): a diferencia de
+  // `updatedAt` (fecha_actualizacion, se mueve con cualquier edición),
+  // `availabilityUpdatedAt` solo se mueve cuando `disponible` de verdad
+  // cambia — acá solo se prueba el mapeo español→inglés de la columna
+  // (el comportamiento real de CUÁNDO se mueve vive en
+  // productos.repository.js#actualizar, probado en
+  // tests/integration/products.test.js).
+  it('mapea disponibilidad_actualizada_en a availabilityUpdatedAt', () => {
+    const resultado = toApiProduct({
+      ...filaBase,
+      disponibilidad_actualizada_en: '2026-01-01T00:00:00.000Z',
+    });
+    expect(resultado.availabilityUpdatedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 });
 

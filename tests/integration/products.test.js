@@ -191,6 +191,62 @@ describe('PATCH /products/{productId}', () => {
   });
 });
 
+// availabilityUpdatedAt (sin RF asociado, petición directa del usuario —
+// ver CLAUDE.md, migración productos-disponibilidad-actualizada-en): a
+// diferencia de updatedAt (que se mueve con CUALQUIER edición), esta
+// marca de tiempo solo se mueve cuando `available` de verdad cambia de
+// valor.
+describe('availabilityUpdatedAt', () => {
+  it('en la creación, coincide con createdAt', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id);
+    expect(producto.availabilityUpdatedAt).toBe(producto.createdAt);
+  });
+
+  it('un PATCH que NO toca available no mueve availabilityUpdatedAt', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id);
+
+    const res = await request(app)
+      .patch(`/products/${producto.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: producto.name, price: 9999, description: 'Descripción nueva' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.updatedAt).not.toBe(producto.updatedAt); // esto sí se movió
+    expect(res.body.availabilityUpdatedAt).toBe(producto.availabilityUpdatedAt); // esto no
+  });
+
+  it('un PATCH que SÍ cambia available mueve availabilityUpdatedAt', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id);
+
+    const res = await request(app)
+      .patch(`/products/${producto.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: producto.name, price: producto.price, available: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.available).toBe(false);
+    expect(new Date(res.body.availabilityUpdatedAt).getTime()).toBeGreaterThan(
+      new Date(producto.availabilityUpdatedAt).getTime(),
+    );
+  });
+
+  it('un PATCH que manda available con el MISMO valor que ya tenía no mueve availabilityUpdatedAt', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const producto = await crearProducto(vendor.accessToken, negocio.id, { available: true });
+
+    const res = await request(app)
+      .patch(`/products/${producto.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: producto.name, price: producto.price, available: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.availabilityUpdatedAt).toBe(producto.availabilityUpdatedAt);
+  });
+});
+
 // Ofertas con vigencia (menú/promoción/combo/evento), sin RF asociado —
 // ver CLAUDE.md, migración productos-tipo-oferta.
 describe('Ofertas con vigencia (offerTypeId / validFrom / validUntil)', () => {
@@ -347,6 +403,104 @@ describe('Ofertas con vigencia (offerTypeId / validFrom / validUntil)', () => {
       .send({ name: 'Combo 1 editado', price: 11000 });
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Combo 1 editado');
+  });
+});
+
+// Límite de catálogo del plan gratis (sin RF asociado, petición directa
+// del usuario — ver CLAUDE.md, FREE_PLAN_MAX_CATALOG_PRODUCTS): máximo
+// 3 productos de CATÁLOGO NORMAL (sin vigencia) por negocio en plan
+// gratis — cupo independiente del de ofertas con vigencia (describe de
+// arriba). Sin mostrar costo ni ofrecer pago — solo bloquea.
+describe('Límite de catálogo del plan gratis (FREE_PLAN_MAX_CATALOG_PRODUCTS)', () => {
+  it('el 4to producto de catálogo se rechaza con 409, sin mencionar costo', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3']) {
+      const res = await crearProducto(vendor.accessToken, negocio.id, { name: nombre });
+      expect(res.id).toBeDefined();
+    }
+
+    const cuarto = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Plato 4', price: 8500 });
+
+    expect(cuarto.status).toBe(409);
+    expect(cuarto.body.detail ?? cuarto.body.title ?? '').not.toMatch(/\$|costo|precio|pago mensual/i);
+  });
+
+  it('una oferta con vigencia no cuenta contra el límite de catálogo', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await (async () => {
+      const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', ['Combo']);
+      return rows[0].id;
+    })();
+
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3']) {
+      await crearProducto(vendor.accessToken, negocio.id, { name: nombre });
+    }
+
+    const oferta = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+
+    expect(oferta.status).toBe(201);
+  });
+
+  it('un PATCH que quita la vigencia de un producto (lo convierte en catálogo normal) respeta el límite', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    const offerTypeId = await (async () => {
+      const { rows } = await pool.query('SELECT id FROM tipos_oferta WHERE nombre = $1', ['Combo']);
+      return rows[0].id;
+    })();
+
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3']) {
+      await crearProducto(vendor.accessToken, negocio.id, { name: nombre });
+    }
+    const oferta = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo', price: 12000, offerTypeId, validFrom: new Date().toISOString() });
+
+    // Quitar validFrom (mandar null) convierte "Combo" en un producto de
+    // catálogo normal — con los 3 ya ocupados, choca contra el límite.
+    const res = await request(app)
+      .patch(`/products/${oferta.body.id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Combo', price: 12000, validFrom: null });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('plan pago: sin límite de productos de catálogo', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+    await pool.query("UPDATE negocios SET plan = 'pago' WHERE id = $1", [negocio.id]);
+
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3', 'Plato 4', 'Plato 5']) {
+      const res = await crearProducto(vendor.accessToken, negocio.id, { name: nombre });
+      expect(res.id).toBeDefined();
+    }
+  });
+
+  it('borrar un producto de catálogo libera el cupo para uno nuevo', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+
+    const productos = [];
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3']) {
+      productos.push(await crearProducto(vendor.accessToken, negocio.id, { name: nombre }));
+    }
+
+    await request(app)
+      .delete(`/products/${productos[0].id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`);
+
+    const res = await request(app)
+      .post(`/businesses/${negocio.id}/products`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Plato nuevo', price: 8500 });
+
+    expect(res.status).toBe(201);
   });
 });
 

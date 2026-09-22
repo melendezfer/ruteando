@@ -13,6 +13,12 @@ const offerTypeInputSchema = z.object({
   icon: z.string().max(50).nullable().optional(),
   displayOrder: z.coerce.number().int().min(0).max(32767).optional(),
   active: z.boolean().optional(),
+  // Sin RF asociado, petición directa del usuario (ver CLAUDE.md) — mismo
+  // criterio que `active`: sin `.default()` a propósito, para que
+  // tiposOferta.service.js distinga "no lo mandó" (conservar en un
+  // PATCH) de "lo mandó explícito"; el default de creación (true) se
+  // aplica en el repositorio.
+  requiresBusinessSchedule: z.boolean().optional(),
 });
 
 module.exports = { offerTypeInputSchema };

@@ -12,6 +12,7 @@ function toApiOfferType(row) {
     icon: row.icono,
     displayOrder: row.orden_visualizacion,
     active: row.activo,
+    requiresBusinessSchedule: Boolean(row.requiere_horario_negocio),
   };
 }
 
@@ -48,6 +49,7 @@ async function crear(input) {
       icono: input.icon,
       ordenVisualizacion: input.displayOrder,
       activo: input.active,
+      requiereHorarioNegocio: input.requiresBusinessSchedule,
     });
     return toApiOfferType(tipo);
   } catch (err) {
@@ -76,6 +78,10 @@ async function actualizar(id, input) {
       ordenVisualizacion:
         input.displayOrder !== undefined ? input.displayOrder : tipo.orden_visualizacion,
       activo: input.active !== undefined ? input.active : tipo.activo,
+      requiereHorarioNegocio:
+        input.requiresBusinessSchedule !== undefined
+          ? input.requiresBusinessSchedule
+          : tipo.requiere_horario_negocio,
     });
     return toApiOfferType(actualizado);
   } catch (err) {

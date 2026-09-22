@@ -6,7 +6,7 @@ const negociosService = require('./negocios.service');
 const almacenamientoService = require('./almacenamiento.service');
 const { toApiProduct } = require('./business.mapper');
 const { NotFoundError, ValidationError, ConflictError } = require('../errors');
-const { FREE_PLAN_MAX_ACTIVE_OFFERS } = require('../config/constants');
+const { FREE_PLAN_MAX_ACTIVE_OFFERS, FREE_PLAN_MAX_CATALOG_PRODUCTS } = require('../config/constants');
 
 async function validarCategoria(categoryId) {
   if (categoryId == null) return;
@@ -47,6 +47,28 @@ async function validarLimiteOfertaGratis(negocio, { vigenciaInicio, excluirProdu
   }
 }
 
+/**
+ * Plan gratis: máximo FREE_PLAN_MAX_CATALOG_PRODUCTS productos de
+ * CATÁLOGO NORMAL (sin vigencia) por negocio a la vez — sin RF asociado,
+ * petición directa del usuario (ver CLAUDE.md, tarea aparte de
+ * requiere_horario_negocio/"Cerca de ti ahora"). Cupo independiente del
+ * de ofertas (validarLimiteOfertaGratis arriba): un producto con
+ * vigencia (`vigenciaInicio` presente) nunca lo ocupa. Sin mostrar
+ * costo ni ofrecer ningún flujo de pago en el mensaje (CLAUDE.md sección
+ * 15) — solo señala que el plan pago no tiene este límite.
+ */
+async function validarLimiteCatalogoGratis(negocio, { vigenciaInicio, excluirProductoId }) {
+  if (vigenciaInicio != null) return; // es una oferta, no ocupa el cupo de catálogo
+  if (negocio.plan !== 'gratis') return;
+
+  const total = await productosRepo.contarProductosCatalogo(negocio.id, { excluirProductoId });
+  if (total >= FREE_PLAN_MAX_CATALOG_PRODUCTS) {
+    throw new ConflictError(
+      `Disponible en el plan pago — el plan gratis permite máximo ${FREE_PLAN_MAX_CATALOG_PRODUCTS} productos en el catálogo (sin contar ofertas con vigencia)`,
+    );
+  }
+}
+
 async function obtenerCrudoOFallar(id) {
   const producto = await productosRepo.buscarPorId(id);
   if (!producto) {
@@ -71,6 +93,7 @@ async function crear(usuarioId, negocioId, input) {
   await validarCategoria(input.categoryId);
   await validarTipoOferta(input.offerTypeId);
   await validarLimiteOfertaGratis(negocio, { vigenciaInicio: input.validFrom });
+  await validarLimiteCatalogoGratis(negocio, { vigenciaInicio: input.validFrom });
 
   const producto = await productosRepo.crear({
     negocioId,
@@ -113,6 +136,7 @@ async function actualizar(usuarioId, id, input) {
   const vigenciaInicio = input.validFrom !== undefined ? input.validFrom : producto.vigencia_inicio;
 
   await validarLimiteOfertaGratis(negocio, { vigenciaInicio, excluirProductoId: id });
+  await validarLimiteCatalogoGratis(negocio, { vigenciaInicio, excluirProductoId: id });
 
   const actualizado = await productosRepo.actualizar(id, {
     categoriaId: input.categoryId !== undefined ? input.categoryId : producto.categoria_id,

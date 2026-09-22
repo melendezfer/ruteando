@@ -42,6 +42,7 @@ const EMPTY_DETAILS: BusinessDetailsValues = {
   categoryId: "",
   contactPhone: "",
   ownDelivery: false,
+  seatingAvailable: false,
 };
 const EMPTY_LOCATION: BusinessLocationValues = {
   type: "fixed",
@@ -146,6 +147,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
       description: values.description.trim() ? values.description.trim() : undefined,
       contactPhone: values.contactPhone.trim() ? values.contactPhone.trim() : undefined,
       ownDelivery: values.ownDelivery,
+      seatingAvailable: values.seatingAvailable,
     };
 
     const { data, error: apiError, response } = businessId

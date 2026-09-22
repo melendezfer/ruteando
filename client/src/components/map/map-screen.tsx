@@ -16,6 +16,7 @@ import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
 import { DiscoveryBanner } from "@/components/map/discovery-banner";
 import { FilteredListSheet, type DiscoveryListFilter } from "@/components/map/filtered-list-sheet";
+import type { DiscoveryOffer } from "@/components/discovery/offer-row";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
@@ -240,6 +241,20 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     geolocation,
   });
 
+  // "Cerca de ti ahora" (sin RF asociado, petición directa del usuario —
+  // ver CLAUDE.md sección 54): mismo criterio que "Disponibles ahora"
+  // arriba — misma fuente de datos, su propio radio fijo, independiente
+  // de lo que el usuario esté buscando en MapSearchSheet. Alcanzable
+  // como pestaña dentro de la hoja inferior unificada
+  // (FilteredListSheet), no como su propio carrusel en el banner —ese
+  // ya quedó reducido a solo "Disponibles ahora" (retroalimentación
+  // sobre el redediseño de navegación global, sección 54).
+  const { businesses: activeOffersRaw, search: searchActiveOffers } = useBusinessSearch({
+    limit: DISCOVERY_BANNER_LIMIT,
+    radiusKm: DEFAULT_MAP_RADIUS_KM,
+    geolocation,
+  });
+
   const businesses = useMemo<BusinessPin[]>(() => {
     const base = (rawBusinesses ?? []).filter(
       (business): business is BusinessPin =>
@@ -271,6 +286,35 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     );
     return sortAvailableNow(withCoords);
   }, [openNowRaw]);
+
+  // "Cerca de ti ahora": un producto vigente de cada negocio se vuelve
+  // una tarjeta propia (no una fila de negocio), así que acá se
+  // APLANA — un negocio con 2 ofertas vigentes produce 2 entradas. `id`
+  // compuesto (`${businessId}-${índice}`), nunca un id persistente del
+  // backend. Ya vienen ordenados por distancia (misma consulta que
+  // discoveryBusinesses) — dentro de cada negocio, por vigencia
+  // ascendente (ver negocios.repository.js#lateralOfertasVigentes).
+  const discoveryOffers = useMemo<DiscoveryOffer[]>(() => {
+    const withCoords = (activeOffersRaw ?? []).filter(
+      (business): business is BusinessPin =>
+        typeof business.latitude === "number" && typeof business.longitude === "number",
+    );
+    const offers: DiscoveryOffer[] = [];
+    for (const business of withCoords) {
+      if (!business.id) continue;
+      (business.activeOffers ?? []).forEach((offer, index) => {
+        if (!offer.name) return;
+        offers.push({
+          id: `${business.id}-${index}`,
+          business,
+          name: offer.name,
+          offerTypeId: offer.offerTypeId ?? null,
+          validUntil: offer.validUntil ?? null,
+        });
+      });
+    }
+    return offers;
+  }, [activeOffersRaw]);
 
   // Tarjeta activa del banner: lo último que el usuario deslizó/tocó, o
   // el primer negocio "Disponibles ahora" por default — sin esto, el
@@ -344,12 +388,13 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         runSearch();
         loadZones();
         searchOpenNow({ openNow: true });
+        searchActiveOffers({ hasActiveOffer: true });
       }
     });
     return () => {
       ignore = true;
     };
-  }, [geolocation.status, runSearch, loadZones, searchOpenNow]);
+  }, [geolocation.status, runSearch, loadZones, searchOpenNow, searchActiveOffers]);
 
   /**
    * "Ver en el mapa" (Fase 4, sección 49) — pide el perfil completo en
@@ -659,6 +704,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           <FilteredListSheet
             filter={listFilter}
             availableNow={discoveryBusinesses}
+            activeOffers={discoveryOffers}
             categoryTypeById={categoryTypeById}
             categoryNameById={categoryNameById}
             offerTypes={offerTypes}

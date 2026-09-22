@@ -12,7 +12,7 @@ async function existePorId(id) {
  */
 async function listarActivos() {
   const { rows } = await pool.query(
-    `SELECT id, nombre, icono, orden_visualizacion, activo
+    `SELECT id, nombre, icono, orden_visualizacion, activo, requiere_horario_negocio
      FROM tipos_oferta WHERE activo = true
      ORDER BY orden_visualizacion, nombre`,
   );
@@ -25,7 +25,7 @@ async function listarActivos() {
  */
 async function listarTodos() {
   const { rows } = await pool.query(
-    `SELECT id, nombre, icono, orden_visualizacion, activo
+    `SELECT id, nombre, icono, orden_visualizacion, activo, requiere_horario_negocio
      FROM tipos_oferta ORDER BY orden_visualizacion, nombre`,
   );
   return rows;
@@ -36,12 +36,12 @@ async function buscarPorId(id) {
   return rows[0] || null;
 }
 
-async function crear({ nombre, icono, ordenVisualizacion, activo }) {
+async function crear({ nombre, icono, ordenVisualizacion, activo, requiereHorarioNegocio }) {
   const { rows } = await pool.query(
-    `INSERT INTO tipos_oferta (nombre, icono, orden_visualizacion, activo)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO tipos_oferta (nombre, icono, orden_visualizacion, activo, requiere_horario_negocio)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [nombre, icono ?? null, ordenVisualizacion ?? 0, activo ?? true],
+    [nombre, icono ?? null, ordenVisualizacion ?? 0, activo ?? true, requiereHorarioNegocio ?? true],
   );
   return rows[0];
 }
@@ -53,13 +53,13 @@ async function crear({ nombre, icono, ordenVisualizacion, activo }) {
  * tiposOferta.service.js), así que esta función siempre recibe los 4
  * valores finales, nunca undefined.
  */
-async function actualizar(id, { nombre, icono, ordenVisualizacion, activo }) {
+async function actualizar(id, { nombre, icono, ordenVisualizacion, activo, requiereHorarioNegocio }) {
   const { rows } = await pool.query(
     `UPDATE tipos_oferta
-     SET nombre = $2, icono = $3, orden_visualizacion = $4, activo = $5
+     SET nombre = $2, icono = $3, orden_visualizacion = $4, activo = $5, requiere_horario_negocio = $6
      WHERE id = $1
      RETURNING *`,
-    [id, nombre, icono ?? null, ordenVisualizacion, activo],
+    [id, nombre, icono ?? null, ordenVisualizacion, activo, requiereHorarioNegocio],
   );
   return rows[0];
 }

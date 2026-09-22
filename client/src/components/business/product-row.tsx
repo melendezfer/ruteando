@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CaretDown, CaretUp, PencilSimple, Tag, Trash } from "@phosphor-icons/react/dist/ssr";
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
+import { formatRelativeTimeShort } from "@/lib/format/relative-time";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { uploadProductPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
 import { deleteProduct } from "@/lib/api/products";
@@ -122,6 +123,12 @@ export function ProductRow({
             <span className="font-sans text-body-sm text-text-muted">
               {product.price !== undefined ? formatCOP(product.price) : ""}
             </span>
+            {product.availabilityUpdatedAt && (
+              <span className="font-sans text-caption text-text-muted">
+                {product.available === false ? "No disponible" : "Disponible"}{" "}
+                {formatRelativeTimeShort(product.availabilityUpdatedAt)}
+              </span>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {product.available === false && (

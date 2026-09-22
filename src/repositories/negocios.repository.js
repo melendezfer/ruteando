@@ -36,10 +36,11 @@ async function crear({
   entregaPropia,
   higieneAutodeclarada,
   movilidad,
+  asientosDisponibles,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto, entrega_propia, higiene_autodeclarada, movilidad)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO negocios (usuario_id, categoria_id, nombre, descripcion, telefono_contacto, entrega_propia, higiene_autodeclarada, movilidad, asientos_disponibles)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       usuarioId,
@@ -50,6 +51,7 @@ async function crear({
       entregaPropia,
       higieneAutodeclarada,
       movilidad,
+      asientosDisponibles,
     ],
   );
   return rows[0];
@@ -79,6 +81,7 @@ async function actualizar(
     entregaPropia,
     higieneAutodeclarada,
     movilidad,
+    asientosDisponibles,
   },
 ) {
   const { rows } = await pool.query(
@@ -88,6 +91,7 @@ async function actualizar(
          entrega_propia = $6,
          higiene_autodeclarada = $7,
          movilidad = $8,
+         asientos_disponibles = $9,
          fecha_actualizacion = now()
      WHERE id = $1
      RETURNING *`,
@@ -100,6 +104,7 @@ async function actualizar(
       entregaPropia,
       higieneAutodeclarada,
       movilidad,
+      asientosDisponibles,
     ],
   );
   return rows[0];
@@ -247,6 +252,32 @@ function lateralDisponibilidadFresca(idxFrescura) {
 }
 
 /**
+ * Condición SQL compartida ("el negocio está dentro de su horario
+ * declarado ahora mismo") — extraída del filtro `openNow` original para
+ * reusarla también en `condicionOfertaVigente` (sin RF asociado,
+ * petición directa del usuario — ver CLAUDE.md, migración
+ * tipos-oferta-requiere-horario-negocio): un tipo de oferta con
+ * `requiere_horario_negocio = true` (menú/promoción/combo) solo cuenta
+ * como vigente si, además de sus fechas, el negocio está dentro de su
+ * horario ahora mismo — mismo turno nocturno cruzando medianoche que ya
+ * maneja el filtro `openNow` (revisa la fila de HOY y de AYER).
+ * `idxHorario` ya trae los índices de los placeholders ligados por el
+ * caller (`agregarFiltrosComunes`, una sola vez por consulta, reusados
+ * entre el filtro `openNow` y `condicionOfertaVigente` sin volver a
+ * ligar los mismos tres valores dos veces).
+ */
+function condicionHorarioSQL({ pHoy, pAyer, pAhora }, negocioAlias = 'n') {
+  return `EXISTS (
+      SELECT 1 FROM horarios h
+      WHERE h.negocio_id = ${negocioAlias}.id AND h.cerrado = false AND (
+           (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura <= h.hora_cierre AND $${pAhora}::time BETWEEN h.hora_apertura AND h.hora_cierre)
+        OR (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time >= h.hora_apertura)
+        OR (h.dia = $${pAyer}::dia_semana AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time <= h.hora_cierre)
+      )
+    )`;
+}
+
+/**
  * Filtros combinables compartidos por listar() y cercanos() (RF-010/011):
  * categoría, texto libre (nombre del negocio o de alguno de sus
  * productos), rango de precio (existe al menos un producto disponible en
@@ -288,11 +319,12 @@ function lateralDisponibilidadFresca(idxFrescura) {
 function agregarFiltrosComunes(
   clausulas,
   params,
-  { categoryId, q, priceMin, priceMax, openNow, offerTypeId },
+  { categoryId, q, priceMin, priceMax, openNow, offerTypeId, hasActiveOffer },
 ) {
   let idxQ = null;
   let idxCategoriasAlias = null;
   let idxOfertaTipo = null;
+  let idxHorario = null;
 
   if (categoryId != null) {
     params.push(categoryId);
@@ -329,7 +361,14 @@ function agregarFiltrosComunes(
     clausulas.push(`EXISTS (SELECT 1 FROM productos p WHERE ${condiciones.join(' AND ')})`);
   }
 
-  if (openNow) {
+  // idxHorario se calcula una sola vez, apenas hace falta (openNow y/o
+  // offerTypeId y/o hasActiveOffer pueden convivir en la misma consulta)
+  // — condicionOfertaVigente() reusa exactamente los mismos tres
+  // placeholders ya ligados acá, tanto en esta cláusula WHERE como más
+  // tarde en columnaOfertaCoincide()/lateralOfertasVigentes() (ver
+  // listar()/construirConsultaCercanos()), sin volver a ligar los mismos
+  // valores dos veces.
+  if (openNow || offerTypeId != null || hasActiveOffer) {
     // Misma regla que disponibilidad.service.js#estaAbiertoAhora, en SQL:
     // un turno nocturno (hora_apertura > hora_cierre) queda guardado bajo
     // el día en que empieza, así que hace falta revisar también la fila
@@ -337,38 +376,66 @@ function agregarFiltrosComunes(
     const { hoyDb, horaActual } = momentoActualBogota();
     const ayerDb = diaAnterior(hoyDb);
     params.push(hoyDb, ayerDb, horaActual);
-    const [pHoy, pAyer, pAhora] = [params.length - 2, params.length - 1, params.length];
-    clausulas.push(`EXISTS (
-      SELECT 1 FROM horarios h
-      WHERE h.negocio_id = n.id AND h.cerrado = false AND (
-           (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura <= h.hora_cierre AND $${pAhora}::time BETWEEN h.hora_apertura AND h.hora_cierre)
-        OR (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time >= h.hora_apertura)
-        OR (h.dia = $${pAyer}::dia_semana AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time <= h.hora_cierre)
-      )
-    )`);
+    idxHorario = { pHoy: params.length - 2, pAyer: params.length - 1, pAhora: params.length };
+  }
+
+  if (openNow) {
+    clausulas.push(condicionHorarioSQL(idxHorario));
   }
 
   if (offerTypeId != null) {
     params.push(offerTypeId);
     idxOfertaTipo = params.length;
-    clausulas.push(`EXISTS (${condicionOfertaVigente(idxOfertaTipo)})`);
+    clausulas.push(`EXISTS (${condicionOfertaVigente({ idxOfertaTipo, idxHorario })})`);
   }
 
-  return { idxQ, idxCategoriasAlias, idxOfertaTipo };
+  if (hasActiveOffer) {
+    clausulas.push(`EXISTS (${condicionOfertaVigente({ idxOfertaTipo: null, idxHorario })})`);
+  }
+
+  return { idxQ, idxCategoriasAlias, idxOfertaTipo, idxHorario };
 }
 
 /**
- * Condición compartida por el filtro WHERE (agregarFiltrosComunes) y la
- * columna `oferta_coincide` (columnaOfertaCoincide) — un solo lugar que
- * define qué significa "hay un producto vigente de este tipo de oferta",
- * para que ambos nunca puedan desalinearse entre sí.
+ * Condición compartida por el filtro WHERE (agregarFiltrosComunes), la
+ * columna `oferta_coincide` (columnaOfertaCoincide) y el LATERAL de
+ * `activeOffers` (lateralOfertasVigentes) — un solo lugar que define qué
+ * significa "hay un producto vigente" (de un tipo de oferta puntual, con
+ * `idxOfertaTipo`, o de cualquier tipo, con `idxOfertaTipo: null` —
+ * `hasActiveOffer`, sin RF asociado), para que ninguno de los tres pueda
+ * desalinearse de los otros.
+ *
+ * `t.requiere_horario_negocio IS NOT TRUE` (no `= false`) trata un
+ * producto con vigencia pero SIN tipo de oferta elegido (LEFT JOIN da
+ * `t.requiere_horario_negocio = NULL`) como "sin cruce de horario" — no
+ * hay ninguna regla de horario que aplicarle si no eligió un tipo.
  */
-function condicionOfertaVigente(idxOfertaTipo) {
-  return `SELECT 1 FROM productos p
+function fromWhereOfertaVigente({ idxOfertaTipo = null, idxHorario }) {
+  const filtroTipo = idxOfertaTipo != null ? `AND p.tipo_oferta_id = $${idxOfertaTipo}` : '';
+  // Con un tipo puntual (offerTypeId), se conserva el criterio original
+  // sin cambios: vigencia_inicio NULL también cuenta (un producto
+  // categorizado con ese tipo, sin fecha de inicio propia, sigue siendo
+  // un resultado válido para ese filtro). Sin tipo puntual
+  // (hasActiveOffer, sin RF asociado — "Cerca de ti ahora"),
+  // vigencia_inicio NOT NULL es obligatorio: es la señal real de "esto
+  // es una oferta" (ver migración productos-tipo-oferta) — un producto
+  // de catálogo normal, sin ninguna vigencia declarada, no debería
+  // aparecer ahí aunque tenga un tipo de oferta elegido.
+  const condicionInicio =
+    idxOfertaTipo != null
+      ? '(p.vigencia_inicio IS NULL OR p.vigencia_inicio <= now())'
+      : '(p.vigencia_inicio IS NOT NULL AND p.vigencia_inicio <= now())';
+  return `FROM productos p
+     LEFT JOIN tipos_oferta t ON t.id = p.tipo_oferta_id
      WHERE p.negocio_id = n.id AND p.disponible
-       AND p.tipo_oferta_id = $${idxOfertaTipo}
-       AND (p.vigencia_inicio IS NULL OR p.vigencia_inicio <= now())
-       AND (p.vigencia_fin IS NULL OR p.vigencia_fin > now())`;
+       AND ${condicionInicio}
+       AND (p.vigencia_fin IS NULL OR p.vigencia_fin > now())
+       ${filtroTipo}
+       AND (t.requiere_horario_negocio IS NOT TRUE OR ${condicionHorarioSQL(idxHorario)})`;
+}
+
+function condicionOfertaVigente(opts) {
+  return `SELECT 1 ${fromWhereOfertaVigente(opts)}`;
 }
 
 /**
@@ -443,9 +510,36 @@ function columnaCategoriaCoincide(idxQ, idxCategoriasAlias) {
  * la misma condición real, nunca a una constante que podría desalinearse
  * si esa condición cambia.
  */
-function columnaOfertaCoincide(idxOfertaTipo) {
+function columnaOfertaCoincide(idxOfertaTipo, idxHorario) {
   if (idxOfertaTipo == null) return 'NULL';
-  return `(EXISTS (${condicionOfertaVigente(idxOfertaTipo)}))`;
+  return `(EXISTS (${condicionOfertaVigente({ idxOfertaTipo, idxHorario })}))`;
+}
+
+/**
+ * LEFT JOIN LATERAL compartido por listar() y cercanos() — `activeOffers`
+ * (sin RF asociado, petición directa del usuario: banner "Cerca de ti
+ * ahora"), solo armado cuando `hasActiveOffer` está activo (mismo
+ * criterio que lateralProductosCoincidentes con `idxQ`: sin el filtro, ni
+ * siquiera se arma el JOIN). Reusa exactamente `condicionOfertaVigente`
+ * (con `idxOfertaTipo: null`, cualquier tipo) para no poder desalinearse
+ * de qué cuenta como "vigente" en el WHERE que ya exige lo mismo — los
+ * productos que este LATERAL trae son siempre un subconjunto no vacío
+ * (el propio WHERE ya garantiza al menos uno).
+ */
+function lateralOfertasVigentes(hasActiveOffer, idxHorario) {
+  if (!hasActiveOffer) return { join: '', columna: 'NULL' };
+  return {
+    join: `LEFT JOIN LATERAL (
+       SELECT json_agg(
+         json_build_object(
+           'nombre', p.nombre, 'precio', p.precio, 'disponible', p.disponible,
+           'tipo_oferta_id', p.tipo_oferta_id, 'vigencia_fin', p.vigencia_fin
+         ) ORDER BY p.vigencia_fin NULLS LAST, p.nombre
+       ) AS ofertas
+       ${fromWhereOfertaVigente({ idxOfertaTipo: null, idxHorario })}
+     ) ofv ON true`,
+    columna: 'ofv.ofertas',
+  };
 }
 
 /**
@@ -486,7 +580,17 @@ async function listarPorUsuario({ usuarioId, cursor, limit }) {
  * primero) con `id` como desempate — paginación keyset, no OFFSET (ver
  * src/utils/cursor.js).
  */
-async function listar({ categoryId, q, priceMin, priceMax, openNow, offerTypeId, cursor, limit }) {
+async function listar({
+  categoryId,
+  q,
+  priceMin,
+  priceMax,
+  openNow,
+  offerTypeId,
+  hasActiveOffer,
+  cursor,
+  limit,
+}) {
   // telefono_verificado = true: verificación de teléfono de vendedores
   // (ver CLAUDE.md) — un negocio 'activo' (aprobado por un administrador)
   // igual no aparece en búsquedas públicas hasta que su dueño verifique
@@ -499,15 +603,13 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, offerTypeId,
   const params = [AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
   const idxFrescura = params.length;
 
-  const { idxQ, idxCategoriasAlias, idxOfertaTipo } = agregarFiltrosComunes(clausulas, params, {
-    categoryId,
-    q,
-    priceMin,
-    priceMax,
-    openNow,
-    offerTypeId,
-  });
+  const { idxQ, idxCategoriasAlias, idxOfertaTipo, idxHorario } = agregarFiltrosComunes(
+    clausulas,
+    params,
+    { categoryId, q, priceMin, priceMax, openNow, offerTypeId, hasActiveOffer },
+  );
   const productosCoincidentes = lateralProductosCoincidentes(idxQ);
+  const ofertasVigentes = lateralOfertasVigentes(hasActiveOffer, idxHorario);
 
   if (cursor) {
     params.push(cursor.fechaCreacion, cursor.id);
@@ -529,8 +631,9 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, offerTypeId,
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
-            ${columnaOfertaCoincide(idxOfertaTipo)} AS oferta_coincide,
-            ${productosCoincidentes.columna} AS productos_coincidentes
+            ${columnaOfertaCoincide(idxOfertaTipo, idxHorario)} AS oferta_coincide,
+            ${productosCoincidentes.columna} AS productos_coincidentes,
+            ${ofertasVigentes.columna} AS ofertas_vigentes
      FROM negocios n
      JOIN categorias c ON c.id = n.categoria_id
      LEFT JOIN LATERAL (
@@ -540,6 +643,7 @@ async function listar({ categoryId, q, priceMin, priceMax, openNow, offerTypeId,
      ) ub ON true
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
+     ${ofertasVigentes.join}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY n.fecha_creacion DESC, n.id DESC
      LIMIT $${params.length}`,
@@ -573,6 +677,7 @@ function construirConsultaCercanos({
   priceMax,
   openNow,
   offerTypeId,
+  hasActiveOffer,
   cursor,
   limit,
 }) {
@@ -585,15 +690,13 @@ function construirConsultaCercanos({
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
 
-  const { idxQ, idxCategoriasAlias, idxOfertaTipo } = agregarFiltrosComunes(clausulas, params, {
-    categoryId,
-    q,
-    priceMin,
-    priceMax,
-    openNow,
-    offerTypeId,
-  });
+  const { idxQ, idxCategoriasAlias, idxOfertaTipo, idxHorario } = agregarFiltrosComunes(
+    clausulas,
+    params,
+    { categoryId, q, priceMin, priceMax, openNow, offerTypeId, hasActiveOffer },
+  );
   const productosCoincidentes = lateralProductosCoincidentes(idxQ);
+  const ofertasVigentes = lateralOfertasVigentes(hasActiveOffer, idxHorario);
 
   if (cursor) {
     params.push(cursor.distanceMeters, cursor.id);
@@ -614,14 +717,16 @@ function construirConsultaCercanos({
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
-            ${columnaOfertaCoincide(idxOfertaTipo)} AS oferta_coincide,
-            ${productosCoincidentes.columna} AS productos_coincidentes
+            ${columnaOfertaCoincide(idxOfertaTipo, idxHorario)} AS oferta_coincide,
+            ${productosCoincidentes.columna} AS productos_coincidentes,
+            ${ofertasVigentes.columna} AS ofertas_vigentes
      FROM negocios n
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
      JOIN categorias c ON c.id = n.categoria_id
      CROSS JOIN objetivo
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
+     ${ofertasVigentes.join}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY u.punto <-> objetivo.punto, n.id
      LIMIT $${params.length}`;

@@ -13,7 +13,7 @@ import { CalendarStar, ForkKnife, Package, Tag } from "@phosphor-icons/react/dis
  * forma de que el frontend valide contra el catálogo completo de
  * Phosphor sin una dependencia nueva solo para esto.
  */
-const OFFER_TYPE_ICON_BY_NAME: Record<string, Icon> = {
+export const OFFER_TYPE_ICON_BY_NAME: Record<string, Icon> = {
   "fork-knife": ForkKnife,
   tag: Tag,
   package: Package,
@@ -22,6 +22,15 @@ const OFFER_TYPE_ICON_BY_NAME: Record<string, Icon> = {
 
 export const DEFAULT_OFFER_TYPE_ICON: Icon = Tag;
 
+/**
+ * Para un lookup dentro de un callback (ej. `.map()`) — para el cuerpo
+ * de un componente en sí, usar el lookup directo contra
+ * `OFFER_TYPE_ICON_BY_NAME`/`DEFAULT_OFFER_TYPE_ICON` (ver
+ * catalog-icons.tsx#resolveCatalogIcon, mismo criterio exacto): la regla
+ * `react-hooks/static-components` marca como error asignar a una
+ * variable con mayúscula inicial, usada luego como tag JSX, el
+ * resultado de una LLAMADA a función en el cuerpo de un componente.
+ */
 export function resolveOfferTypeIcon(iconName: string | null | undefined): Icon {
   if (!iconName) return DEFAULT_OFFER_TYPE_ICON;
   return OFFER_TYPE_ICON_BY_NAME[iconName] ?? DEFAULT_OFFER_TYPE_ICON;

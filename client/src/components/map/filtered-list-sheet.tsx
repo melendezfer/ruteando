@@ -11,6 +11,7 @@ import type { CatalogType } from "@/lib/catalog/catalog-label";
 import type { ConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
+import { OfferRow, type DiscoveryOffer } from "@/components/discovery/offer-row";
 import { Skeleton } from "@/components/discovery/skeleton";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
@@ -18,6 +19,7 @@ type OfferType = components["schemas"]["OfferType"];
 
 export type DiscoveryListFilter =
   | { type: "available_now" }
+  | { type: "active_offers" }
   | { type: "category"; categoryId: number }
   | { type: "offerType"; offerTypeId: number }
   | { type: "favorites" };
@@ -44,6 +46,12 @@ interface FilteredListSheetProps {
   filter: DiscoveryListFilter;
   /** "Disponibles ahora" ya cargado por map-screen.tsx para el carrusel de arriba — se reusa acá tal cual, sin un fetch aparte. */
   availableNow: BusinessPin[];
+  /**
+   * "Cerca de ti ahora" (sin RF asociado, petición directa del usuario
+   * — ver CLAUDE.md sección 54), ya cargado por map-screen.tsx (mismo
+   * criterio que `availableNow`: sin fetch propio acá).
+   */
+  activeOffers: DiscoveryOffer[];
   categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
   offerTypes: OfferType[];
@@ -63,14 +71,20 @@ interface FilteredListSheetProps {
  * de ubicación, se queda visible arriba.
  *
  * Navegación horizontal entre familias (pestañas con ícono, arriba de la
- * lista): "Disponibles ahora" (si hay), "Favoritos" (siempre), y la
- * categoría/tipo de oferta específico con el que se abrió la hoja (si
- * aplica) — tocar una pestaña distinta cambia la lista de abajo sin
- * cerrar ni reabrir la hoja. "Disponibles ahora" reusa los datos ya
- * cargados (`availableNow`, sin fetch); "Favoritos" siempre trae TODOS
- * los favoritos (no solo los abiertos ahora — decisión ya tomada,
- * distinta a la del carrusel de arriba), y categoría/oferta piden
- * `GET /businesses/nearby` o `/businesses` según haya geolocalización.
+ * lista): "Disponibles ahora" (si hay), "Cerca de ti ahora" (si hay —
+ * ofertas con vigencia, sin RF asociado, ver CLAUDE.md sección 54),
+ * "Favoritos" (siempre), y la categoría/tipo de oferta específico con el
+ * que se abrió la hoja (si aplica) — tocar una pestaña distinta cambia
+ * la lista de abajo sin cerrar ni reabrir la hoja. "Disponibles ahora" y
+ * "Cerca de ti ahora" reusan datos ya cargados por map-screen.tsx
+ * (`availableNow`/`activeOffers`, sin fetch propio); "Favoritos" siempre
+ * trae TODOS los favoritos (no solo los abiertos ahora — decisión ya
+ * tomada, distinta a la del carrusel de arriba), y categoría/oferta
+ * piden `GET /businesses/nearby` o `/businesses` según haya
+ * geolocalización. "Cerca de ti ahora" muestra `OfferRow` (la oferta
+ * como protagonista — plato/promoción/evento, negocio, distancia,
+ * vigencia), no `DiscoveryRow` — es la única pestaña con una fila de
+ * forma distinta.
  *
  * Tocar una fila navega al PERFIL COMPLETO (`/negocios/{id}`) — a
  * diferencia del carrusel de arriba y de los resultados de
@@ -82,6 +96,7 @@ interface FilteredListSheetProps {
 export function FilteredListSheet({
   filter,
   availableNow,
+  activeOffers,
   categoryTypeById,
   categoryNameById,
   offerTypes,
@@ -106,20 +121,23 @@ export function FilteredListSheet({
     setActiveFilter(filter);
   }
 
-  // Pestañas disponibles: "Disponibles ahora" (si hay datos) + "Favoritos"
-  // (siempre) + la categoría/oferta específica con la que se abrió la
-  // hoja, si no es ya una de las dos fijas.
+  // Pestañas disponibles: "Disponibles ahora" (si hay datos) + "Cerca de
+  // ti ahora" (si hay datos, sin RF asociado — ver CLAUDE.md sección 54)
+  // + "Favoritos" (siempre) + la categoría/oferta específica con la que
+  // se abrió la hoja, si no es ya una de las fijas.
   const tabs = useMemo<DiscoveryListFilter[]>(() => {
     const list: DiscoveryListFilter[] = [];
     if (availableNow.length > 0) list.push({ type: "available_now" });
+    if (activeOffers.length > 0) list.push({ type: "active_offers" });
     list.push({ type: "favorites" });
     if (filter.type === "category" || filter.type === "offerType") list.push(filter);
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availableNow.length, filter.type, filter.type === "category" ? filter.categoryId : null, filter.type === "offerType" ? filter.offerTypeId : null]);
+  }, [availableNow.length, activeOffers.length, filter.type, filter.type === "category" ? filter.categoryId : null, filter.type === "offerType" ? filter.offerTypeId : null]);
 
   function tabLabel(tab: DiscoveryListFilter): string {
     if (tab.type === "available_now") return "Disponibles ahora";
+    if (tab.type === "active_offers") return "Cerca de ti ahora";
     if (tab.type === "favorites") return "Favoritos";
     if (tab.type === "category") return categoryNameById.get(tab.categoryId) ?? "Categoría";
     return offerTypes.find((t) => t.id === tab.offerTypeId)?.name ?? "Oferta";
@@ -128,9 +146,23 @@ export function FilteredListSheet({
   function tabIcon(tab: DiscoveryListFilter): Icon {
     if (tab.type === "available_now") return CheckCircle;
     if (tab.type === "favorites") return Heart;
-    if (tab.type === "category") return resolveCatalogIcon(categoryTypeById.get(tab.categoryId));
-    return Tag;
+    // "active_offers" también cae en Tag — mismo ícono genérico ya
+    // usado para "offerType" (un tipo de oferta puntual), consistente
+    // con el resto de las pestañas de oferta.
+    return tab.type === "category" ? resolveCatalogIcon(categoryTypeById.get(tab.categoryId)) : Tag;
   }
+
+  // Ícono/nombre del tipo de oferta por id (sin RF asociado — ver
+  // CLAUDE.md sección 54), solo para la pestaña "Cerca de ti ahora":
+  // cada `OfferRow` necesita resolver su propio tipo, y un `.find()`
+  // dentro de un `.map()` por cada oferta sería O(n·m) sin necesidad.
+  const offerTypeById = useMemo(() => {
+    const map = new Map<number, OfferType>();
+    offerTypes.forEach((type) => {
+      if (type.id !== undefined) map.set(type.id, type);
+    });
+    return map;
+  }, [offerTypes]);
 
   const activeFilterKey = filterKey(activeFilter);
 
@@ -144,6 +176,11 @@ export function FilteredListSheet({
         setBusinesses(availableNow);
         return;
       }
+
+      // "Cerca de ti ahora" — mismo criterio, `activeOffers` ya viene
+      // cargado por map-screen.tsx (prop, no `businesses`): no hay nada
+      // que hacer acá, el JSX de abajo lee la prop directo.
+      if (activeFilter.type === "active_offers") return;
 
       setBusinesses(null);
 
@@ -222,33 +259,54 @@ export function FilteredListSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {businesses === null && (
-            <div className="flex flex-col gap-3 p-4">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          )}
+          {activeFilter.type === "active_offers" ? (
+            activeOffers.length === 0 ? (
+              <p className="px-4 py-8 text-center font-sans text-body-sm text-text-muted">
+                No encontramos ofertas cerca.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 p-3">
+                {activeOffers.map((offer) => (
+                  <OfferRow
+                    key={offer.id}
+                    offer={offer}
+                    offerType={offer.offerTypeId != null ? (offerTypeById.get(offer.offerTypeId) ?? null) : null}
+                    onOpenDetail={(selected) => handleOpenProfile(selected.business)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            <>
+              {businesses === null && (
+                <div className="flex flex-col gap-3 p-4">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              )}
 
-          {businesses !== null && businesses.length === 0 && (
-            <p className="px-4 py-8 text-center font-sans text-body-sm text-text-muted">
-              No encontramos negocios que coincidan.
-            </p>
-          )}
+              {businesses !== null && businesses.length === 0 && (
+                <p className="px-4 py-8 text-center font-sans text-body-sm text-text-muted">
+                  No encontramos negocios que coincidan.
+                </p>
+              )}
 
-          {businesses !== null && businesses.length > 0 && (
-            <div className="flex flex-col divide-y divide-border">
-              {businesses.map((business) => (
-                <DiscoveryRow
-                  key={business.id}
-                  business={business}
-                  catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
-                  categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
-                  onOpenDetail={handleOpenProfile}
-                  onViewOnMap={onViewOnMap}
-                />
-              ))}
-            </div>
+              {businesses !== null && businesses.length > 0 && (
+                <div className="flex flex-col divide-y divide-border">
+                  {businesses.map((business) => (
+                    <DiscoveryRow
+                      key={business.id}
+                      business={business}
+                      catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
+                      categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
+                      onOpenDetail={handleOpenProfile}
+                      onViewOnMap={onViewOnMap}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

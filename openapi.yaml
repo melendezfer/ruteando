@@ -116,6 +116,15 @@ components:
         de este tipo de oferta que esté vigente ahora mismo (ya empezó,
         no venció, y está disponible) — ver Business.matchedOfferType.
       schema: { type: integer }
+    HasActiveOfferFilter:
+      name: hasActiveOffer
+      in: query
+      description: >-
+        "Cerca de ti ahora" (sin RF asociado, petición directa del
+        usuario — ver CLAUDE.md). Igual que `offerTypeId`, pero sin fijar
+        un tipo — solo negocios con al menos un producto CON vigencia
+        activa (de cualquier tipo) ahora mismo — ver Business.activeOffers.
+      schema: { type: boolean }
     Limit:
       name: limit
       in: query
@@ -212,6 +221,20 @@ components:
             con catálogos compartidos que ya tienen productos apuntando
             a ellos. GET /offer-types (público) solo lista los activos;
             GET /admin/offer-types lista también los inactivos.
+        requiresBusinessSchedule:
+          type: boolean
+          description: >-
+            Sin RF asociado, petición directa del usuario (ver CLAUDE.md):
+            si `true`, una oferta de este tipo solo cuenta como vigente
+            (para `offerTypeId`/`matchedOfferType`/`hasActiveOffer`)
+            cuando además el negocio está dentro de su horario declarado
+            ahora mismo — un menú de almuerzo no debería aparecer fuera
+            del horario en que se vende, aunque su `validUntil` siga
+            lejos. `false` (ej. 'Evento') deja la oferta vigente solo
+            según `validFrom`/`validUntil`, sin cruzar contra el horario
+            — un evento no está atado a cuándo el negocio abre para
+            vender su catálogo normal. Default `true` en creación (los 4
+            tipos de fábrica: solo 'Evento' se sembró en `false`).
 
     OfferTypeInput:
       type: object
@@ -226,6 +249,11 @@ components:
         active:
           type: boolean
           description: Default true en creación; un PATCH que lo omite conserva el valor existente.
+        requiresBusinessSchedule:
+          type: boolean
+          description: >-
+            Ver OfferType.requiresBusinessSchedule. Default `true` en
+            creación; un PATCH que lo omite conserva el valor existente.
 
     Business:
       type: object
@@ -288,6 +316,14 @@ components:
             de la categoría). No es un dato sensible: visible para
             cualquiera. Default `itinerant` cuando no se manda en
             BusinessInput.
+        seatingAvailable:
+          type: boolean
+          description: >-
+            El negocio ofrece bancas/asientos para comer o esperar en el
+            sitio (petición directa del usuario, sin RF asociado — ver
+            CLAUDE.md). Mismo criterio que `ownDelivery`/`mobility`: no
+            es un dato sensible, visible para cualquiera. Default
+            `false` cuando no se manda en BusinessInput.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         latitude:
@@ -359,6 +395,17 @@ components:
             para cada negocio devuelto (el propio filtro ya lo exige
             para calificar). Solo en GET /businesses y
             GET /businesses/nearby.
+        activeOffers:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/ActiveOffer' }
+          description: >-
+            "Cerca de ti ahora" (sin RF asociado, petición directa del
+            usuario — ver CLAUDE.md): los productos con vigencia activa
+            de este negocio, solo cuando la búsqueda incluyó
+            `hasActiveOffer=true` (siempre no vacío para cada negocio
+            devuelto, el propio filtro ya lo exige). `null` sin ese
+            filtro. Solo en GET /businesses y GET /businesses/nearby.
         availabilityConfirmedAt:
           type: string
           format: date-time
@@ -403,6 +450,28 @@ components:
         name: { type: string }
         price: { type: number }
         available: { type: boolean }
+
+    ActiveOffer:
+      description: >-
+        "Cerca de ti ahora" (sin RF asociado, petición directa del
+        usuario — ver CLAUDE.md). Forma liviana de un producto con
+        vigencia activa de este negocio — no el Product completo (sin
+        id/businessId/categoryId), mismo criterio que MatchedProduct, ver
+        Business.activeOffers.
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: number }
+        available: { type: boolean }
+        offerTypeId:
+          type: integer
+          nullable: true
+          description: Ver Product.offerTypeId — el cliente resuelve el ícono/nombre contra GET /offer-types.
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Ver Product.validUntil.
 
     BusinessZone:
       description: >-
@@ -479,6 +548,14 @@ components:
             propósito, mismo criterio que `ownDelivery`: en POST,
             omitirlo equivale a `itinerant`; en PATCH, omitirlo
             conserva el valor existente.
+        seatingAvailable:
+          type: boolean
+          description: >-
+            El negocio ofrece bancas/asientos para comer o esperar en el
+            sitio (petición directa del usuario, sin RF asociado — ver
+            CLAUDE.md). Opcional, sin `default` declarado a propósito,
+            mismo criterio que `ownDelivery`: en POST, omitirlo equivale
+            a `false`; en PATCH, omitirlo conserva el valor existente.
 
     AssistedRegistrationInput:
       description: >-
@@ -616,6 +693,16 @@ components:
           description: >-
             Hasta cuándo es vigente. `null` = sin fecha de cierre
             ("hasta nuevo aviso"), no lo mismo que "ya venció".
+        availabilityUpdatedAt:
+          type: string
+          format: date-time
+          description: >-
+            Sin RF asociado, petición directa del usuario (ver CLAUDE.md):
+            desde cuándo `available` tiene su valor actual — a diferencia
+            de `updatedAt` (que se mueve con cualquier edición del
+            producto), esta marca de tiempo solo se mueve cuando
+            `available` de verdad cambia de valor. En la creación,
+            coincide con `createdAt`.
 
     ProductInput:
       type: object
@@ -1450,6 +1537,7 @@ paths:
         - { $ref: '#/components/parameters/PriceMaxFilter' }
         - { $ref: '#/components/parameters/OpenNowFilter' }
         - { $ref: '#/components/parameters/OfferTypeIdFilter' }
+        - { $ref: '#/components/parameters/HasActiveOfferFilter' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -1494,6 +1582,7 @@ paths:
         - { $ref: '#/components/parameters/PriceMaxFilter' }
         - { $ref: '#/components/parameters/OpenNowFilter' }
         - { $ref: '#/components/parameters/OfferTypeIdFilter' }
+        - { $ref: '#/components/parameters/HasActiveOfferFilter' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:

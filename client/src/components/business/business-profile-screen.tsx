@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Chair,
   Compass,
   Gear,
   Moped,
@@ -29,6 +30,7 @@ import { PhoneVerificationPanel } from "@/components/business/phone-verification
 import { LocationVisibilityToggle } from "@/components/business/location-visibility-toggle";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
+import { SeatingToggle } from "@/components/business/seating-toggle";
 import { MobilityToggle } from "@/components/business/mobility-toggle";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
@@ -351,6 +353,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
               Hace domicilios propios
             </span>
           )}
+          {profile.seatingAvailable && (
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
+              <Chair size={16} weight="bold" />
+              Tiene bancas/asientos
+            </span>
+          )}
           {profile.hygieneSelfDeclared && <HygieneBadge />}
           <AvailabilityConfirmedBadge confirmedAt={availabilityConfirmedAt} />
         </div>
@@ -420,6 +428,19 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             categoryId={profile.categoryId}
             contactPhone={profile.contactPhone ?? null}
             initialOwnDelivery={Boolean(profile.ownDelivery)}
+          />
+        </div>
+      )}
+
+      {isOwner && profile.id && profile.name != null && profile.categoryId != null && (
+        <div className="px-5 pb-4">
+          <SeatingToggle
+            businessId={profile.id}
+            name={profile.name}
+            description={profile.description ?? null}
+            categoryId={profile.categoryId}
+            contactPhone={profile.contactPhone ?? null}
+            initialSeatingAvailable={Boolean(profile.seatingAvailable)}
           />
         </div>
       )}

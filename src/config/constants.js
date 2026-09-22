@@ -177,4 +177,18 @@ module.exports = {
   // desactivarse una oferta, el cupo se libera solo (expiración
   // perezosa) — no hay que llevar ciclos mensuales.
   FREE_PLAN_MAX_ACTIVE_OFFERS: 1,
+
+  // Sin RF asociado, petición directa del usuario (tarea aparte,
+  // planeada junto con requiere_horario_negocio y "Cerca de ti ahora" —
+  // ver CLAUDE.md): máximo de productos de CATÁLOGO NORMAL (sin
+  // vigencia — `vigencia_inicio IS NULL`, ver
+  // productos.repository.js#contarProductosCatalogo) que un negocio en
+  // plan gratis puede tener a la vez. Independiente de
+  // FREE_PLAN_MAX_ACTIVE_OFFERS (esa cuenta ofertas CON vigencia, un
+  // cupo aparte) — un producto de catálogo normal nunca ocupa el cupo de
+  // ofertas, ni viceversa. Al intentar crear/convertir un 4to producto
+  // de catálogo, se rechaza con 409 y un mensaje que señala el plan
+  // pago, SIN mostrar costo ni ningún flujo de pago (CLAUDE.md sección
+  // 15: nada de UI de precios/facturación durante el piloto).
+  FREE_PLAN_MAX_CATALOG_PRODUCTS: 3,
 };

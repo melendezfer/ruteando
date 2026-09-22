@@ -20,6 +20,12 @@ export interface BusinessSearchFilters {
    * Business.matchedOfferType.
    */
   offerTypeId?: number;
+  /**
+   * "Cerca de ti ahora" (sin RF asociado, petición directa del usuario)
+   * — igual que `offerTypeId`, pero sin fijar un tipo: cualquier
+   * producto con vigencia activa cuenta — ver Business.activeOffers.
+   */
+  hasActiveOffer?: boolean;
 }
 
 interface UseBusinessSearchOptions {
@@ -65,6 +71,7 @@ export function useBusinessSearch({ limit, radiusKm, geolocation }: UseBusinessS
         ...(filters.priceMax !== undefined ? { priceMax: filters.priceMax } : {}),
         ...(filters.openNow ? { openNow: true } : {}),
         ...(filters.offerTypeId !== undefined ? { offerTypeId: filters.offerTypeId } : {}),
+        ...(filters.hasActiveOffer ? { hasActiveOffer: true } : {}),
       };
 
       const { data } = coords

@@ -45,6 +45,18 @@ async function listarPorNegocio(negocioId) {
   return rows;
 }
 
+/**
+ * `disponibilidad_actualizada_en` (sin RF asociado, petición directa del
+ * usuario — ver CLAUDE.md, migración productos-disponibilidad-actualizada-en)
+ * solo se mueve cuando `disponible` DE VERDAD cambia de valor — a
+ * diferencia de `fecha_actualizacion`, que se pisa con cualquier campo.
+ * `IS DISTINCT FROM` (no `!=`) compara contra el valor VIEJO de la fila
+ * (las expresiones del SET, en Postgres, se evalúan contra la fila antes
+ * del UPDATE, no contra los valores que las demás asignaciones de esta
+ * misma sentencia están por dejar) — así un PATCH que no toca
+ * `available` deja esta columna intacta, y uno que sí lo cambia la mueve
+ * a `now()`.
+ */
 async function actualizar(
   id,
   {
@@ -62,7 +74,11 @@ async function actualizar(
     `UPDATE productos
      SET categoria_id = $2, nombre = $3, descripcion = $4, precio = $5, disponible = $6,
          tipo_oferta_id = $7, vigencia_inicio = $8, vigencia_fin = $9,
-         fecha_actualizacion = now()
+         fecha_actualizacion = now(),
+         disponibilidad_actualizada_en = CASE
+           WHEN disponible IS DISTINCT FROM $6 THEN now()
+           ELSE disponibilidad_actualizada_en
+         END
      WHERE id = $1
      RETURNING *`,
     [
@@ -118,6 +134,36 @@ async function contarOfertasVigentes(negocioId, { excluirProductoId } = {}) {
   return rows[0].total;
 }
 
+/**
+ * Plan gratis: máximo FREE_PLAN_MAX_CATALOG_PRODUCTS productos de
+ * CATÁLOGO NORMAL (sin vigencia, `vigencia_inicio IS NULL`) por negocio
+ * a la vez — sin RF asociado, petición directa del usuario (ver
+ * CLAUDE.md, tarea aparte de requiere_horario_negocio/"Cerca de ti
+ * ahora"). Cupo independiente del de ofertas
+ * (contarOfertasVigentes arriba): un producto con vigencia nunca cuenta
+ * acá, y viceversa. `excluirProductoId`, mismo motivo que
+ * contarOfertasVigentes — un PATCH sobre un producto ya existente no
+ * debe chocar contra sí mismo.
+ */
+async function contarProductosCatalogo(negocioId, { excluirProductoId } = {}) {
+  const params = [negocioId];
+  let clausulaExcluir = '';
+  if (excluirProductoId) {
+    params.push(excluirProductoId);
+    clausulaExcluir = `AND id != $${params.length}`;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS total
+     FROM productos
+     WHERE negocio_id = $1
+       AND vigencia_inicio IS NULL
+       ${clausulaExcluir}`,
+    params,
+  );
+  return rows[0].total;
+}
+
 module.exports = {
   crear,
   buscarPorId,
@@ -125,4 +171,5 @@ module.exports = {
   actualizar,
   eliminar,
   contarOfertasVigentes,
+  contarProductosCatalogo,
 };

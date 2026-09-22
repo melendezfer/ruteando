@@ -5616,3 +5616,230 @@ abriendo la vista rápida de siempre.
 - `FilteredListSheet` no pagina — mismo límite fijo (`LIST_LIMIT`, no
   "cargar más") que el resto de las listas sin scroll infinito del
   proyecto (Documento 08 sección 5.4.1).
+
+## 54. Retroalimentación sobre el redediseño de navegación global (sección 53)
+
+Ajustes de diseño/navegación sobre lo que dejó la sección 53, verificados
+en vivo por el usuario probando el PR #81 ya mergeado — petición directa
+del usuario, propia rama (`feature/redisenio-navegacion-mapa`, sí —
+mismo nombre de rama que la sección 53; este trabajo se hizo en una
+segunda pasada sobre la misma rama, antes de abrir un PR nuevo). Ocho
+pedidos, más un diagnóstico aparte (no un fix) del problema reportado de
+carga en celular.
+
+### 1–2. Banner sin fila-título, logo con wordmark
+
+`DiscoveryBanner` (`discovery-banner.tsx`) perdió la fila-título que
+vivía arriba del carrusel ("Disponibles ahora" centrado + ícono ⓘ + ícono
+de familia, ver sección 53) — pedido explícito: "más espacio vertical
+para el mapa". Esa fila era, además, el único lugar donde vivía la
+navegación entre familias (swipe entre "Disponibles ahora"/"Favoritos
+abiertos ahora") — con la hoja inferior unificada de los puntos 3/4 (ver
+abajo) absorbiendo esa navegación, la fila dejó de tener trabajo que
+hacer, no solo espacio que ocupar. El banner quedó reducido a un solo
+carrusel ("Disponibles ahora"), sin selector de familia.
+
+Sin esa fila, hacía falta un punto de entrada nuevo a "ver más
+disponibles ahora": se agregó como la ÚLTIMA tarjeta del propio carrusel
+("Ver todas", ancho fijo `w-20`, ícono `CaretRight` + texto) — participa
+del scroll horizontal como una tarjeta más, sin ocupar ninguna fila
+propia.
+
+El logo (`RuteandoLogo`, esquina inferior izquierda del mapa) pasó de un
+ícono solo (32px) a ícono + la palabra "Ruteando" (`text-title-2 font-bold
+text-terracota`, sobre una píldora `bg-surface/90` con blur) — pedido
+explícito: "hoy es un ícono muy pequeño sin texto".
+
+### 3–4. Las listas filtradas se vuelven una hoja inferior, con navegación entre familias
+
+**El cambio más grande de esta retroalimentación.** `FilteredListSheet`
+(`filtered-list-sheet.tsx`) era, desde la sección 53, una vista de
+PANTALLA COMPLETA (`absolute inset-0 z-[1000]`) que tapaba el mapa por
+completo — el usuario la comparó explícitamente con `MapSearchSheet`/
+`BusinessSummarySheet` (que sí son hojas inferiores, `absolute inset-x-0
+bottom-0`) y pidió el mismo patrón: "el mapa con el pin de ubicación se
+queda visible arriba". Se cambió exactamente a eso — mismo `max-h-[70vh]`
+que `MapSearchSheet`. La `<LeafletMap>` en sí nunca dependió de
+`showMap` (solo la UI flotante — logo, `ZoneComparisonCard`, el círculo
+de centrar — lo hace, mismo criterio ya vigente para `selected`/
+`searchSheetOpen`), así que el único cambio estructural real fue la
+posición del propio contenedor de la hoja.
+
+Dentro de esa hoja, pedido explícito: "navegación horizontal entre
+familias (Disponibles ahora, Favoritos, categorías, ofertas), mostrando
+el ícono de cada una" — `DiscoveryListFilter` ganó un cuarto variante
+(`{ type: "available_now" }`, antes solo existía como concepto implícito
+del banner) y `FilteredListSheet` pasó de recibir un filtro fijo a
+manejar una **pestaña activa** (`activeFilter`, estado local) distinta
+del filtro con el que se abrió (`filter`, el punto de entrada). Pestañas
+construidas dinámicamente:
+
+1. **Disponibles ahora** (`CheckCircle`) — solo si hay datos. Reusa
+   `discoveryBusinesses` (prop `availableNow`, ya cargado por
+   `map-screen.tsx` para el carrusel de arriba) — **sin fetch propio**,
+   sin parpadeo de skeleton al entrar a esta pestaña.
+2. **Favoritos** (`Heart`) — siempre presente. A diferencia de la
+   pestaña anterior, siempre trae TODOS los favoritos (no solo los
+   abiertos ahora — mismo criterio ya establecido en la sección 53 para
+   el ícono de sección del banner viejo), fetch propio contra
+   `GET /users/me/favorites`.
+3. **La categoría/oferta específica** con la que se abrió la hoja (si
+   `filter.type` es `category`/`offerType`) — ícono resuelto con
+   `resolveCatalogIcon`/`Tag` según corresponda.
+
+Tocar una pestaña distinta cambia la lista de abajo sin cerrar ni reabrir
+la hoja — verificado con Playwright: abrir en "Disponibles ahora",
+cambiar a "Favoritos" sin recargar, ver las filas correctas en cada una.
+
+**Hallazgo real de lint al construir esto**: sincronizar `activeFilter`
+con el prop `filter` cuando la hoja se reabre con un filtro nuevo
+mientras sigue montada (dos íconos tocados seguidos) con
+`useEffect(() => setActiveFilter(filter), [...])` dispara
+`react-hooks/set-state-in-effect` (setState síncrono dentro de un
+efecto, sin ningún trabajo async de por medio — cascada de renders
+innecesaria). Se resolvió con el patrón que React mismo recomienda para
+"ajustar estado cuando cambia un prop" — comparación **durante el
+render**, no en un efecto:
+```tsx
+const [lastSyncedFilterKey, setLastSyncedFilterKey] = useState(filterKey(filter));
+if (filterKey(filter) !== lastSyncedFilterKey) {
+  setLastSyncedFilterKey(filterKey(filter));
+  setActiveFilter(filter);
+}
+```
+`filterKey()` (nueva, módulo) da una clave estable (`"category:5"`, no
+identidad de objeto) para poder comparar sin depender de que el padre
+memoice el filtro.
+
+### 5. Tocar una fila de la hoja abre el perfil completo — verificado, no asumido
+
+Pedido explícito, con instrucción de no darlo por hecho sin probarlo:
+antes, `onOpenDetail` de cada `DiscoveryRow` dentro de esta hoja llamaba
+al mismo handler que el carrusel del banner y `MapSearchSheet`
+(`handleSelectFromSearch` → `BusinessSummarySheet`, un resumen, no
+navegación) — no había ninguna forma clara de llegar al perfil completo
+desde acá. `FilteredListSheet` ahora resuelve esto internamente
+(`useRouter()`, `router.push(\`/negocios/${business.id}\`)`), sin
+involucrar a `map-screen.tsx` — el carrusel del banner y
+`MapSearchSheet` siguen abriendo el resumen sin cambios (no se pidió
+tocar esos dos). Verificado con Playwright: tocar una fila de la hoja
+navega de verdad a `/negocios/{id}` (URL confirmada), sin pasar por
+`BusinessSummarySheet`.
+
+### 6. "Volver al mapa" — el círculo grande de `MainFloatingNav` ya nunca desaparece
+
+Hallazgo del propio usuario probando la sección 53: "hoy quitamos el de
+'centrar mapa' cuando no hay mapa, pero eso dejó al usuario sin ninguna
+forma de regresar". `MainFloatingNav` (`main-floating-nav.tsx`) ganó
+`onBackToMap?: () => void`; el círculo grande ya no se omite nunca — es
+`Crosshair`/"Mi ubicación" con `onCenterMap`, o `Compass`/"Volver al
+mapa" en su ausencia (con `onBackToMap` si el caller lo da, o
+`router.push("/mapa")` por default). Cubre las 4 pantallas +
+`/cuenta` + el selector de negocio automáticamente (ninguna de ellas
+pasa `onCenterMap` ni `onBackToMap`, así que todas heredan el fallback
+`router.push`) — el único caller con lógica a medida es `MapScreen`
+mismo: cuando algo tapa la vista (`selected`/`searchSheetOpen`/
+`listFilter`), "volver" significa CERRAR ese overlay (`handleBackToMap`,
+limpia los tres estados), no navegar — un `router.push("/mapa")` estando
+ya en esa ruta no habría hecho nada.
+
+**Hallazgo real, no anticipado, encontrado al auditar "el perfil de un
+negocio" (la cuarta pantalla listada por el usuario)**: la sección 53
+decía explícitamente "`business-profile-screen.tsx` NO se toca... sigue
+con su `BottomNavBar` condicional tal cual estaba" — code muerto del
+redediseño original que nunca se completó ahí. Se retiró esa
+`<BottomNavBar />` (y el archivo `bottom-nav-bar.tsx` completo, sin
+ninguna otra referencia real en el proyecto — confirmado con grep antes
+de borrarlo) y se agregó "Volver al mapa" como tercera acción del
+`FloatingActionStack` propio de esa pantalla (WhatsApp/Cómo llegar, sin
+cambios) — no se migró a `MainFloatingNav` completo ahí (hubiera
+significado 5-6 círculos apilados, WhatsApp + Cómo llegar + Buscar +
+Perfil + Favoritos + Volver al mapa); se agregó solo lo que se pidió.
+`FloatingActionStack#aboveBottomNav` (el prop que compensaba espacio
+para esa barra) quedó sin ningún caller — se eliminó del componente en
+vez de dejarlo sin usar.
+
+### 7. Sin verde en "Abierto" — auditoría completa, no solo el lugar obvio
+
+Se grepeó todo `client/src` por "Abierto"/`text-verde`/`bg-verde` antes
+de tocar nada, en vez de adivinar dónde vivía el color. Resultado:
+`discovery-row.tsx` (las tarjetas del banner y las filas de la hoja) ya
+era neutro desde que se escribió (sección 53) — nunca tuvo punto ni
+color por estado. El único lugar real con el verde de marca era
+`business-profile-screen.tsx`: la píldora sobre la foto de portada
+(`bg-verde`/`bg-text-muted` según `profile.isOpenNow`) — se unificó a un
+solo fondo (`bg-black/60`, translúcido sobre cualquier foto) para los
+dos estados; el texto ("Abierto ahora"/"Cerrado ahora") es lo único que
+sigue cambiando. Verificado con Playwright, comparando
+`getComputedStyle().color`/`.backgroundColor` contra el rgb exacto de
+`--color-verde` (`#2e7d32`) en las tres superficies pedidas (banner,
+filas de la hoja, perfil de negocio) — 0 coincidencias en las tres.
+
+### Diagnóstico: la app no carga en el celular (LAN) — causa confirmada, sin fix aplicado
+
+Pedido explícito: diagnosticar y reportar la causa antes de aplicar
+cualquier cambio, sin asumir que ya estaba resuelto por el fix de fotos
+de la sección 22 (PR #80). Probado con Playwright, emulando un
+dispositivo real (`devices["iPhone 13"]` — viewport, user-agent, touch
+habilitado, no solo un viewport angosto de escritorio) contra la IP de
+LAN real (`192.168.1.7:3001`, la misma que resuelve el celular vía el
+reenvío de puertos de la sección 24), en dos corridas:
+
+1. Con `ruteando-frontend` en modo `next dev` (el que estaba corriendo):
+   todos los assets estáticos responden `200`, pero el WebSocket de HMR
+   de Turbopack falla el handshake
+   (`WebSocket connection to 'ws://192.168.1.7:3001/_next/hmr?id=...'
+   failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE`)
+   — React nunca hidrata, la página queda para siempre en "Cargando
+   sesión…" (`body.innerText` confirmado, no solo una sospecha).
+2. Con `bash scripts/dev-lan.sh --prod-frontend` (build de producción,
+   `next start`, sin socket de HMR): la MISMA URL, el MISMO dispositivo
+   emulado, carga completa — hidrata, muestra "Iniciar sesión"/"Crear
+   cuenta", prefetch real de `/login`/`/register`, cero errores de
+   consola.
+
+**Es exactamente el mismo bug ya documentado en la sección 24** ("Bug
+real: 'Cargando sesión...' colgado para siempre por LAN"), no una causa
+nueva ni relacionada con el storage/fotos del PR #80 — sigue sin
+reproducirse en absoluto contra `localhost`, y sigue sin tener un fix de
+código posible (si React no hidrata, ningún JS del cliente puede
+rescatar la pantalla) — el único camino conocido sigue siendo `next
+start` en vez de `next dev` para probar desde un dispositivo real por
+LAN. No se aplicó ningún cambio de código para esto — se confirmó el
+diagnóstico, se dejó el frontend momentáneamente en `--prod-frontend`
+para que el usuario pudiera probar desde el celular de inmediato, y
+después, a pedido explícito del usuario, se devolvió a `next dev` (con
+recarga en vivo) para seguir el desarrollo normal en esta computadora —
+correr `bash scripts/dev-lan.sh --prod-frontend` de nuevo sigue siendo
+el paso manual para volver a probar por celular.
+
+### Verificado con Playwright, de punta a punta
+
+Cuenta de consumidor de prueba registrada por API (con los dos
+consentimientos obligatorios otorgados por SQL) + un favorito real sobre
+"Costuras y Arreglos María" — contra el servidor de desarrollo real,
+geolocalización simulada sobre Ciudad Verde: confirmado que no queda
+ningún rastro de la fila-título del banner; el wordmark "Ruteando" es
+visible; "Ver todas" abre la hoja como bottom sheet con el mapa Leaflet
+visible detrás (`.leaflet-container` visible, contenedor de la hoja con
+las clases `absolute inset-x-0 bottom-0`); las pestañas "Disponibles
+ahora"/"Favoritos" están presentes y cambiar a "Favoritos" muestra la
+fila real del negocio favorito sin cerrar la hoja; tocar esa fila navega
+a `/negocios/{id}` real; "Volver al mapa" está visible y funciona desde
+el perfil de negocio, desde Perfil y desde `/buscar`; cero elementos con
+el verde de marca en las tres superficies pedidas; cero errores de
+consola en todo el recorrido. Cuenta y favorito de prueba borrados
+después.
+
+### Gaps conocidos, no ocultos
+
+- El diagnóstico de LAN no tiene fix de código posible (ver arriba) —
+  documentado, no resuelto; el mismo límite ya aceptado en la sección
+  24.
+- `MainFloatingNav` sigue sin resaltar "en qué pantalla estoy" (mismo
+  criterio ya documentado en la sección 53) — no se pidió agregarlo acá
+  tampoco.
+- El botón "Volver al mapa" del perfil de negocio, a diferencia de
+  `MainFloatingNav`, no tiene la lógica de "cerrar overlay en vez de
+  navegar" — no hace falta ahí: esa pantalla no tiene overlays propios
+  que tapen nada, `router.push("/mapa")` siempre es la acción correcta.

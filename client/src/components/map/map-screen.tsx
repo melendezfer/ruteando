@@ -14,13 +14,11 @@ import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { MapSearchSheet, type MapFiltersState } from "@/components/map/map-search-sheet";
 import { BusinessSummarySheet } from "@/components/map/business-summary-sheet";
 import { ZoneComparisonCard } from "@/components/map/zone-comparison-card";
-import { DiscoveryBanner, type DiscoveryFamilyData, type DiscoveryFamilyId } from "@/components/map/discovery-banner";
+import { DiscoveryBanner } from "@/components/map/discovery-banner";
 import { FilteredListSheet, type DiscoveryListFilter } from "@/components/map/filtered-list-sheet";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
-
-type Business = components["schemas"]["Business"];
 
 type Category = components["schemas"]["Category"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -212,19 +210,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     return map;
   }, [categories]);
 
-  // Título de FilteredListSheet, ya resuelto acá (categoryNameById/
-  // offerTypes ya están a mano) — el sheet en sí no vuelve a resolverlo.
-  const listFilterTitle = useMemo(() => {
-    if (!listFilter) return "";
-    if (listFilter.type === "favorites") return "Tus favoritos";
-    if (listFilter.type === "category") {
-      const name = categoryNameById.get(listFilter.categoryId);
-      return name ? `Más ${name} cerca` : "Más cerca de ti";
-    }
-    const name = offerTypes.find((t) => t.id === listFilter.offerTypeId)?.name;
-    return name ? `Más ${name} cerca` : "Más de este tipo cerca";
-  }, [listFilter, categoryNameById, offerTypes]);
-
   // Banner de descubrimiento, familia "Disponibles ahora" (Fase 1, sin
   // RF asociado) — resaltado del pin correspondiente al deslizar entre
   // tarjetas, ver DiscoveryBanner. `null` mientras no se ha deslizado
@@ -254,29 +239,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     radiusKm: DEFAULT_MAP_RADIUS_KM,
     geolocation,
   });
-
-  // Segunda familia del banner: "Favoritos abiertos ahora" (sin RF
-  // asociado, petición directa del usuario) — GET /users/me/favorites
-  // con el mismo openNow=true, no FavoritesContext (ese solo guarda un
-  // Set de ids, sin coordenadas/distancia/mobility/categoryId que este
-  // banner necesita para renderizar la tarjeta). No depende de
-  // geolocalización — ese endpoint no acepta lat/lng, así que
-  // `distanceMeters` siempre queda null acá (el mismo criterio de
-  // sortAvailableNow ya tolera esto, cae al desempate por confirmación
-  // fresca).
-  const [favoritesOpenNowRaw, setFavoritesOpenNowRaw] = useState<Business[] | null>(null);
-
-  useEffect(() => {
-    let ignore = false;
-    api
-      .GET("/users/me/favorites", { params: { query: { limit: DISCOVERY_BANNER_LIMIT, openNow: true } } })
-      .then(({ data }) => {
-        if (!ignore) setFavoritesOpenNowRaw(data?.data ?? []);
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   const businesses = useMemo<BusinessPin[]>(() => {
     const base = (rawBusinesses ?? []).filter(
@@ -310,35 +272,11 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     return sortAvailableNow(withCoords);
   }, [openNowRaw]);
 
-  // Segunda familia: "Favoritos abiertos ahora" — mismo filtro (lat/lng
-  // presentes, orden por distancia/confirmación) que discoveryBusinesses,
-  // sobre la respuesta de GET /users/me/favorites?openNow=true.
-  const favoritesOpenNow = useMemo<BusinessPin[]>(() => {
-    const withCoords = (favoritesOpenNowRaw ?? []).filter(
-      (business): business is BusinessPin =>
-        typeof business.latitude === "number" && typeof business.longitude === "number",
-    );
-    return sortAvailableNow(withCoords);
-  }, [favoritesOpenNowRaw]);
-
-  // Familias del banner (sin RF asociado, petición directa del usuario)
-  // — solo las que de verdad tienen negocios entran acá; una familia
-  // vacía ni siquiera aparece como pestaña (mismo criterio de "sin
-  // negocios, no se muestra nada" de la Fase 1). "Disponibles ahora"
-  // siempre primero cuando ambas tienen datos — es la familia original,
-  // la más orientada a "qué hay cerca ahora mismo".
-  const discoveryFamilies = useMemo<DiscoveryFamilyData[]>(() => {
-    const list: DiscoveryFamilyData[] = [];
-    if (discoveryBusinesses.length > 0) list.push({ id: "available_now", businesses: discoveryBusinesses });
-    if (favoritesOpenNow.length > 0) list.push({ id: "favorites_open_now", businesses: favoritesOpenNow });
-    return list;
-  }, [discoveryBusinesses, favoritesOpenNow]);
-
   // Tarjeta activa del banner: lo último que el usuario deslizó/tocó, o
-  // el primer negocio de la primera familia por default — sin esto, el
+  // el primer negocio "Disponibles ahora" por default — sin esto, el
   // banner arrancaría sin ninguna tarjeta resaltada hasta el primer
   // swipe.
-  const bannerHighlightId = bannerActiveId ?? discoveryFamilies[0]?.businesses[0]?.id ?? null;
+  const bannerHighlightId = bannerActiveId ?? discoveryBusinesses[0]?.id ?? null;
 
   const runSearch = useCallback(() => {
     const priceMin = filters.priceMin ? Number(filters.priceMin) : undefined;
@@ -554,9 +492,25 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     }
   }
 
-  /** Ícono de sección "Favoritos abiertos ahora" del banner — ver DiscoveryBanner#onOpenFamilyList. "Disponibles ahora" no llega acá (sigue con su vista rápida interna). */
-  function handleOpenFamilyList(familyId: DiscoveryFamilyId) {
-    if (familyId === "favorites_open_now") setListFilter({ type: "favorites" });
+  /** "Ver todas" al final del carrusel del banner — abre la hoja inferior unificada ya en la pestaña "Disponibles ahora" (ver FilteredListSheet). */
+  function handleOpenAvailableList() {
+    setListFilter({ type: "available_now" });
+  }
+
+  /**
+   * "Volver al mapa" de `MainFloatingNav` cuando algo tapa la vista
+   * (resumen de negocio, hoja de búsqueda o la lista filtrada) — cierra
+   * ese overlay en vez de navegar (ya se está en `/mapa`). Retroalimentación
+   * sobre el redediseño de navegación global (sin RF asociado, petición
+   * directa del usuario): sin esto, quitar "centrar mapa" al abrir
+   * cualquiera de estos dejaba al usuario sin ninguna forma de volver.
+   */
+  function handleBackToMap() {
+    if (pendingSelectionTimeoutRef.current) clearTimeout(pendingSelectionTimeoutRef.current);
+    setPendingSelection(null);
+    setSelected(null);
+    setSearchSheetOpen(false);
+    setListFilter(null);
   }
 
   /** "Ver esa zona" en ZoneComparisonCard — recentra el mapa sobre la zona sugerida, mismo zoom que "Mi ubicación". */
@@ -601,7 +555,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           la vez sería confuso. */}
       {!listFilter && (
         <DiscoveryBanner
-          families={discoveryFamilies}
+          businesses={discoveryBusinesses}
           categoryTypeById={categoryTypeById}
           categoryNameById={categoryNameById}
           activeId={bannerHighlightId}
@@ -609,7 +563,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           onOpenDetail={handleBannerOpenDetail}
           onViewOnMap={handleBannerViewOnMap}
           onCategoryClick={handleCategoryClick}
-          onOpenFamilyList={handleOpenFamilyList}
+          onOpenList={handleOpenAvailableList}
         />
       )}
 
@@ -704,24 +658,26 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         {listFilter && (
           <FilteredListSheet
             filter={listFilter}
-            title={listFilterTitle}
+            availableNow={discoveryBusinesses}
             categoryTypeById={categoryTypeById}
             categoryNameById={categoryNameById}
+            offerTypes={offerTypes}
             geolocation={geolocation}
-            onSelectResult={handleSelectFromSearch}
             onViewOnMap={handleSelectFromSearch}
             onClose={() => setListFilter(null)}
           />
         )}
 
         {showMap && (
-          <div className="fixed bottom-6 left-6 z-40">
-            <RuteandoLogo size={32} />
+          <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-surface/90 px-3 py-2 shadow-lg backdrop-blur">
+            <RuteandoLogo size={28} />
+            <span className="font-heading text-title-2 font-bold text-terracota">Ruteando</span>
           </div>
         )}
 
         <MainFloatingNav
           onCenterMap={showMap ? handleLocateMe : undefined}
+          onBackToMap={!showMap ? handleBackToMap : undefined}
           onSearch={handleToggleSearchSheet}
         />
       </div>

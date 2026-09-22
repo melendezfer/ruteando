@@ -17,6 +17,19 @@ const envSchema = z
     JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET debe tener al menos 16 caracteres'),
     JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET debe tener al menos 16 caracteres'),
 
+    // Panel de administrador (Fase 1, sin RF asociado — ver CLAUDE.md):
+    // secreto de firma PROPIO, distinto de JWT_ACCESS_SECRET a
+    // propósito — "login de administrador separado del login de
+    // vendedor/consumidor", pedido explícito del usuario. Con secretos
+    // distintos, un access token de un administrador y uno de un
+    // usuario normal son estructuralmente inverificables el uno como el
+    // otro (falla la firma), no solo "con un rol que no matchea" — una
+    // capa de defensa en profundidad más fuerte que confiar solo en que
+    // el middleware correcto revise el claim correcto.
+    ADMIN_JWT_ACCESS_SECRET: z
+      .string()
+      .min(16, 'ADMIN_JWT_ACCESS_SECRET debe tener al menos 16 caracteres'),
+
     STORAGE_ENDPOINT: z.string().min(1, 'STORAGE_ENDPOINT es obligatorio'),
     STORAGE_BUCKET: z.string().min(1, 'STORAGE_BUCKET es obligatorio'),
     STORAGE_ACCESS_KEY: z.string().min(1, 'STORAGE_ACCESS_KEY es obligatorio'),
@@ -90,6 +103,10 @@ const envSchema = z
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_REFRESH_SECRET debe ser distinto de JWT_ACCESS_SECRET',
     path: ['JWT_REFRESH_SECRET'],
+  })
+  .refine((data) => data.ADMIN_JWT_ACCESS_SECRET !== data.JWT_ACCESS_SECRET, {
+    message: 'ADMIN_JWT_ACCESS_SECRET debe ser distinto de JWT_ACCESS_SECRET (panel de administrador separado, ver CLAUDE.md)',
+    path: ['ADMIN_JWT_ACCESS_SECRET'],
   })
   .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.SENTRY_DSN), {
     message: 'SENTRY_DSN es obligatorio en production (registro de errores centralizado)',

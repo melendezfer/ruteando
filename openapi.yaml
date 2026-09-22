@@ -179,6 +179,36 @@ components:
         createdAt: { type: string, format: date-time }
         active: { type: boolean }
 
+    Administrator:
+      description: >-
+        Panel de administrador (Fase 1, sin RF asociado — ver CLAUDE.md).
+        Cuenta de la tabla `administradores`, SEPARADA de `usuarios` —
+        nunca confundir con `User.role = 'administrator'` (Épica 9,
+        /admin/*), un sistema distinto que sigue existiendo tal cual.
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [admin, super_admin]
+          description: >-
+            `admin` (delegable) vs. `super_admin` (dueño, único rol que
+            puede crear/gestionar otros administradores — fases
+            futuras). Ver `requireAdminRole` en el backend, el único
+            punto que valida esto.
+        createdAt: { type: string, format: date-time }
+        active: { type: boolean }
+
+    AdminAuthTokens:
+      type: object
+      properties:
+        accessToken: { type: string, description: 'JWT, vigente 15 minutos, firmado con un secreto propio (ADMIN_JWT_ACCESS_SECRET) distinto del de usuarios' }
+        refreshToken: { type: string, description: 'Vigente 30 días, un solo uso' }
+        tokenType: { type: string, default: Bearer }
+        admin: { $ref: '#/components/schemas/Administrator' }
+
     Category:
       type: object
       properties:
@@ -1248,6 +1278,86 @@ paths:
                 refreshToken: { type: string }
       responses:
         '204': { description: Sesión cerrada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin-panel/auth/login:
+    post:
+      tags: [Panel de administrador]
+      summary: Iniciar sesión de administrador
+      description: >-
+        Fase 1 del panel de administrador (sin RF asociado — ver
+        CLAUDE.md). Deliberadamente SEPARADO de /auth/login: cuenta de
+        `administradores`, no de `usuarios` — sin chequeo de
+        consentimiento (Ley 1581 no aplica acá), sin `role` de
+        usuario, firmado con un secreto propio.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Sesión de administrador iniciada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAuthTokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin-panel/auth/refresh:
+    post:
+      tags: [Panel de administrador]
+      summary: Renovar el token de acceso de administrador
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Tokens de administrador renovados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAuthTokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin-panel/auth/logout:
+    post:
+      tags: [Panel de administrador]
+      summary: Invalidar el refresh token de administrador actual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '204': { description: Sesión de administrador cerrada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin-panel/me:
+    get:
+      tags: [Panel de administrador]
+      summary: Obtener el perfil del administrador autenticado
+      responses:
+        '200':
+          description: Perfil del administrador
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Administrator' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/forgot-password:

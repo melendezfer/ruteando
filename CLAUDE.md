@@ -6079,3 +6079,217 @@ contra una arquitectura que ya no existe).
   quedó sembrado con `seatingAvailable: true`, y el límite de catálogo
   gratis no se verificó contra esos datos (los negocios de demo tienen
   pocos productos, muy por debajo de 3). No se pidió para esta tanda.
+
+## 56. Panel de administrador — Fase 1 de 5: la base
+
+Petición directa del usuario, dividida explícitamente en 5 fases (esta
+sección documenta solo la Fase 1 — arquitectura y login, sin ninguna
+pantalla de las fases futuras) — propia rama
+(`feature/panel-admin-base`). Reemplaza, para el equipo administrador,
+la idea de seguir construyendo sobre el sistema de la Épica 9
+(`usuarios.rol_usuario = 'administrador'`, rutas `/admin/*`) — ese
+sistema **no se toca ni se migra** en esta fase, los dos coexisten a
+propósito (ver más abajo).
+
+### Por qué un sistema nuevo, no extender el de la Épica 9
+
+El sistema viejo (secciones 6/9 de este archivo) tiene un solo rol
+(`administrador`, sin niveles) resuelto contra la misma tabla
+`usuarios` que consumidores y vendedores — suficiente para "aprobar
+negocios y moderar reseñas", insuficiente para lo que pidió esta
+funcionalidad: dos niveles de administrador (uno delegable, uno dueño)
+con un control de permisos centralizado pensado para crecer. Forzar
+eso dentro de `usuarios`/`rol_usuario` (un ENUM de 3 valores ya
+existente, compartido con el login normal) habría significado o bien
+ensuciar ese ENUM con conceptos que no le corresponden a un consumidor
+ni a un vendedor, o bien construir una segunda capa de roles encima de
+la primera — más confuso que dos sistemas separados y honestos sobre
+serlo. Se optó por una tabla y un flujo de autenticación
+**completamente aparte** (`administradores`, rutas
+`/admin-panel/*`), documentado como convivencia intencional, no como
+un descuido: las pantallas futuras de moderación (Fase 2+) decidirán
+en su momento si consumen las tablas viejas (`negocios.estado`,
+`resenas.estado_moderacion`) desde el sistema nuevo, o si el
+`/admin/*` viejo se deprecia entonces — esa migración de datos/rutas
+queda fuera del alcance de esta fase.
+
+### Separación de secretos de firma — no solo de tablas
+
+`ADMIN_JWT_ACCESS_SECRET` (nuevo, `src/config/env.js`) es un secreto
+de firma JWT **distinto** de `JWT_ACCESS_SECRET` (usuarios normales),
+con un `.refine()` que hace fallar el arranque si ambos coinciden —
+mismo criterio de "que el proceso ni siquiera arranque" ya usado con
+`SKIP_PHONE_VERIFICATION_CHECK` (sección 34). Esto no es solo
+prolijidad: sin secretos distintos, un token de acceso de un
+vendedor/consumidor cualquiera (firmado con el mismo algoritmo) sería
+estructuralmente indistinguible de un token de administrador para
+cualquier middleware que solo mirara el `payload.role` sin verificar
+contra qué secreto se firmó — un vendedor no podría fabricarse uno
+sin la clave privada, pero sí quedaría abierta la superficie de que un
+bug futuro en algún endpoint compartido aceptara sin querer un token
+del otro dominio. Verificado con una prueba explícita en las dos
+direcciones (`authenticateAdmin.middleware.test.js`: un token de
+`JWT_ACCESS_SECRET` es rechazado; `adminAuth.test.js`: un token de
+`ADMIN_JWT_ACCESS_SECRET` no sirve contra `GET /users/me`).
+
+### Modelo de datos
+
+- `rol_administrador` (ENUM nuevo): `administrador` (delegable) |
+  `administrador_maestro` (dueño) — un campo `rol`, no un booleano
+  `esAdmin`, tal como pidió explícitamente el usuario, para que un
+  tercer nivel futuro (si llegara a hacer falta) sea agregar un valor
+  al ENUM, no reescribir la columna.
+- `administradores` (nueva): `id` UUID v7, `nombre_completo`,
+  `correo` UNIQUE, `contrasena_hash` (argon2, mismo algoritmo que
+  `usuarios`), `rol`, `activo` (BOOLEAN, para desactivar sin borrar —
+  un administrador desactivado no puede iniciar sesión, probado
+  explícitamente), `fecha_creacion`, `fecha_actualizacion`.
+- `tokens_refresco_administrador` (nueva) — calco exacto de
+  `tokens_refresco` (rotación + detección de reuso, RFC 9700): un
+  refresh token robado y reusado revoca también el token ya rotado a
+  partir de él, mismo mecanismo que el login normal.
+- `auditoria_admin` (nueva, Fase 1 la deja lista aunque ninguna
+  pantalla la use todavía): `administrador_id` (`ON DELETE SET NULL`,
+  no `CASCADE` — mismo criterio que
+  `solicitudes_eliminacion_cuenta`/sección 23: la traza de auditoría
+  sobrevive aunque el administrador que la generó se borre después),
+  `accion` (texto corto, ej. `'aprobar_negocio'`), `entidad_tipo`/
+  `entidad_id` (TEXT libres, sin FK — las tablas que una acción futura
+  podría auditar mezclan UUID e INTEGER como PK, ej. `negocios` vs.
+  `eventos`, así que una FK tipada no podría apuntar a todas; el
+  desacople es deliberado, no un descuido), `detalle` (JSONB
+  opcional, contexto libre de la acción), `fecha`.
+
+### `src/services/auditoria.service.js` — envoltorio delgado, para que las fases futuras solo lo llamen
+
+`registrar({administradorId, accion, entidadTipo, entidadId, detalle})`
+es la única función pública — ninguna pantalla de esta fase la
+invoca desde un endpoint real todavía (no hay ninguna acción
+administrativa nueva que auditar en la Fase 1: login/logout no son
+"acciones sobre una entidad"), pero queda lista para que
+`aprobar_negocio`/`suspender_usuario`/etc. (fases futuras) solo tengan
+que llamarla, sin diseñar la tabla ni el servicio en ese momento.
+Probada directo contra el servicio con datos de prueba armados a mano
+(mismo criterio que `disponibilidad.service.test.js`), incluida la
+sobrevivencia al borrado del administrador.
+
+### `administrador.mapper.js` — vocabulario de API deliberadamente distinto del viejo
+
+`admin`/`super_admin` (no `administrator`) para no chocar con el
+mapeo ya existente `usuarios.rol_usuario='administrador' → role:
+'administrator'` (Épica 9) — dos sistemas con la palabra "admin" en
+juego, vocabularios de API distintos a propósito para que nunca se
+confundan al leer un payload suelto sin saber de cuál endpoint vino.
+
+### `authenticateAdmin`/`requireAdminRole` — el "único punto central de control de permisos" pedido
+
+`requireAdminRole(...rolesPermitidos)` (calco exacto de
+`requireRole.js`, el que ya usa el resto del proyecto) es el middleware
+que decide, por endpoint, qué rol hace falta — agregar una función
+nueva en una fase futura es escribir
+`router.get('/lo-que-sea', authenticateAdmin, requireAdminRole('super_admin'), controlador)`,
+sin tocar ninguna lógica de autorización ya existente. `authenticateAdmin`
+(calco de `authenticate.js`) verifica el JWT contra
+`ADMIN_JWT_ACCESS_SECRET` y deja `req.admin = {id, role}` — nunca
+`req.user`, para que ningún controlador confunda por accidente una
+sesión de administrador con una de usuario normal aunque ambos
+middlewares terminen adjuntando algo a `req`.
+
+### Sin autorregistro — bootstrap solo por script
+
+No existe ningún endpoint `POST /admin-panel/auth/register` — cualquiera
+podría autoasignarse el rol de mayor privilegio si existiera uno.
+`scripts/crearAdministradorMaestro.js` (`npm run admin:crear-maestro
+"Nombre" correo password`) es la única forma de crear el primer
+`administrador_maestro`; delegar un `administrador` nuevo desde ahí en
+adelante es trabajo de una pantalla de fase futura (gestión de
+administradores), no de esta.
+
+### Rutas nuevas (`/admin-panel/*`, deliberadamente distinto de `/admin/*`)
+
+`POST /admin-panel/auth/login`, `POST /admin-panel/auth/refresh`,
+`POST /admin-panel/auth/logout`, `GET /admin-panel/me` — mismo
+contrato de forma que `/auth/*`/`/users/me` (`AdminAuthTokens`,
+`Administrator`), sin el chequeo de consentimientos de RF-018 (Ley
+1581 no le aplica a una cuenta de administrador, no es un dato
+personal de un usuario final).
+
+### Frontend: shell de dashboard + módulos declarativos, sin ningún módulo real todavía
+
+`client/src/lib/admin/modules.ts` — `ADMIN_MODULES: AdminModule[] = []`
+(vacío a propósito, cada `AdminModule` declara `requiredRoles` desde
+el día uno) y `modulesForRole(role)` — el mecanismo que hace que
+agregar una pantalla de fase futura sea empujar un objeto a ese
+array, no reestructurar la navegación. `client/src/app/admin/layout.tsx`
+envuelve las rutas `/admin/*` en `AdminAuthProvider` — un contexto de
+sesión **separado** del de consumidor/vendedor (`admin-token-store.ts`
+usa su propia clave de `sessionStorage`, `ruteando.admin.refreshToken`,
+distinta de `ruteando.refreshToken`), así que tener sesión de
+administrador y de consumidor abiertas en la misma pestaña no las
+mezcla ni una pisa a la otra. `RequireAdminAuth` redirige a
+`/admin/login` sin sesión (a diferencia de `RequireAuth`, que muestra
+botones de login/registro inline) — un panel administrativo no tiene
+"modo invitado".
+
+`/admin/dashboard` es el shell: header (logo, nombre+rol del
+administrador, botón de salir), nav lateral con los módulos de
+`modulesForRole(admin.role)` ("Todavía no hay módulos habilitados."
+cuando está vacío, como ahora) y un estado de bienvenida en el
+contenido principal — vacío a propósito, listo para que las fases 2-5
+monten su contenido ahí sin tocar el layout.
+
+**No se creó un root layout nuevo de Next.js** — `/admin/*` es un
+layout anidado dentro del root existente (`AuthProvider` de
+consumidor/vendedor lo sigue envolviendo por fuera, inofensivo porque
+lee una clave de `sessionStorage` distinta) — separar un root
+completo hubiera exigido agrupar por rutas TODA la app existente, un
+refactor grande y riesgoso no pedido para esta fase.
+
+### Verificado
+
+Suite completa del backend: 644/644 (28 pruebas nuevas — 6
+`authenticateAdmin.middleware.test.js`, 3
+`requireAdminRole.middleware.test.js`, ~19 `adminAuth.test.js`, entre
+login/refresh/logout/me/auditoría). **Hallazgo real de higiene de
+pruebas, encontrado corriendo la suite dos veces seguidas, no una
+sola vez**: el caso "sobrevive al borrado del administrador" deja una
+fila de auditoría con `administrador_id = NULL` a propósito (es lo que
+prueba) — pero `afterAll` solo limpia por `administradorIdsCreados`,
+que ya no aplica una vez que el FK quedó en null. Sin un borrado
+explícito dentro del propio test, cada corrida de la suite acumulaba
+una fila huérfana más, y la siguiente corrida veía 2 filas donde
+esperaba 1. Corregido borrando esa fila específica al final del mismo
+test, no relajando la aserción.
+
+`npx tsc --noEmit`/`lint`/`build` del frontend en verde (rutas nuevas
+confirmadas en el build: `/admin`, `/admin/dashboard`, `/admin/login`).
+Verificado con Playwright contra el servidor de desarrollo real
+(`bash scripts/dev-lan.sh --prod-frontend`, cuenta creada con
+`npm run admin:crear-maestro` para la verificación y borrada después
+junto con su fila de auditoría): login vacío → lleno → "Entrar" →
+aterriza en `/admin/dashboard` → "Bienvenido al panel" visible →
+"Todavía no hay módulos habilitados." visible → nombre y "Administrador
+maestro" visibles → navegar a "/" después no arrastra ninguna sesión
+de administrador (sigue pidiendo login normal de consumidor/vendedor,
+confirmando que los dos almacenes de token no se mezclan).
+
+### Gaps conocidos, no ocultos
+
+- Cero módulos reales — es exactamente el alcance pedido para esta
+  fase ("NO construyas todavía: colas de decisión, moderación,
+  catálogos, directorios, estadísticas, ni identidad/cédula"). Las
+  fases 2-5 se agregan a `ADMIN_MODULES` sin reestructurar nada de lo
+  construido acá.
+- Sin pantalla de "gestión de administradores" (crear/desactivar
+  delegados desde la UI) — hoy solo existe el script de bootstrap del
+  primer `administrador_maestro`; delegar administradores nuevos desde
+  el panel mismo es trabajo de una fase futura, no de la base.
+- El sistema viejo de la Épica 9 (`/admin/*`, `usuarios.rol_usuario`)
+  sigue funcionando sin cambios, coexistiendo con este — la decisión de
+  si se migra o se deprecia queda para cuando las fases futuras
+  necesiten construir sobre moderación/aprobación real.
+- Sin ninguna acción real que llame a `auditoria.service.js#registrar`
+  todavía desde un endpoint — login/logout no cuentan como "acción
+  sobre una entidad" en el sentido que pidió el usuario. Las fases
+  futuras son las que generan las primeras filas reales de auditoría
+  fuera de las pruebas.

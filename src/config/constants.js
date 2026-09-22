@@ -13,6 +13,14 @@ module.exports = {
   REFRESH_TOKEN_TTL_MS: 30 * 24 * 60 * 60 * 1000,
   PASSWORD_RESET_CODE_TTL_MS: 15 * 60 * 1000,
 
+  // Panel de administrador (Fase 1, sin RF asociado — ver CLAUDE.md):
+  // mismo valor que JWT_ACCESS_TOKEN_TTL, declarado aparte (no
+  // reutilizando esa misma constante) para que las dos puedan
+  // divergir después sin tocar el sistema de usuarios normales — ej.
+  // si en el futuro se decide una sesión de administrador más corta.
+  ADMIN_JWT_ACCESS_TOKEN_TTL: '15m',
+  ADMIN_REFRESH_TOKEN_TTL_MS: 30 * 24 * 60 * 60 * 1000,
+
   // Verificación de teléfono de vendedores por SMS (ver CLAUDE.md) —
   // "~10 minutos" es un requisito propio del producto, no citado de
   // ningún documento de especificación original (esta funcionalidad es

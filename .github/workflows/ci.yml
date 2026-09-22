@@ -30,6 +30,7 @@ jobs:
       DATABASE_URL: postgres://ruteando:ci_password@localhost:5432/ruteando_test
       JWT_ACCESS_SECRET: ci-only-access-secret-not-for-real-use
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-real-use-distinct
+      ADMIN_JWT_ACCESS_SECRET: ci-only-admin-access-secret-not-for-real-use
       STORAGE_ENDPOINT: http://localhost:9000
       STORAGE_BUCKET: ruteando-media-ci
       STORAGE_ACCESS_KEY: ci-placeholder

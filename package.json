@@ -24,6 +24,7 @@
     "seed:loadtest:clean": "node scripts/seedLoadTest.js --clean",
     "seed:demo": "node scripts/seedDemoBusinesses.js",
     "seed:demo:clean": "node scripts/seedDemoBusinesses.js --clean",
+    "admin:crear-maestro": "node scripts/crearAdministradorMaestro.js",
     "loadtest": "k6 run scripts/loadtest-nearby.js"
   },
   "repository": {

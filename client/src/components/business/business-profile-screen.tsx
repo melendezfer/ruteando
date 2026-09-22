@@ -326,12 +326,18 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             <HeroFallbackIcon size={64} weight="duotone" className="text-text-muted" />
           </div>
         )}
-        {/* Texto neutro, sin punto ni color por estado (sin RF asociado,
-            petición directa del usuario) — antes usaba `bg-verde` para
-            "Abierto ahora" vs. `bg-text-muted` para "Cerrado ahora"; ahora
-            es el mismo fondo oscuro translúcido para los dos estados, el
-            texto es lo único que cambia. */}
-        <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 font-sans text-caption font-semibold uppercase tracking-wide text-white">
+        {/* Revertido a pedido explícito del usuario (sin RF asociado):
+            la retroalimentación sobre el redediseño de navegación global
+            (CLAUDE.md sección 54, punto 7) había unificado esto a un
+            fondo oscuro translúcido para los dos estados, quitando el
+            verde de marca — el usuario pidió después volver a la
+            versión con color por estado, tal como estaba antes de esa
+            auditoría. */}
+        <span
+          className={`absolute bottom-3 left-3 rounded-full px-3 py-1 font-sans text-caption font-semibold uppercase tracking-wide text-white ${
+            profile.isOpenNow ? "bg-verde" : "bg-text-muted"
+          }`}
+        >
           {profile.isOpenNow ? "Abierto ahora" : "Cerrado ahora"}
         </span>
       </div>

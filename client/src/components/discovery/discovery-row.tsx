@@ -18,7 +18,7 @@ import type { BusinessPin } from "@/components/map/leaflet-map";
  */
 function resolveLocationActionLabel(business: BusinessPin, catalogType: CatalogType | null): string {
   if (catalogType === "services") return "Ver zona";
-  return business.mobility === "fixed" ? "Ver en mapa" : "Ver ubicación";
+  return business.mobility === "itinerant" ? "Ver ubicación" : "Ver en mapa";
 }
 
 interface DiscoveryRowProps {

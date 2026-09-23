@@ -10,6 +10,7 @@ const {
   locationInputSchema,
   locationVisibilityInputSchema,
   scheduleInputSchema,
+  locationSlotsInputSchema,
   reportInputSchema,
   phoneVerificationConfirmSchema,
   businessListQuerySchema,
@@ -90,6 +91,19 @@ router.put(
   authenticate,
   validateBody(scheduleInputSchema),
   controller.putSchedule,
+);
+
+// Franjas del día con ubicación propia de un vendedor ambulante
+// (migración franjas-ubicacion-ambulante). GET con optionalAuthenticate
+// por el mismo motivo que GET .../location: el dueño ve la coordenada
+// exacta aunque el negocio haya elegido "zona aproximada".
+router.get('/:businessId/location-slots', validarBusinessId, optionalAuthenticate, controller.getLocationSlots);
+router.put(
+  '/:businessId/location-slots',
+  validarBusinessId,
+  authenticate,
+  validateBody(locationSlotsInputSchema),
+  controller.putLocationSlots,
 );
 
 router.post(

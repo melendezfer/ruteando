@@ -1,4 +1,8 @@
-import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+// "Confirmó que está vendiendo" — ícono propio (registro único), distinto
+// de "abierto según su horario" y de "acción completada".
+const ConfirmedSellingIcon = SEMANTIC_ICONS.confirmedSelling;
 import { formatConfirmedAgo } from "@/lib/availability/format-confirmed-at";
 
 interface AvailabilityConfirmedBadgeProps {
@@ -19,7 +23,7 @@ export function AvailabilityConfirmedBadge({ confirmedAt }: AvailabilityConfirme
 
   return (
     <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-verde/10 px-3 py-1 font-sans text-caption font-semibold text-verde">
-      <CheckCircle size={16} weight="bold" />
+      <ConfirmedSellingIcon size={16} weight="bold" />
       {formatConfirmedAgo(confirmedAt)}
     </span>
   );

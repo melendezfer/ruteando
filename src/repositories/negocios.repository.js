@@ -266,16 +266,69 @@ function lateralDisponibilidadFresca(idxFrescura) {
  * entre el filtro `openNow` y `condicionOfertaVigente` sin volver a
  * ligar los mismos tres valores dos veces).
  */
-function condicionHorarioSQL({ pHoy, pAyer, pAhora }, negocioAlias = 'n') {
+function condicionHorarioSQL(idxHorario, negocioAlias = 'n') {
   return `EXISTS (
       SELECT 1 FROM horarios h
       WHERE h.negocio_id = ${negocioAlias}.id AND h.cerrado = false AND (
-           (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura <= h.hora_cierre AND $${pAhora}::time BETWEEN h.hora_apertura AND h.hora_cierre)
-        OR (h.dia = $${pHoy}::dia_semana  AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time >= h.hora_apertura)
-        OR (h.dia = $${pAyer}::dia_semana AND h.hora_apertura >  h.hora_cierre AND $${pAhora}::time <= h.hora_cierre)
+        ${condicionRangoHorarioSQL(idxHorario, { dia: 'h.dia', inicio: 'h.hora_apertura', fin: 'h.hora_cierre' })}
       )
     )`;
 }
+
+/**
+ * La regla de "¿el reloj cae dentro de este rango semanal?" sola, sin la
+ * tabla — compartida por `horarios` (condicionHorarioSQL, arriba) y por
+ * `franjas_ubicacion` (lateralFranjaActiva, abajo), para que las dos
+ * interpreten igual un rango nocturno que cruza medianoche (`inicio >
+ * fin`, guardado bajo el día en que EMPIEZA — de ahí la fila de AYER).
+ */
+function condicionRangoHorarioSQL({ pHoy, pAyer, pAhora }, { dia, inicio, fin }) {
+  return `(${dia} = $${pHoy}::dia_semana  AND ${inicio} <= ${fin} AND $${pAhora}::time BETWEEN ${inicio} AND ${fin})
+        OR (${dia} = $${pHoy}::dia_semana  AND ${inicio} >  ${fin} AND $${pAhora}::time >= ${inicio})
+        OR (${dia} = $${pAyer}::dia_semana AND ${inicio} >  ${fin} AND $${pAhora}::time <= ${fin})`;
+}
+
+/**
+ * Liga una sola vez los tres valores de "ahora" (día de hoy, de ayer y
+ * hora actual, en Bogotá) que usan condicionRangoHorarioSQL y todos sus
+ * callers. Devuelve los índices de placeholder.
+ */
+function ligarMomentoActual(params) {
+  const { hoyDb, horaActual } = momentoActualBogota();
+  params.push(hoyDb, diaAnterior(hoyDb), horaActual);
+  return { pHoy: params.length - 2, pAyer: params.length - 1, pAhora: params.length };
+}
+
+/**
+ * Franja del día vigente AHORA para un vendedor ambulante (migración
+ * franjas-ubicacion-ambulante) — mismo patrón que
+ * `tipos_oferta.requiere_horario_negocio`: nada se activa ni desactiva
+ * con un cron, se evalúa contra el reloj en cada consulta. Solo para
+ * `movilidad = 'ambulante'` (un negocio que cambió de modalidad conserva
+ * sus franjas guardadas, pero dejan de tener efecto). Las franjas no se
+ * solapan (lo valida el servicio al guardar), así que hay a lo sumo una;
+ * el ORDER BY es solo para que el resultado sea determinístico igual.
+ *
+ * El caller usa `COALESCE(fr.punto, <punto base>)` como la ubicación
+ * EFECTIVA del negocio: dentro de una franja, la de la franja; fuera de
+ * toda franja, la base (`ubicaciones.es_actual`) — nunca se oculta.
+ */
+function lateralFranjaActiva(idxHorario, negocioAlias = 'n') {
+  return `LEFT JOIN LATERAL (
+       SELECT f.id, f.punto, f.hora_inicio, f.hora_fin, f.direccion_referencia
+       FROM franjas_ubicacion f
+       WHERE f.negocio_id = ${negocioAlias}.id AND ${negocioAlias}.movilidad = 'ambulante' AND (
+         ${condicionRangoHorarioSQL(idxHorario, { dia: 'f.dia', inicio: 'f.hora_inicio', fin: 'f.hora_fin' })}
+       )
+       ORDER BY f.hora_inicio, f.id
+       LIMIT 1
+     ) fr ON true`;
+}
+
+// Columnas de la franja vigente que viajan en cada fila (ver
+// business.mapper.js#toApiBusiness, `activeLocationSlot`).
+const COLUMNAS_FRANJA_ACTIVA = `fr.id AS franja_id, fr.hora_inicio AS franja_hora_inicio,
+            fr.hora_fin AS franja_hora_fin, fr.direccion_referencia AS franja_direccion_referencia`;
 
 /**
  * Filtros combinables compartidos por listar() y cercanos() (RF-010/011):
@@ -361,23 +414,16 @@ function agregarFiltrosComunes(
     clausulas.push(`EXISTS (SELECT 1 FROM productos p WHERE ${condiciones.join(' AND ')})`);
   }
 
-  // idxHorario se calcula una sola vez, apenas hace falta (openNow y/o
-  // offerTypeId y/o hasActiveOffer pueden convivir en la misma consulta)
-  // — condicionOfertaVigente() reusa exactamente los mismos tres
+  // condicionOfertaVigente() reusa exactamente los mismos tres
   // placeholders ya ligados acá, tanto en esta cláusula WHERE como más
   // tarde en columnaOfertaCoincide()/lateralOfertasVigentes() (ver
   // listar()/construirConsultaCercanos()), sin volver a ligar los mismos
   // valores dos veces.
-  if (openNow || offerTypeId != null || hasActiveOffer) {
-    // Misma regla que disponibilidad.service.js#estaAbiertoAhora, en SQL:
-    // un turno nocturno (hora_apertura > hora_cierre) queda guardado bajo
-    // el día en que empieza, así que hace falta revisar también la fila
-    // de "ayer" para la mitad del turno que cae después de medianoche.
-    const { hoyDb, horaActual } = momentoActualBogota();
-    const ayerDb = diaAnterior(hoyDb);
-    params.push(hoyDb, ayerDb, horaActual);
-    idxHorario = { pHoy: params.length - 2, pAyer: params.length - 1, pAhora: params.length };
-  }
+  // idxHorario se liga siempre (no solo con openNow/offerTypeId/
+  // hasActiveOffer): la ubicación efectiva de un ambulante depende de su
+  // franja vigente AHORA (lateralFranjaActiva), en cualquier consulta.
+  // Una sola vez por consulta, reusado por todos los que lo necesiten.
+  idxHorario = ligarMomentoActual(params);
 
   if (openNow) {
     clausulas.push(condicionHorarioSQL(idxHorario));
@@ -627,7 +673,11 @@ async function listar({
     // en el mismo milisegundo (carga masiva, sembrado, ráfaga de
     // registros concurrentes) podían quedar fuera de cualquier página al
     // paginar, porque el cursor comparaba contra un valor ya truncado.
-    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor, ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta,
+    `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor,
+            ST_Y(COALESCE(fr.punto, ub.punto)::geometry) AS latitud,
+            ST_X(COALESCE(fr.punto, ub.punto)::geometry) AS longitud,
+            ub.mostrar_ubicacion_exacta,
+            ${COLUMNAS_FRANJA_ACTIVA},
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
@@ -637,10 +687,11 @@ async function listar({
      FROM negocios n
      JOIN categorias c ON c.id = n.categoria_id
      LEFT JOIN LATERAL (
-       SELECT ST_Y(u.punto::geometry) AS latitud, ST_X(u.punto::geometry) AS longitud, u.mostrar_ubicacion_exacta
+       SELECT u.punto, u.mostrar_ubicacion_exacta
        FROM ubicaciones u WHERE u.negocio_id = n.id AND u.es_actual = true
        LIMIT 1
      ) ub ON true
+     ${lateralFranjaActiva(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
@@ -685,7 +736,23 @@ function construirConsultaCercanos({
   const clausulas = [`n.estado = 'activo'`, clausulaTelefonoVerificado()];
   const params = [lng, lat]; // $1, $2 — el punto objetivo
   params.push(radiusKm * 1000); // $3 — radio en metros
-  clausulas.push(`ST_DWithin(u.punto, objetivo.punto, $3)`);
+  // Radio contra la ubicación EFECTIVA (la de la franja vigente de un
+  // ambulante, o la base — ver lateralFranjaActiva). ST_DWithin sobre un
+  // COALESCE no puede usar ningún índice, así que primero se acotan los
+  // candidatos con dos búsquedas que sí usan su índice GIST
+  // (idx_ubicaciones_punto e idx_franjas_ubicacion_punto): cualquier
+  // negocio cuya ubicación efectiva cae en el radio tiene, por fuerza,
+  // su base o alguna de sus franjas en el radio. Después, el ST_DWithin
+  // sobre la efectiva descarta, por ejemplo, un ambulante cuya base está
+  // cerca pero que ahora mismo está en una franja lejos.
+  clausulas.push(`n.id IN (
+       SELECT u2.negocio_id FROM ubicaciones u2
+       WHERE u2.es_actual = true AND ST_DWithin(u2.punto, objetivo.punto, $3)
+       UNION
+       SELECT f2.negocio_id FROM franjas_ubicacion f2
+       WHERE ST_DWithin(f2.punto, objetivo.punto, $3)
+     )`);
+  clausulas.push(`ST_DWithin(COALESCE(fr.punto, u.punto), objetivo.punto, $3)`);
 
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
@@ -701,7 +768,7 @@ function construirConsultaCercanos({
   if (cursor) {
     params.push(cursor.distanceMeters, cursor.id);
     clausulas.push(
-      `(ST_Distance(u.punto, objetivo.punto), n.id) > ($${params.length - 1}::double precision, $${params.length}::uuid)`,
+      `(ST_Distance(COALESCE(fr.punto, u.punto), objetivo.punto), n.id) > ($${params.length - 1}::double precision, $${params.length}::uuid)`,
     );
   }
 
@@ -710,10 +777,11 @@ function construirConsultaCercanos({
        SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS punto
      )
      SELECT n.*,
-            ST_Y(u.punto::geometry) AS latitud,
-            ST_X(u.punto::geometry) AS longitud,
+            ST_Y(COALESCE(fr.punto, u.punto)::geometry) AS latitud,
+            ST_X(COALESCE(fr.punto, u.punto)::geometry) AS longitud,
             u.mostrar_ubicacion_exacta,
-            ST_Distance(u.punto, objetivo.punto) AS distancia_m,
+            ST_Distance(COALESCE(fr.punto, u.punto), objetivo.punto) AS distancia_m,
+            ${COLUMNAS_FRANJA_ACTIVA},
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
@@ -724,11 +792,12 @@ function construirConsultaCercanos({
      JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
      JOIN categorias c ON c.id = n.categoria_id
      CROSS JOIN objetivo
+     ${lateralFranjaActiva(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
      WHERE ${clausulas.join(' AND ')}
-     ORDER BY u.punto <-> objetivo.punto, n.id
+     ORDER BY distancia_m, n.id
      LIMIT $${params.length}`;
 
   return { sql, params };
@@ -780,28 +849,48 @@ async function explicarCercanos(filtros) {
  * devuelve.
  */
 async function clusterizar({ lat, lng, radiusKm }) {
+  const params = [lng, lat, radiusKm * 1000, ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES];
+  const idxHorario = ligarMomentoActual(params);
+  // Misma ubicación EFECTIVA que listar()/cercanos() (franja vigente de un
+  // ambulante, o la base), con el mismo acotado previo por índice — ver
+  // el comentario en construirConsultaCercanos(). Así una zona no cuenta
+  // a un ambulante donde NO está ahora mismo.
   const { rows } = await pool.query(
     `WITH objetivo AS (
        SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS punto
+     ),
+     efectivos AS (
+       SELECT n.id AS negocio_id, n.categoria_id, COALESCE(fr.punto, u.punto) AS punto
+       FROM negocios n
+       JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
+       ${lateralFranjaActiva(idxHorario)}
+       WHERE n.estado = 'activo' AND ${clausulaTelefonoVerificado()}
+         AND n.id IN (
+           SELECT u2.negocio_id FROM ubicaciones u2, objetivo o
+           WHERE u2.es_actual = true AND ST_DWithin(u2.punto, o.punto, $3)
+           UNION
+           SELECT f2.negocio_id FROM franjas_ubicacion f2, objetivo o
+           WHERE ST_DWithin(f2.punto, o.punto, $3)
+         )
      )
      SELECT
-       n.id AS negocio_id,
-       n.categoria_id,
-       ST_Y(u.punto::geometry) AS latitud,
-       ST_X(u.punto::geometry) AS longitud,
-       ST_Distance(u.punto, objetivo.punto) AS distancia_m,
-       ST_ClusterDBSCAN(ST_Transform(u.punto::geometry, 3857), $4, $5) OVER () AS cluster_id
-     FROM negocios n
-     JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
+       e.negocio_id,
+       e.categoria_id,
+       ST_Y(e.punto::geometry) AS latitud,
+       ST_X(e.punto::geometry) AS longitud,
+       ST_Distance(e.punto, objetivo.punto) AS distancia_m,
+       ST_ClusterDBSCAN(ST_Transform(e.punto::geometry, 3857), $4, $5) OVER () AS cluster_id
+     FROM efectivos e
      CROSS JOIN objetivo
-     WHERE n.estado = 'activo' AND ${clausulaTelefonoVerificado()}
-       AND ST_DWithin(u.punto, objetivo.punto, $3)`,
-    [lng, lat, radiusKm * 1000, ZONE_RADIUS_METERS, ZONE_MIN_BUSINESSES],
+     WHERE ST_DWithin(e.punto, objetivo.punto, $3)`,
+    params,
   );
   return rows;
 }
 
 module.exports = {
+  condicionRangoHorarioSQL,
+  ligarMomentoActual,
   crear,
   buscarPorId,
   actualizar,

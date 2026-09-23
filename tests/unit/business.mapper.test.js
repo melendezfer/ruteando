@@ -29,6 +29,7 @@ describe('toApiBusiness', () => {
     };
 
     expect(toApiBusiness(row)).toEqual({
+      activeLocationSlot: null,
       id: 'b-1',
       ownerId: 'u-1',
       categoryId: 2,

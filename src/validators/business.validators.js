@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { LOCATION_SLOTS_MAX } = require('../config/constants');
 
 const businessInputSchema = z.object({
   name: z.string().min(1).max(150),
@@ -25,7 +26,7 @@ const businessInputSchema = z.object({
   // propósito — un PATCH que no lo menciona conserva el valor existente
   // en vez de resetearlo en silencio. El default real de creación
   // ('itinerant', ver negocios.service.js#crear) se aplica ahí, no acá.
-  mobility: z.enum(['itinerant', 'fixed']).optional(),
+  mobility: z.enum(['itinerant', 'street_stall', 'fixed']).optional(),
   // Bancas/asientos disponibles (petición directa del usuario, sin RF
   // asociado — ver CLAUDE.md). Mismo criterio que ownDelivery: sin
   // `.default()` a propósito — un PATCH que no lo menciona conserva el
@@ -106,6 +107,79 @@ const scheduleInputSchema = z
   .refine((dias) => new Set(dias.map((d) => d.day)).size === dias.length, {
     message: 'No puede haber dos horarios para el mismo día',
   });
+
+// Franjas del día con ubicación propia de un vendedor ambulante
+// (migración franjas-ubicacion-ambulante) — PUT
+// /businesses/{businessId}/location-slots, reemplazo completo igual que
+// scheduleInputSchema. Mismas reglas de hora que el horario: formato
+// HH:MM, endTime < startTime es una franja nocturna que cruza medianoche,
+// la igualdad exacta se rechaza (ambigua). Coordenadas con la misma caja
+// de Cundinamarca que locationInputSchema.
+const locationSlotSchema = z
+  .object({
+    day: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+    startTime: z.string().regex(TIME_PATTERN),
+    endTime: z.string().regex(TIME_PATTERN),
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+    referenceAddress: z.string().max(255).nullable().optional(),
+  })
+  .refine((data) => data.startTime !== data.endTime, {
+    message: 'endTime no puede ser igual a startTime',
+    path: ['endTime'],
+  })
+  .refine(
+    (data) =>
+      data.latitude >= CUNDINAMARCA_BBOX.latMin &&
+      data.latitude <= CUNDINAMARCA_BBOX.latMax &&
+      data.longitude >= CUNDINAMARCA_BBOX.lonMin &&
+      data.longitude <= CUNDINAMARCA_BBOX.lonMax,
+    {
+      message: 'Las coordenadas están fuera del rango esperado para Cundinamarca',
+      path: ['latitude'],
+    },
+  );
+
+const ORDEN_DIA_API = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const MINUTOS_SEMANA = 7 * 24 * 60;
+
+function aMinutos(hora) {
+  const [h, m] = hora.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Intervalos semanales [inicio, fin) en minutos desde el lunes 00:00 —
+ * una franja nocturna (endTime < startTime) termina al día siguiente; la
+ * del domingo que cruza medianoche termina el lunes (se parte en dos
+ * tramos al dar la vuelta a la semana).
+ */
+function intervalosSemanales(franja) {
+  const base = ORDEN_DIA_API.indexOf(franja.day) * 24 * 60;
+  const inicio = base + aMinutos(franja.startTime);
+  let fin = base + aMinutos(franja.endTime);
+  if (fin <= inicio) fin += 24 * 60;
+  if (fin <= MINUTOS_SEMANA) return [[inicio, fin]];
+  return [
+    [inicio, MINUTOS_SEMANA],
+    [0, fin - MINUTOS_SEMANA],
+  ];
+}
+
+/** true si dos franjas se pisan en algún minuto de la semana (tocarse en el borde, 09:00-12:00 y 12:00-14:00, no cuenta). */
+function franjasSeSolapan(a, b) {
+  return intervalosSemanales(a).some(([ai, af]) =>
+    intervalosSemanales(b).some(([bi, bf]) => ai < bf && bi < af),
+  );
+}
+
+const locationSlotsInputSchema = z
+  .array(locationSlotSchema)
+  .max(LOCATION_SLOTS_MAX)
+  .refine(
+    (franjas) => franjas.every((a, i) => franjas.slice(i + 1).every((b) => !franjasSeSolapan(a, b))),
+    { message: 'Dos franjas no pueden solaparse — el vendedor no puede estar en dos sitios a la vez' },
+  );
 
 const reportInputSchema = z.object({
   reason: z.string().min(1).max(500),
@@ -215,6 +289,8 @@ module.exports = {
   locationInputSchema,
   locationVisibilityInputSchema,
   scheduleInputSchema,
+  locationSlotsInputSchema,
+  franjasSeSolapan,
   reportInputSchema,
   phoneVerificationConfirmSchema,
   businessListQuerySchema,

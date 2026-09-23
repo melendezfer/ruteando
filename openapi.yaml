@@ -214,7 +214,26 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        icon: { type: string, nullable: true }
+        icon:
+          type: string
+          nullable: true
+          description: >-
+            Ícono propio de la categoría, como nombre kebab-case de Phosphor
+            Icons (ej. `coffee`, `scissors`) — mismo formato que
+            `OfferType.icon`. Es la única fuente de verdad de con qué ícono
+            se dibuja la categoría en cualquier pantalla (pin del mapa,
+            banner, listas, perfil); el cliente no lo deduce de `type`.
+            `null` en una categoría sin ícono asignado todavía — el cliente
+            usa un ícono genérico de respaldo.
+        color:
+          type: string
+          pattern: '^#[0-9a-f]{6}$'
+          description: >-
+            Color fijo de la categoría (hex), guardado — no calculado. Hoy
+            un tono por familia (`food` naranja, `services` turquesa,
+            `goods` morado), elegidos para no chocar con los colores de
+            estado de la app; la identidad de cada categoría la carga
+            `icon`. Categorías sin color asignado usan un gris neutro.
         displayOrder: { type: integer }
         type:
           type: string
@@ -223,7 +242,8 @@ components:
             Expansión de alcance sin RF asociado (ver CLAUDE.md sección
             31): distingue qué tan genérico es el catálogo de un negocio
             de esta categoría — `food` (comida, el alcance original del
-            proyecto) muestra su catálogo como "Menú"; `goods` (bienes
+            proyecto) muestra su catálogo como "Carta" ("Menú" queda
+            reservado para el tipo de oferta temporal, ver OfferType); `goods` (bienes
             físicos no gastronómicos, ej. artesanías) como "Productos";
             `services` (ej. costura/sastrería, asesoría legal básica)
             como "Servicios". No cambia la forma de los datos
@@ -241,7 +261,13 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        icon: { type: string, nullable: true }
+        icon:
+          type: string
+          nullable: true
+          description: >-
+            Nombre kebab-case de Phosphor Icons (`fork-knife`, `percent`,
+            `package`, `calendar-star`). `tag` NO se usa para ningún tipo
+            puntual: en la app significa "oferta con vigencia" genérica.
         displayOrder: { type: integer }
         active:
           type: boolean
@@ -329,12 +355,15 @@ components:
             Default `false` cuando no se manda en BusinessInput.
         mobility:
           type: string
-          enum: [itinerant, fixed]
+          enum: [itinerant, street_stall, fixed]
           description: >-
-            Movilidad autodeclarada del negocio (petición directa del
+            Modalidad autodeclarada del negocio (petición directa del
             usuario, sin RF asociado — ver CLAUDE.md): `itinerant`
-            (ambulante — se desplaza, ej. carrito o moto) vs. `fixed`
-            (un punto de venta que no cambia). Distinto de
+            (ambulante — se desplaza, ej. carrito o moto; puede declarar
+            franjas del día con ubicación propia, ver
+            /businesses/{businessId}/location-slots), `street_stall`
+            (puesto fijo en la vía pública — siempre en el mismo sitio de
+            la calle, sin local) y `fixed` (local cerrado). Distinto de
             `Location.type` (que también distingue `mobile` de los
             demás valores): ese campo se declara una sola vez al
             registrar la ubicación (RF-005); `mobility` es un
@@ -453,6 +482,18 @@ components:
             ningún resultado: un negocio `itinerant`/ambulante sin
             confirmación fresca se ve exactamente igual que uno con ella,
             decisión explícita del usuario al diseñar esta funcionalidad.
+        activeLocationSlot:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ActiveLocationSlot' }]
+          description: >-
+            Franja del día vigente AHORA de un vendedor `itinerant` (ver
+            /businesses/{businessId}/location-slots). Cuando no es null,
+            en GET /businesses y GET /businesses/nearby `latitude`/
+            `longitude`/`distanceMeters` ya son los de esa franja, no los
+            de la ubicación base — el vendedor aparece donde está ahora.
+            En GET /businesses/{businessId} `location` sigue siendo la
+            base y este campo dice dónde está ahora. Null fuera de toda
+            franja, en otras modalidades, o en POST/PATCH.
         rejectionReason:
           type: string
           nullable: true
@@ -572,7 +613,7 @@ components:
             conserva el valor existente.
         mobility:
           type: string
-          enum: [itinerant, fixed]
+          enum: [itinerant, street_stall, fixed]
           description: >-
             Ver Business.mobility. Opcional, sin `default` declarado a
             propósito, mismo criterio que `ownDelivery`: en POST,
@@ -686,6 +727,36 @@ components:
         openTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
         closeTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", nullable: true }
         closed: { type: boolean, default: false }
+
+    LocationSlot:
+      description: >-
+        Franja del día con ubicación propia de un vendedor ambulante (sin RF
+        asociado — ver CLAUDE.md). `endTime` menor que `startTime` es una
+        franja nocturna que cruza medianoche (queda bajo el día en que
+        empieza, igual que ScheduleDay). Dos franjas no pueden solaparse.
+        La coordenada sigue la misma regla de "zona aproximada" que
+        Location: el público la ve aproximada si el negocio lo eligió; el
+        dueño siempre la exacta.
+      type: object
+      required: [day, startTime, endTime, latitude, longitude]
+      properties:
+        id: { type: integer, readOnly: true }
+        day:
+          { type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday] }
+        startTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+        endTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        referenceAddress: { type: string, maxLength: 255, nullable: true }
+
+    ActiveLocationSlot:
+      description: Resumen de la franja vigente ahora (sin coordenadas — esas ya viajan como la ubicación efectiva del negocio).
+      type: object
+      properties:
+        id: { type: integer }
+        startTime: { type: string }
+        endTime: { type: string }
+        referenceAddress: { type: string, nullable: true }
 
     Product:
       type: object
@@ -1891,6 +1962,54 @@ paths:
               items: { $ref: '#/components/schemas/ScheduleDay' }
       responses:
         '200': { description: Horario actualizado }
+
+  /businesses/{businessId}/location-slots:
+    get:
+      tags: [Negocios]
+      summary: Franjas del día con ubicación propia (vendedor ambulante)
+      security: []
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '200':
+          description: Franjas ordenadas por día y hora de inicio
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LocationSlot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Negocios]
+      summary: Reemplazar todas las franjas del día (solo el dueño, solo modalidad itinerant)
+      description: >-
+        Reemplazo completo, igual que PUT .../schedule. Una franja solo
+        cuenta como vigente mientras el reloj (hora de Bogotá) cae dentro
+        de ella — se evalúa en cada consulta, sin cron (mismo patrón que
+        OfferType.requiresBusinessSchedule). Una lista vacía borra todas
+        las franjas y se acepta en cualquier modalidad; una lista no vacía
+        en un negocio que no es `itinerant` da 409.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 21
+              items: { $ref: '#/components/schemas/LocationSlot' }
+      responses:
+        '200':
+          description: Franjas guardadas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LocationSlot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /businesses/{businessId}/outdated-reports:
     post:

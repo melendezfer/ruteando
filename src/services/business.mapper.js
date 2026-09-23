@@ -33,8 +33,15 @@ const LOCATION_TYPE_API_TO_DB = Object.fromEntries(
 // 'mobile' como uno de sus 6 valores) — son dos campos separados con
 // significados relacionados pero no iguales, ver la migración para el
 // razonamiento completo de por qué no se reusó `ubicaciones.tipo`.
+//
+// 3 valores desde la migración modalidad-fijo-via-publica: 'fixed' sigue
+// significando exactamente lo mismo que antes (local cerrado) para no
+// romper a ningún cliente existente; el valor nuevo es 'street_stall'
+// (puesto fijo en la vía pública — siempre en el mismo sitio, pero en la
+// calle, no en un local).
 const MOBILITY_DB_TO_API = {
   ambulante: 'itinerant',
+  fijo_via_publica: 'street_stall',
   local_fijo: 'fixed',
 };
 
@@ -258,6 +265,50 @@ function toApiBusiness(row) {
     // 'rechazado' (o haya estado en algún momento y luego se haya vuelto
     // a aprobar, ver negocios.repository.js#aprobar, que lo limpia).
     rejectionReason: row.motivo_rechazo ?? null,
+    // Franja del día vigente AHORA de un vendedor ambulante (migración
+    // franjas-ubicacion-ambulante) — cuando no es null, `latitude`/
+    // `longitude`/`distanceMeters` de esta misma fila ya son los de la
+    // franja, no los de la ubicación base (ver
+    // negocios.repository.js#lateralFranjaActiva). Solo viene lleno en
+    // listar/cercanos (que hacen ese join) y en el perfil
+    // (toApiBusinessProfile lo sobrescribe con su propia consulta).
+    activeLocationSlot: row.franja_id != null ? toApiActiveLocationSlot({
+      id: row.franja_id,
+      hora_inicio: row.franja_hora_inicio,
+      hora_fin: row.franja_hora_fin,
+      direccion_referencia: row.franja_direccion_referencia,
+    }) : null,
+  };
+}
+
+/** Resumen de la franja vigente — sin coordenadas: esas ya viajan como la ubicación efectiva del negocio. */
+function toApiActiveLocationSlot(row) {
+  return {
+    id: Number(row.id),
+    startTime: truncarSegundos(row.hora_inicio),
+    endTime: truncarSegundos(row.hora_fin),
+    referenceAddress: row.direccion_referencia ?? null,
+  };
+}
+
+/**
+ * Franja completa (GET/PUT /businesses/{businessId}/location-slots).
+ * Misma regla de privacidad que toApiLocation: el público ve la
+ * coordenada aproximada si el negocio eligió "zona aproximada"
+ * (`ubicaciones.mostrar_ubicacion_exacta`, la preferencia vale para toda
+ * ubicación del negocio, base o franja); el dueño siempre la exacta.
+ */
+function toApiLocationSlot(row, { mostrarExacta }) {
+  const latitud = Number(row.latitud);
+  const longitud = Number(row.longitud);
+  return {
+    id: Number(row.id),
+    day: DAY_DB_TO_API[row.dia],
+    startTime: truncarSegundos(row.hora_inicio),
+    endTime: truncarSegundos(row.hora_fin),
+    latitude: mostrarExacta ? latitud : aproximarCoordenada(latitud),
+    longitude: mostrarExacta ? longitud : aproximarCoordenada(longitud),
+    referenceAddress: row.direccion_referencia ?? null,
   };
 }
 
@@ -455,6 +506,7 @@ function toApiBusinessProfile({
   esPropietario,
   availabilityConfirmedAt,
   isOpenNow,
+  franjaActiva,
 }) {
   return {
     ...toApiBusiness(negocio),
@@ -473,6 +525,10 @@ function toApiBusinessProfile({
     // `schedule` en el mismo instante de la petición, nunca cacheado ni
     // recalculado en el cliente.
     isOpenNow: Boolean(isOpenNow),
+    // Ver toApiBusiness#activeLocationSlot. En el perfil, `location` sigue
+    // siendo la ubicación BASE (la que edita el dueño); dónde está el
+    // ambulante ahora mismo, si está en una franja, lo dice este campo.
+    activeLocationSlot: franjaActiva ? toApiActiveLocationSlot(franjaActiva) : null,
   };
 }
 
@@ -493,6 +549,7 @@ module.exports = {
   toApiBusiness,
   toApiLocation,
   toApiScheduleDay,
+  toApiLocationSlot,
   toApiProduct,
   toApiPhoto,
   toApiReview,

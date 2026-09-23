@@ -254,7 +254,10 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: true,
     higieneAutodeclarada: true,
-    movilidad: 'ambulante',
+    // Puesto fijo en la vía pública (migración modalidad-fijo-via-publica):
+    // siempre en la misma esquina, sin local — el caso que antes no tenía
+    // valor propio y quedaba como 'ambulante'.
+    movilidad: 'fijo_via_publica',
     direccionReferencia: 'Carrera 38 con Calle 33, frente al parque de Ciudad Verde',
     productos: [
       {
@@ -297,7 +300,10 @@ const NEGOCIOS = [
     cerradoHoy: false,
     entregaPropia: false,
     higieneAutodeclarada: true,
-    movilidad: 'ambulante',
+    // Puesto fijo en la vía pública (migración modalidad-fijo-via-publica):
+    // siempre en la misma esquina, sin local — el caso que antes no tenía
+    // valor propio y quedaba como 'ambulante'.
+    movilidad: 'fijo_via_publica',
     direccionReferencia: 'Calle 34 Sur, al lado de la cancha sintética',
     productos: [
       {
@@ -928,6 +934,41 @@ const NEGOCIOS = [
       },
     ],
   },
+  {
+    // Vendedor ambulante con franjas del día (migración
+    // franjas-ubicacion-ambulante) — el caso exacto que motivó la
+    // funcionalidad: tinto en los paraderos de bus en la mañana y en la
+    // noche, y a la salida del colegio al mediodía. Fuera de esas franjas
+    // aparece en su ubicación base. Los tres puntos reusan rayos ya
+    // verificados por geocodificación inversa (0°/90°/180°, ver cabecera)
+    // a distancias por debajo del máximo verificado en cada uno.
+    slug: 'tintos-don-efra',
+    nombre: 'Tintos Don Efra',
+    descripcion: 'Tinto, aromática y pericos en termo, con carrito por el barrio.',
+    categoria: 'Tintos y café',
+    categoriaTipo: 'alimentos',
+    correo: 'demo-tintos-don-efra@ruteando.test',
+    nombreDueno: 'Efraín Rodríguez',
+    telefono: '3001110020',
+    distanciaM: 120,
+    rumbo: 0,
+    cerradoHoy: false,
+    entregaPropia: false,
+    higieneAutodeclarada: true,
+    movilidad: 'ambulante',
+    direccionReferencia: 'Calle 33 con Carrera 38, casa del vendedor',
+    sinFotoNegocio: true,
+    franjas: [
+      { inicio: '05:00', fin: '09:00', distanciaM: 320, rumbo: 90, direccion: 'Paradero de buses de la Avenida Ciudad Verde' },
+      { inicio: '12:00', fin: '14:00', distanciaM: 700, rumbo: 180, direccion: 'Salida del colegio, portón principal' },
+      { inicio: '17:00', fin: '20:00', distanciaM: 320, rumbo: 90, direccion: 'Paradero de buses de la Avenida Ciudad Verde' },
+    ],
+    productos: [
+      { nombre: 'Tinto', descripcion: 'Café negro recién colado, en vaso de 7 oz.', precio: 1000, disponible: true },
+      { nombre: 'Perico', descripcion: 'Café con leche caliente.', precio: 1500, disponible: true },
+      { nombre: 'Aromática', descripcion: 'Aromática de frutas o de hierbabuena.', precio: 1000, disponible: true },
+    ],
+  },
 ];
 
 async function limpiar() {
@@ -1060,6 +1101,19 @@ async function sembrar() {
       );
     }
 
+    // Franjas del día de un ambulante (migración franjas-ubicacion-ambulante)
+    // — las mismas todos los días de la semana.
+    for (const f of n.franjas ?? []) {
+      const puntoFranja = desplazar(f.distanciaM, f.rumbo);
+      for (const dia of ORDEN_DIAS_DB) {
+        await pool.query(
+          `INSERT INTO franjas_ubicacion (negocio_id, dia, hora_inicio, hora_fin, punto, direccion_referencia)
+           VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7)`,
+          [negocioId, dia, f.inicio, f.fin, puntoFranja.lng, puntoFranja.lat, f.direccion],
+        );
+      }
+    }
+
     // Foto de relleno vía servicio externo de placeholders (evita tocar
     // el pipeline real de subida/compresión/S3, fuera del alcance de este
     // script) — salvo `sinFotoNegocio: true` (petición explícita del
@@ -1169,7 +1223,7 @@ async function sembrar() {
       `- ${r.nombre} [${r.categoria} · ${r.categoriaTipo}] — ~${r.distanciaM} m, ${r.estadoAhora}, plan ${r.plan}, ` +
         `${r.entregaPropia ? 'hace domicilios propios' : 'sin domicilios propios'}, ` +
         `${r.higieneAutodeclarada ? 'con sello de higiene' : 'sin sello de higiene'}, ` +
-        `${r.movilidad === 'local_fijo' ? 'local fijo' : 'ambulante'}, ` +
+        `${{ local_fijo: 'local', fijo_via_publica: 'puesto en la calle', ambulante: 'ambulante' }[r.movilidad]}, ` +
         `${r.catalogoItems} ítem(s) de catálogo${r.sinFotoNegocio ? ' (sin fotos — prueba el ícono-silueta)' : ''}\n` +
         (r.oferta ? `    oferta con vigencia: ${r.oferta}\n` : '') +
         `    login: ${r.correo} / ${CONTRASENA_DEMO}    WhatsApp: ${r.whatsapp}`,

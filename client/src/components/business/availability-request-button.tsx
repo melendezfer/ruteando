@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle, HourglassMedium, Question, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { HourglassMedium, Question, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+// "Confirmó que está vendiendo" — ícono propio (registro único), distinto
+// de "abierto según su horario" y de "acción completada".
+const ConfirmedSellingIcon = SEMANTIC_ICONS.confirmedSelling;
 import { Button } from "@/components/ui/button";
 import { requestAvailabilityCheck, getAvailabilityRequest } from "@/lib/api/availability";
 import { getAvailabilityRequestErrorMessage } from "@/lib/api/error-messages";
@@ -104,7 +109,7 @@ export function AvailabilityRequestButton({ businessId, onConfirmed }: Availabil
   if (stage.status === "confirmed") {
     return (
       <p className="flex items-center gap-2 font-sans text-body-sm font-medium text-verde">
-        <CheckCircle size={18} weight="bold" />
+        <ConfirmedSellingIcon size={18} weight="bold" />
         ¡Confirmó que sigue vendiendo!
       </p>
     );

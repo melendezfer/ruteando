@@ -110,13 +110,29 @@ beforeAll(async () => {
     [usuarioId],
   );
 
+  // Franjas del día de ambulantes (migración franjas-ubicacion-ambulante):
+  // cercanos() acota candidatos también por idx_franjas_ubicacion_punto —
+  // con la tabla vacía cualquier plan sirve y la prueba no mediría nada.
+  // Una franja por negocio sembrado, en otro punto al azar de la misma
+  // zona.
+  await pool.query(
+    `INSERT INTO franjas_ubicacion (negocio_id, dia, hora_inicio, hora_fin, punto)
+     SELECT n.id, 'lunes', '06:00', '09:00',
+            ST_SetSRID(ST_MakePoint(
+              $2 + (random() - 0.5) * 0.3,
+              $3 + (random() - 0.5) * 0.3
+            ), 4326)::geography
+     FROM negocios n WHERE n.usuario_id = $1`,
+    [usuarioId, CENTRO.lng, CENTRO.lat],
+  );
+
   // Sin esto, el planificador usa estadísticas viejas/por defecto para
   // las tablas recién sembradas (autoanalyze de Postgres es asíncrono y
   // no alcanza a correr en el tiempo de una prueba) y puede subestimar
   // la selectividad de categoria_id/estado, eligiendo un plan que no
   // pasa por el índice espacial en absoluto — verificado a mano: sin
   // ANALYZE, la segunda prueba de abajo elegía otro camino de acceso.
-  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad');
+  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, franjas_ubicacion');
 });
 
 afterAll(async () => {
@@ -155,6 +171,13 @@ describe('plan de ejecución de GET /businesses/nearby', () => {
         n['Index Name'] === 'idx_solicitudes_disponibilidad_confirmadas',
     );
     expect(indexScanDisponibilidad).toBeDefined();
+
+    // Ubicación efectiva por franja: el acotado de candidatos por la
+    // ubicación de las franjas también debe ir por su índice GIST.
+    const indexScanFranjas = nodos.find(
+      (n) => NODOS_INDEX_SCAN.has(n['Node Type']) && n['Index Name'] === 'idx_franjas_ubicacion_punto',
+    );
+    expect(indexScanFranjas).toBeDefined();
   });
 
   it('sigue usando el índice con los filtros combinables activos (categoría + openNow)', async () => {

@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle, Question, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { Question, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+// "Confirmó que está vendiendo" — ícono propio (registro único), distinto
+// de "abierto según su horario" y de "acción completada".
+const ConfirmedSellingIcon = SEMANTIC_ICONS.confirmedSelling;
 import {
   listPendingAvailabilityRequests,
   respondToAvailabilityRequest,
@@ -112,7 +117,7 @@ export function VendorAvailabilityRequestsPanel({
                   aria-label="Confirmar que sigo vendiendo"
                   className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-verde transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <CheckCircle size={16} weight="bold" />
+                  <ConfirmedSellingIcon size={16} weight="bold" />
                 </button>
               </div>
             </div>

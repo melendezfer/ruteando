@@ -11,6 +11,7 @@ const {
   locationVisibilityInputSchema,
   scheduleInputSchema,
   locationSlotsInputSchema,
+  liveLocationInputSchema,
   reportInputSchema,
   phoneVerificationConfirmSchema,
   businessListQuerySchema,
@@ -105,6 +106,17 @@ router.put(
   validateBody(locationSlotsInputSchema),
   controller.putLocationSlots,
 );
+
+// Ubicación en vivo del ambulante (migración ubicacion-en-vivo): solo el
+// dueño; ver posicionesEnVivo.service.js para el orden de las reglas.
+router.post(
+  '/:businessId/live-location',
+  validarBusinessId,
+  authenticate,
+  validateBody(liveLocationInputSchema),
+  controller.postLiveLocation,
+);
+router.delete('/:businessId/live-location', validarBusinessId, authenticate, controller.deleteLiveLocation);
 
 router.post(
   '/:businessId/outdated-reports',

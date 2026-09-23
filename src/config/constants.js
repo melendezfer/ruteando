@@ -201,9 +201,23 @@ module.exports = {
   FREE_PLAN_MAX_CATALOG_PRODUCTS: 3,
 
   // Franjas del día con ubicación propia de un vendedor ambulante
-  // (migración franjas-ubicacion-ambulante). Cifra propia, no citada: 3
-  // por día alcanza para el caso descrito (paraderos en la mañana,
-  // colegio al mediodía, paraderos en la noche) con margen, y acota el
-  // tamaño del PUT de reemplazo completo.
-  LOCATION_SLOTS_MAX: 21,
+  // (migración franjas-ubicacion-ambulante). Cifra propia, no citada: 5
+  // por día. La primera versión permitía 21 (3 por día) y resultó
+  // demasiado justa: el caso descrito por el usuario (paraderos en la
+  // mañana, colegio al mediodía, paraderos en la noche, todos los días)
+  // ya son 21, y el vendedor no podía agregar ni uno más (encontrado
+  // verificando el editor con Playwright). Sigue acotando el tamaño del
+  // PUT de reemplazo completo.
+  LOCATION_SLOTS_MAX: 35,
+
+  // Ubicación en vivo del ambulante (migración ubicacion-en-vivo). Cifras
+  // propias: el rastro visible dura 15 minutos (decisión explícita del
+  // usuario); la posición deja de contar como "en vivo" si el vendedor no
+  // manda una nueva en 2 minutos (cerró la app — solo se comparte con la
+  // app abierta); y el servidor descarta posiciones que lleguen a menos de
+  // 10 s de la anterior (un watchPosition puede disparar varias por
+  // segundo; no aportan nada al rastro y inflarían la tabla).
+  LIVE_LOCATION_TRAIL_MINUTES: 15,
+  LIVE_LOCATION_STALE_SECONDS: 120,
+  LIVE_LOCATION_MIN_INTERVAL_SECONDS: 10,
 };

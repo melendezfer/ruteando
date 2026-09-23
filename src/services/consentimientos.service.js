@@ -10,6 +10,8 @@ const TIPO_CONSENTIMIENTO_API_TO_DB = {
   terms_conditions: 'terminos_condiciones',
   assisted_registration: 'registro_asistido',
   notifications: 'notificaciones',
+  // Ubicación en vivo del vendedor ambulante (migración ubicacion-en-vivo).
+  live_location: 'ubicacion_en_vivo',
 };
 
 const TIPO_CONSENTIMIENTO_DB_TO_API = Object.fromEntries(

@@ -2,6 +2,7 @@ const { obtenerCrudoOFallar } = require('./negocios.service');
 const ubicacionesRepo = require('../repositories/ubicaciones.repository');
 const horariosRepo = require('../repositories/horarios.repository');
 const franjasRepo = require('../repositories/franjasUbicacion.repository');
+const posicionesEnVivoRepo = require('../repositories/posicionesEnVivo.repository');
 const productosRepo = require('../repositories/productos.repository');
 const fotosRepo = require('../repositories/fotos.repository');
 const resenasRepo = require('../repositories/resenas.repository');
@@ -37,7 +38,7 @@ async function obtener(id, requesterId) {
   const negocio = await obtenerCrudoOFallar(id);
   const esPropietario = requesterId != null && negocio.usuario_id === requesterId;
 
-  const [ubicacion, horario, productos, fotos, agregadoResenas, availabilityConfirmedAt, franjaActiva] =
+  const [ubicacion, horario, productos, fotos, agregadoResenas, availabilityConfirmedAt, franjaActiva, enVivo] =
     await Promise.all([
       ubicacionesRepo.obtenerActual(id),
       horariosRepo.listar(id),
@@ -49,6 +50,7 @@ async function obtener(id, requesterId) {
         AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES,
       ),
       franjasRepo.obtenerActiva(id),
+      posicionesEnVivoRepo.obtenerVigente(id),
     ]);
 
   // Épica F4 (frontend): "abierto ahora" en el perfil se calcula acá, no
@@ -72,6 +74,7 @@ async function obtener(id, requesterId) {
     availabilityConfirmedAt,
     isOpenNow,
     franjaActiva,
+    enVivo,
   });
 }
 

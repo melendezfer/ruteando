@@ -181,6 +181,25 @@ const locationSlotsInputSchema = z
     { message: 'Dos franjas no pueden solaparse — el vendedor no puede estar en dos sitios a la vez' },
   );
 
+// POST /businesses/{businessId}/live-location — misma caja de
+// Cundinamarca que el resto de coordenadas del proyecto.
+const liveLocationInputSchema = z
+  .object({
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+  })
+  .refine(
+    (data) =>
+      data.latitude >= CUNDINAMARCA_BBOX.latMin &&
+      data.latitude <= CUNDINAMARCA_BBOX.latMax &&
+      data.longitude >= CUNDINAMARCA_BBOX.lonMin &&
+      data.longitude <= CUNDINAMARCA_BBOX.lonMax,
+    {
+      message: 'Las coordenadas están fuera del rango esperado para Cundinamarca',
+      path: ['latitude'],
+    },
+  );
+
 const reportInputSchema = z.object({
   reason: z.string().min(1).max(500),
 });
@@ -290,6 +309,7 @@ module.exports = {
   locationVisibilityInputSchema,
   scheduleInputSchema,
   locationSlotsInputSchema,
+  liveLocationInputSchema,
   franjasSeSolapan,
   reportInputSchema,
   phoneVerificationConfirmSchema,

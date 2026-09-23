@@ -59,3 +59,23 @@ export async function grantNotificationsConsent(): Promise<{
   });
   return { ok: response.ok, status: response.status, consent: data ?? null };
 }
+
+/**
+ * Ubicación en vivo del vendedor ambulante (migración ubicacion-en-vivo):
+ * `live_location` es requisito del servidor para aceptar posiciones (403
+ * consent-required sin él). Acción explícita del vendedor desde el modal
+ * de LiveLocationConsentModal, igual que notificaciones: el resultado sí
+ * se muestra.
+ */
+export async function grantLiveLocationConsent(): Promise<{ ok: boolean }> {
+  const { response } = await api.POST("/consents", {
+    body: { type: "live_location", textVersion: MANDATORY_CONSENT_TEXT_VERSION, grantedByThirdParty: false },
+  });
+  return { ok: response.ok };
+}
+
+/** ¿El usuario autenticado ya otorgó este tipo de consentimiento alguna vez? (consentimientos es append-only). */
+export async function hasConsent(type: NonNullable<Consent["type"]>): Promise<boolean> {
+  const { data } = await api.GET("/users/me/consents");
+  return (data ?? []).some((c) => c.type === type);
+}

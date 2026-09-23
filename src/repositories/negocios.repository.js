@@ -4,6 +4,8 @@ const {
   ZONE_RADIUS_METERS,
   ZONE_MIN_BUSINESSES,
   AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES,
+  LIVE_LOCATION_STALE_SECONDS,
+  LIVE_LOCATION_TRAIL_MINUTES,
 } = require('../config/constants');
 const env = require('../config/env');
 const { resolverCategoriasPorAlias } = require('../config/categoryAliases');
@@ -309,7 +311,7 @@ function ligarMomentoActual(params) {
  * solapan (lo valida el servicio al guardar), así que hay a lo sumo una;
  * el ORDER BY es solo para que el resultado sea determinístico igual.
  *
- * El caller usa `COALESCE(fr.punto, <punto base>)` como la ubicación
+ * El caller usa `COALESCE(vivo.punto, fr.punto, <punto base>)` como la ubicación
  * EFECTIVA del negocio: dentro de una franja, la de la franja; fuera de
  * toda franja, la base (`ubicaciones.es_actual`) — nunca se oculta.
  */
@@ -323,6 +325,81 @@ function lateralFranjaActiva(idxHorario, negocioAlias = 'n') {
        ORDER BY f.hora_inicio, f.id
        LIMIT 1
      ) fr ON true`;
+}
+
+/**
+ * Posición en vivo de un vendedor ambulante (migración ubicacion-en-vivo)
+ * — la PRIMERA opción de ubicación efectiva (antes que la franja y la
+ * base). Solo cuenta si:
+ *   - el negocio es 'ambulante';
+ *   - la última posición tiene menos de LIVE_LOCATION_STALE_SECONDS (el
+ *     vendedor solo comparte con la app abierta: si la cierra, deja de
+ *     contar sola, sin que nadie tenga que "apagar" nada);
+ *   - el negocio está dentro de su horario o de una franja AHORA — mismo
+ *     mecanismo sin cron que las franjas: al terminar el horario, la
+ *     posición deja de mostrarse aunque el vendedor siga con la app
+ *     abierta (y el servidor además deja de aceptarle posiciones, ver
+ *     posicionesEnVivo.service.js).
+ * `rastro` son las posiciones de los últimos LIVE_LOCATION_TRAIL_MINUTES,
+ * en orden, para dibujar por dónde pasó — nunca más que eso (la tabla
+ * tampoco guarda más, ver la migración).
+ *
+ * La posición en vivo se muestra EXACTA aunque el negocio haya elegido
+ * "zona aproximada" (el caller hace `mostrar_ubicacion_exacta OR
+ * vivo.punto IS NOT NULL`): ese interruptor protege la ubicación base (ej.
+ * la casa de quien vende "desde casa"); compartir la posición en vivo es
+ * un consentimiento aparte y explícito, cuyo texto dice que los clientes
+ * verán dónde está el vendedor mientras se mueve.
+ *
+ * Requiere `lateralFranjaActiva()` antes en el mismo FROM (usa `fr.id`).
+ */
+function lateralPosicionEnVivo(idxHorario, negocioAlias = 'n') {
+  const stale = Number(LIVE_LOCATION_STALE_SECONDS);
+  const rastro = Number(LIVE_LOCATION_TRAIL_MINUTES);
+  return `LEFT JOIN LATERAL (
+       SELECT ult.punto, ult.registrada_en,
+              (SELECT json_agg(json_build_object(
+                        'latitud', ST_Y(p.punto::geometry),
+                        'longitud', ST_X(p.punto::geometry),
+                        'registrada_en', p.registrada_en
+                      ) ORDER BY p.registrada_en)
+                 FROM posiciones_en_vivo p
+                WHERE p.negocio_id = ${negocioAlias}.id
+                  AND p.registrada_en >= now() - make_interval(mins => ${rastro})) AS rastro
+       FROM posiciones_en_vivo ult
+       WHERE ult.negocio_id = ${negocioAlias}.id
+         AND ${negocioAlias}.movilidad = 'ambulante'
+         AND ult.registrada_en >= now() - make_interval(secs => ${stale})
+         AND (fr.id IS NOT NULL OR ${condicionHorarioSQL(idxHorario, negocioAlias)})
+       ORDER BY ult.registrada_en DESC
+       LIMIT 1
+     ) vivo ON true`;
+}
+
+// Columnas de la posición en vivo que viajan en cada fila (ver
+// business.mapper.js#toApiBusiness, `liveLocation`).
+const COLUMNAS_EN_VIVO = `vivo.registrada_en AS vivo_actualizada_en, vivo.rastro AS vivo_rastro`;
+
+/**
+ * Acotado previo por índice de los candidatos dentro del radio (ver el
+ * comentario en construirConsultaCercanos): cualquier negocio cuya
+ * ubicación efectiva cae en el radio tiene su base, alguna franja o
+ * alguna posición en vivo reciente dentro del radio. `objetivo` y el
+ * placeholder del radio los arma el caller.
+ */
+function candidatosEnRadioSQL(idxRadio) {
+  const stale = Number(LIVE_LOCATION_STALE_SECONDS);
+  return `n.id IN (
+       SELECT u2.negocio_id FROM ubicaciones u2
+       WHERE u2.es_actual = true AND ST_DWithin(u2.punto, objetivo.punto, $${idxRadio})
+       UNION
+       SELECT f2.negocio_id FROM franjas_ubicacion f2
+       WHERE ST_DWithin(f2.punto, objetivo.punto, $${idxRadio})
+       UNION
+       SELECT v2.negocio_id FROM posiciones_en_vivo v2
+       WHERE v2.registrada_en >= now() - make_interval(secs => ${stale})
+         AND ST_DWithin(v2.punto, objetivo.punto, $${idxRadio})
+     )`;
 }
 
 // Columnas de la franja vigente que viajan en cada fila (ver
@@ -673,10 +750,11 @@ async function listar({
     // registros concurrentes) podían quedar fuera de cualquier página al
     // paginar, porque el cursor comparaba contra un valor ya truncado.
     `SELECT n.*, n.fecha_creacion::text AS fecha_creacion_cursor,
-            ST_Y(COALESCE(fr.punto, ub.punto)::geometry) AS latitud,
-            ST_X(COALESCE(fr.punto, ub.punto)::geometry) AS longitud,
-            ub.mostrar_ubicacion_exacta,
+            ST_Y(COALESCE(vivo.punto, fr.punto, ub.punto)::geometry) AS latitud,
+            ST_X(COALESCE(vivo.punto, fr.punto, ub.punto)::geometry) AS longitud,
+            (ub.mostrar_ubicacion_exacta OR vivo.punto IS NOT NULL) AS mostrar_ubicacion_exacta,
             ${COLUMNAS_FRANJA_ACTIVA},
+            ${COLUMNAS_EN_VIVO},
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
@@ -691,6 +769,7 @@ async function listar({
        LIMIT 1
      ) ub ON true
      ${lateralFranjaActiva(idxHorario)}
+     ${lateralPosicionEnVivo(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
@@ -744,14 +823,8 @@ function construirConsultaCercanos({
   // su base o alguna de sus franjas en el radio. Después, el ST_DWithin
   // sobre la efectiva descarta, por ejemplo, un ambulante cuya base está
   // cerca pero que ahora mismo está en una franja lejos.
-  clausulas.push(`n.id IN (
-       SELECT u2.negocio_id FROM ubicaciones u2
-       WHERE u2.es_actual = true AND ST_DWithin(u2.punto, objetivo.punto, $3)
-       UNION
-       SELECT f2.negocio_id FROM franjas_ubicacion f2
-       WHERE ST_DWithin(f2.punto, objetivo.punto, $3)
-     )`);
-  clausulas.push(`ST_DWithin(COALESCE(fr.punto, u.punto), objetivo.punto, $3)`);
+  clausulas.push(candidatosEnRadioSQL(3));
+  clausulas.push(`ST_DWithin(COALESCE(vivo.punto, fr.punto, u.punto), objetivo.punto, $3)`);
 
   params.push(AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES);
   const idxFrescura = params.length; // $4
@@ -767,7 +840,7 @@ function construirConsultaCercanos({
   if (cursor) {
     params.push(cursor.distanceMeters, cursor.id);
     clausulas.push(
-      `(ST_Distance(COALESCE(fr.punto, u.punto), objetivo.punto), n.id) > ($${params.length - 1}::double precision, $${params.length}::uuid)`,
+      `(ST_Distance(COALESCE(vivo.punto, fr.punto, u.punto), objetivo.punto), n.id) > ($${params.length - 1}::double precision, $${params.length}::uuid)`,
     );
   }
 
@@ -776,11 +849,12 @@ function construirConsultaCercanos({
        SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS punto
      )
      SELECT n.*,
-            ST_Y(COALESCE(fr.punto, u.punto)::geometry) AS latitud,
-            ST_X(COALESCE(fr.punto, u.punto)::geometry) AS longitud,
-            u.mostrar_ubicacion_exacta,
-            ST_Distance(COALESCE(fr.punto, u.punto), objetivo.punto) AS distancia_m,
+            ST_Y(COALESCE(vivo.punto, fr.punto, u.punto)::geometry) AS latitud,
+            ST_X(COALESCE(vivo.punto, fr.punto, u.punto)::geometry) AS longitud,
+            (u.mostrar_ubicacion_exacta OR vivo.punto IS NOT NULL) AS mostrar_ubicacion_exacta,
+            ST_Distance(COALESCE(vivo.punto, fr.punto, u.punto), objetivo.punto) AS distancia_m,
             ${COLUMNAS_FRANJA_ACTIVA},
+            ${COLUMNAS_EN_VIVO},
             disp.respondida_en AS disponibilidad_confirmada_en,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
@@ -792,6 +866,7 @@ function construirConsultaCercanos({
      JOIN categorias c ON c.id = n.categoria_id
      CROSS JOIN objetivo
      ${lateralFranjaActiva(idxHorario)}
+     ${lateralPosicionEnVivo(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
@@ -859,18 +934,14 @@ async function clusterizar({ lat, lng, radiusKm }) {
        SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography AS punto
      ),
      efectivos AS (
-       SELECT n.id AS negocio_id, n.categoria_id, COALESCE(fr.punto, u.punto) AS punto
+       SELECT n.id AS negocio_id, n.categoria_id, COALESCE(vivo.punto, fr.punto, u.punto) AS punto
        FROM negocios n
        JOIN ubicaciones u ON u.negocio_id = n.id AND u.es_actual = true
+       CROSS JOIN objetivo
        ${lateralFranjaActiva(idxHorario)}
+       ${lateralPosicionEnVivo(idxHorario)}
        WHERE n.estado = 'activo' AND ${clausulaTelefonoVerificado()}
-         AND n.id IN (
-           SELECT u2.negocio_id FROM ubicaciones u2, objetivo o
-           WHERE u2.es_actual = true AND ST_DWithin(u2.punto, o.punto, $3)
-           UNION
-           SELECT f2.negocio_id FROM franjas_ubicacion f2, objetivo o
-           WHERE ST_DWithin(f2.punto, o.punto, $3)
-         )
+         AND ${candidatosEnRadioSQL(3)}
      )
      SELECT
        e.negocio_id,
@@ -889,7 +960,12 @@ async function clusterizar({ lat, lng, radiusKm }) {
 
 module.exports = {
   condicionRangoHorarioSQL,
+  condicionHorarioSQL,
   ligarMomentoActual,
+  lateralFranjaActiva,
+  lateralPosicionEnVivo,
+  COLUMNAS_FRANJA_ACTIVA,
+  COLUMNAS_EN_VIVO,
   crear,
   buscarPorId,
   actualizar,

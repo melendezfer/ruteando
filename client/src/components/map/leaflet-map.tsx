@@ -5,15 +5,17 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { Circle, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Circle, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { components } from "@/lib/api/schema";
 import { describeVariety } from "@/lib/zones/zone-format";
-import { getCategoryPinColor } from "@/lib/map/category-pin-colors";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
+import { resolveCategoryVisual, type CategoryVisual } from "@/lib/icons/category-icons";
+import { MOBILITY_ICONS, MOBILITY_LABELS } from "@/lib/icons/semantic-icons";
 
 type Business = components["schemas"]["Business"];
 type BusinessZone = components["schemas"]["BusinessZone"];
+type Category = components["schemas"]["Category"];
 type Mobility = NonNullable<Business["mobility"]>;
 
 export interface BusinessPin extends Business {
@@ -33,8 +35,8 @@ interface LeafletMapProps {
   center: { lat: number; lng: number };
   userLocation: { lat: number; lng: number } | null;
   businesses: BusinessPin[];
-  /** `Category.type` de cada `categoryId` — decide la FAMILIA de color del pin (ver category-pin-colors.ts). Un negocio cuya categoría todavía no resolvió (categorías sin cargar, o id desconocido) cae al terracota de marca de siempre. */
-  categoryTypeById: Map<number, CatalogType>;
+  /** Categoría completa por id — el pin toma de acá su ÍCONO y su COLOR (`Category.icon`/`color`, guardados en la base). Una categoría todavía sin cargar cae al ícono y gris de respaldo (lib/icons/category-icons.ts). */
+  categoriesById: Map<number, Category>;
   /** "Zonas de aglomeración" (ver CLAUDE.md sección 32) — resaltado visual, además de los pines individuales de siempre. */
   zones: BusinessZone[];
   /**
@@ -78,7 +80,7 @@ export function LeafletMap({
   center,
   userLocation,
   businesses,
-  categoryTypeById,
+  categoriesById,
   zones,
   selectedBusinessId,
   onSelectBusiness,
@@ -144,22 +146,64 @@ export function LeafletMap({
           })
         }
       >
-        {businesses.map((business) => (
+        {businesses
+          .filter((business) => business.liveLocation == null)
+          .map((business) => (
+            <BusinessMarker
+              key={business.id}
+              business={business}
+              icon={getBusinessIcon(
+                resolveCategoryVisual(business.categoryId != null ? categoriesById.get(business.categoryId) : undefined),
+                business.mobility ?? "fixed",
+                false,
+              )}
+              selected={business.id === selectedBusinessId}
+              onSelect={onSelectBusiness}
+            />
+          ))}
+      </MarkerClusterGroup>
+
+      {/* Ambulantes compartiendo EN VIVO: fuera del MarkerClusterGroup a
+          propósito — agrupados dentro de un círculo con un número, su
+          anillo y su posición real quedaban ocultos justo cuando más
+          importa verlos (encontrado verificando con Playwright). Siempre
+          sueltos y por encima del resto (zIndexOffset). */}
+      {businesses
+        .filter((business) => business.liveLocation != null)
+        .map((business) => (
           <BusinessMarker
             key={business.id}
             business={business}
             icon={getBusinessIcon(
-              getCategoryPinColor(
-                business.categoryId,
-                business.categoryId != null ? categoryTypeById.get(business.categoryId) : undefined,
-              ),
+              resolveCategoryVisual(business.categoryId != null ? categoriesById.get(business.categoryId) : undefined),
               business.mobility ?? "fixed",
+              true,
             )}
             selected={business.id === selectedBusinessId}
             onSelect={onSelectBusiness}
+            zIndexOffset={1000}
           />
         ))}
-      </MarkerClusterGroup>
+
+      {/* Rastro de un ambulante compartiendo en vivo: por dónde pasó en los
+          últimos 15 minutos (el servidor no guarda más). Fuera del
+          MarkerClusterGroup a propósito — una línea no se agrupa; debajo
+          de los pines (overlayPane < markerPane). Mismo color de la
+          categoría que su pin. */}
+      {businesses.map((business) => {
+        const trail = business.liveLocation?.trail ?? [];
+        if (trail.length < 2) return null;
+        const { color } = resolveCategoryVisual(
+          business.categoryId != null ? categoriesById.get(business.categoryId) : undefined,
+        );
+        return (
+          <Polyline
+            key={`rastro-${business.id}`}
+            positions={trail.map((p) => [p.latitude ?? 0, p.longitude ?? 0] as [number, number])}
+            pathOptions={{ color, weight: 4, opacity: 0.55, dashArray: "2 8", lineCap: "round" }}
+          />
+        );
+      })}
     </MapContainer>
   );
 }
@@ -212,7 +256,7 @@ function ExposeMapInstance({ onMapReady }: { onMapReady?: (map: L.Map) => void }
   return null;
 }
 
-// Nombre del div INTERNO del ícono (ver createPinIcon) que recibe el
+// Nombre del div INTERNO del ícono (ver getBusinessIcon) que recibe el
 // `scale()` al seleccionar/tocar un pin — nunca el wrapper que
 // `<Marker icon=.../>` controla directamente: ese wrapper es el mismo
 // elemento que Leaflet reposiciona en cada pan/zoom con un
@@ -244,11 +288,13 @@ function BusinessMarker({
   icon,
   selected,
   onSelect,
+  zIndexOffset,
 }: {
   business: BusinessPin;
   icon: L.DivIcon;
   selected: boolean;
   onSelect: (business: BusinessPin) => void;
+  zIndexOffset?: number;
 }) {
   const markerRef = useRef<L.Marker | null>(null);
   // Memoizado a propósito: `position={[lat, lng]}` inline crearía un
@@ -271,7 +317,7 @@ function BusinessMarker({
 
   useEffect(() => {
     // El `scale()` va en el div INTERNO (`.f3-business-pin-inner`), no en
-    // `getElement()` directo — ver el comentario junto a createPinIcon.
+    // `getElement()` directo — ver el comentario junto a getBusinessIcon.
     markerRef.current
       ?.getElement()
       ?.querySelector(`.${PIN_INNER_CLASS}`)
@@ -283,89 +329,76 @@ function BusinessMarker({
       ref={markerRef}
       position={position}
       icon={icon}
-      title={business.name}
-      alt={business.name}
+      zIndexOffset={zIndexOffset}
+      title={pinTitle(business)}
+      alt={pinTitle(business)}
       eventHandlers={{ click: () => onSelect(business) }}
     />
   );
 }
 
-// Un ícono por color de categoría (ver category-pin-colors.ts), no por
-// negocio ni por estado seleccionado — el color de un pin nunca cambia
-// durante su vida en el mapa, así que cachearlos a nivel de módulo (no
-// con useMemo: mutar el Map dentro de un hook de memoización dispara la
-// regla "no reasignar después del render" del linter — acá no hace
-// falta, es una caché de un valor puramente determinístico, sin
-// relación con ningún ciclo de render) evita reconstruir el mismo SVG
-// en cada render de la lista de negocios. El "crecimiento" al
-// seleccionar/tocar un pin NO se resuelve creando un ícono distinto
-// (eso reemplazaría el nodo DOM entero vía `marker.setIcon()` y la
-// transición CSS no tendría de dónde animar) — ver BusinessMarker más
-// abajo, que en cambio alterna una clase CSS sobre el mismo elemento.
-const businessIconCache = new Map<string, L.DivIcon>();
+/** Nombre accesible del pin: la modalidad y el "en vivo" no pueden depender solo del dibujo. */
+function pinTitle(business: BusinessPin): string {
+  const partes = [business.name ?? "Negocio", MOBILITY_LABELS[business.mobility ?? "fixed"]];
+  if (business.liveLocation) partes.push("en vivo");
+  return partes.join(" · ");
+}
 
-function getBusinessIcon(color: string, mobility: Mobility): L.DivIcon {
-  const key = `${color}|${mobility}`;
+// Un ícono por combinación (ícono de categoría, color, modalidad, en
+// vivo), no por negocio ni por estado seleccionado — nada de eso cambia
+// mientras el pin sigue en el mapa, así que se cachea a nivel de módulo
+// (no con useMemo: mutar el Map dentro de un hook de memoización dispara
+// la regla "no reasignar después del render" del linter — acá es una
+// caché de un valor puramente determinístico). El "crecimiento" al
+// seleccionar NO crea un ícono distinto (reemplazaría el nodo y la
+// transición CSS no tendría de dónde animar) — ver BusinessMarker.
+const businessIconCache = new Map<string, L.DivIcon>();
+// El SVG de cada ícono de Phosphor, una sola vez por (ícono, tamaño, color, peso).
+const iconSvgCache = new Map<string, string>();
+
+function iconSvg(Icon: CategoryVisual["Icon"], size: number, color: string, weight: "fill" | "bold"): string {
+  const key = `${Icon.displayName ?? String(Icon)}|${size}|${color}|${weight}`;
+  let svg = iconSvgCache.get(key);
+  if (svg === undefined) {
+    // renderToStaticMarkup (no un <Icon/> en el árbol de React): el pin lo
+    // dibuja Leaflet a partir de un string de HTML (L.divIcon), fuera del
+    // árbol de React.
+    svg = renderToStaticMarkup(<Icon size={size} color={color} weight={weight} />);
+    iconSvgCache.set(key, svg);
+  }
+  return svg;
+}
+
+/**
+ * Pin rediseñado (PR 2 de 3): la gota siempre tiene la misma forma — lo
+ * que identifica a la CATEGORÍA es su ícono (blanco, adentro) y su color
+ * (relleno), ambos guardados en la base; la MODALIDAD es una marca chica
+ * aparte (círculo blanco abajo a la derecha, ícono de
+ * lib/icons/semantic-icons.ts: carrito / sombrilla / local) que nunca
+ * reemplaza al ícono de la categoría. Un ambulante compartiendo en vivo
+ * suma un anillo que pulsa (.f3-business-pin-inner--live, globals.css).
+ */
+function getBusinessIcon(visual: CategoryVisual, mobility: Mobility, live: boolean): L.DivIcon {
+  const key = `${visual.Icon.displayName ?? String(visual.Icon)}|${visual.color}|${mobility}|${live}`;
   let icon = businessIconCache.get(key);
   if (!icon) {
-    icon = mobility === "itinerant" ? createItinerantPinIcon(color) : createPinIcon(color);
+    const html = `
+    <div class="${PIN_INNER_CLASS}${live ? " f3-business-pin-inner--live" : ""}" style="--pin-color:${visual.color}">
+      <svg width="34" height="44" viewBox="0 0 34 44" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M17 1C8.2 1 1 8.2 1 17c0 11.6 16 26 16 26s16-14.4 16-26C33 8.2 25.8 1 17 1z" fill="${visual.color}" stroke="#fff" stroke-width="2"/>
+      </svg>
+      <span class="f3-pin-icon">${iconSvg(visual.Icon, 18, "#fff", "fill")}</span>
+      <span class="f3-pin-mobility">${iconSvg(MOBILITY_ICONS[mobility], 11, "#1b1b1b", "bold")}</span>
+    </div>`;
+    icon = L.divIcon({
+      html,
+      className: "f3-business-pin",
+      iconSize: [34, 44],
+      iconAnchor: [17, 44],
+    });
     businessIconCache.set(key, icon);
   }
   return icon;
-}
-
-// Forma clásica ("gota") — local_fijo/"fixed", un punto de venta que no
-// se mueve. Es también el respaldo del lado del cliente cuando
-// `business.mobility` no resolvió (el campo es opcional solo en el tipo
-// generado de OpenAPI — la API real siempre lo manda, con default
-// 'itinerant' en la creación, ver negocios.service.js#crear — así que
-// este respaldo es puramente defensivo, nunca el camino esperado);
-// se eligió la gota y no el círculo para ese caso porque es la forma
-// que todo pin ya tenía ANTES de esta funcionalidad, el cambio visual
-// más chico posible si algún dato llegara incompleto.
-function createPinIcon(color: string): L.DivIcon {
-  const svg = `
-    <div class="${PIN_INNER_CLASS}">
-      <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
-        <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.716 23.284 0 15 0z" fill="${color}"/>
-        <circle cx="15" cy="15" r="6" fill="#fff"/>
-      </svg>
-    </div>`;
-  return L.divIcon({
-    html: svg,
-    className: "f3-business-pin",
-    iconSize: [30, 42],
-    iconAnchor: [15, 42],
-  });
-}
-
-// Forma "ambulante"/"itinerant" (petición directa del usuario, sin RF
-// asociado — ver CLAUDE.md): un círculo (no la gota clásica, que
-// implica "acá está fijo el negocio") con un carrito dibujado a mano
-// adentro — mismo COLOR de categoría que la gota (ver
-// category-pin-colors.ts, sin tocar), solo cambia la forma. Ancla al
-// CENTRO del círculo, no a una punta inferior como la gota — mismo
-// criterio que createUserIcon() (un punto "acá estoy ahora", no "acá
-// está clavado"). `.f3-business-pin-inner--circle` en globals.css
-// pisa el `transform-origin` a 50% 50% para que el crecimiento al
-// seleccionar sea concéntrico, no desde una punta que este ícono no
-// tiene.
-function createItinerantPinIcon(color: string): L.DivIcon {
-  const svg = `
-    <div class="${PIN_INNER_CLASS} f3-business-pin-inner--circle">
-      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="15" fill="${color}" stroke="#fff" stroke-width="2"/>
-        <path d="M9 11h2l1.6 7.2h9.4l1.5-5.2H13.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="14.2" cy="21" r="1.3" fill="#fff"/>
-        <circle cx="20.2" cy="21" r="1.3" fill="#fff"/>
-      </svg>
-    </div>`;
-  return L.divIcon({
-    html: svg,
-    className: "f3-business-pin",
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-  });
 }
 
 function createUserIcon(): L.DivIcon {

@@ -6391,8 +6391,9 @@ originales (Arepas, Empanadas, Fruver, etc.) nunca estuvieron en ninguna
 migración, solo en `scripts/seedDemoBusinesses.js` — un ambiente nuevo
 (staging/producción) solo tenía las 5 categorías que sí venían por
 migración. Esta migración las crea (`INSERT ... ON CONFLICT (nombre) DO
-UPDATE`). "Postres" (creada a mano en desarrollo, duplica "Dulces y
-postres") no se crea, solo recibe ícono/color si ya existe.
+UPDATE`), incluida "Postres": es una categoría legítima de la familia
+gastronómica, distinta de "Dulces y postres" (decisión explícita del
+usuario — no se borra ni se fusiona).
 
 ### "Carta", no "Menú"
 

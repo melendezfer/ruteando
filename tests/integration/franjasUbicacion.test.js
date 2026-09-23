@@ -211,6 +211,8 @@ describe('GET /categories — ícono y color guardados', () => {
     expect(porNombre['Tintos y café']).toMatchObject({ icon: 'coffee', color: '#e8590c', type: 'food' });
     expect(porNombre['Droguerías']).toMatchObject({ icon: 'pill', color: '#9c36b5', type: 'goods' });
     expect(porNombre['Servicios legales básicos']).toMatchObject({ icon: 'scales', color: '#1098ad' });
+    // "Postres" es categoría legítima (no un duplicado de "Dulces y postres").
+    expect(porNombre['Postres']).toMatchObject({ icon: 'ice-cream', color: '#e8590c', type: 'food' });
     // Ícono propio por categoría: las de comida ya no comparten uno solo.
     const iconosComida = res.body.filter((c) => c.type === 'food' && c.icon).map((c) => c.icon);
     expect(new Set(iconosComida).size).toBe(iconosComida.length);

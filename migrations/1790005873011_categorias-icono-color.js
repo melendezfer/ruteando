@@ -31,9 +31,9 @@
  * solo existían por scripts/seedDemoBusinesses.js (Arepas, Empanadas,
  * Fruver, etc.) — sin esto, un ambiente nuevo (staging/producción) solo
  * tendría las 5 que sí venían por migración, sin ninguna categoría de
- * comida para elegir. 'Postres' (creada a mano en desarrollo, duplica
- * 'Dulces y postres') NO se crea acá: solo se le asigna ícono/color si ya
- * existe.
+ * comida para elegir. 'Postres' también: es una categoría legítima de la
+ * familia gastronómica, distinta de 'Dulces y postres' (decisión explícita
+ * del usuario — no se borra ni se fusiona).
  *
  * @param pgm {import('node-pg-migrate').MigrationBuilder}
  */
@@ -51,6 +51,7 @@ exports.up = (pgm) => {
       ('Dulces y postres',               'alimentos', 'cake',               '#e8590c', 5),
       ('Jugos naturales',                'alimentos', 'orange-slice',       '#e8590c', 6),
       ('Fruver',                         'alimentos', 'carrot',             '#e8590c', 7),
+      ('Postres',                        'alimentos', 'ice-cream',          '#e8590c', 8),
       ('Tintos y café',                  'alimentos', 'coffee',             '#e8590c', 104),
       ('Costura y sastrería',            'servicios', 'scissors',           '#1098ad', 100),
       ('Servicios legales básicos',      'servicios', 'scales',             '#1098ad', 101),
@@ -60,8 +61,6 @@ exports.up = (pgm) => {
     ON CONFLICT (nombre) DO UPDATE
       SET tipo = EXCLUDED.tipo, icono = EXCLUDED.icono, color = EXCLUDED.color;
 
-    UPDATE categorias SET icono = 'ice-cream', color = '#e8590c', tipo = 'alimentos'
-     WHERE nombre = 'Postres';
 
     -- Una sola cosa por ícono en toda la app: 'tag' queda como "oferta con
     -- vigencia" genérica (insignia de oferta, pestaña "Cerca de ti

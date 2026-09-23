@@ -29,8 +29,11 @@ class NotFoundError extends ProblemDetailsError {
 }
 
 class ConflictError extends ProblemDetailsError {
-  constructor(detail = 'El recurso ya existe o entra en conflicto con el estado actual') {
-    super({ status: 409, title: 'Conflicto', detail });
+  // `type` opcional: solo para un 409 que el cliente necesita distinguir
+  // de los demás por código (RFC 9457), ej. ubicación en vivo fuera de
+  // horario, que apaga el interruptor del vendedor en vez de reintentar.
+  constructor(detail = 'El recurso ya existe o entra en conflicto con el estado actual', type) {
+    super({ status: 409, title: 'Conflicto', detail, type });
     this.name = 'ConflictError';
   }
 }
@@ -51,11 +54,14 @@ class TooManyRequestsError extends ProblemDetailsError {
 // toProblemDetails() en vez de pasar un campo por el constructor de la
 // base: ningún otro error del proyecto necesita una extensión propia.
 class ConsentRequiredError extends ProblemDetailsError {
-  constructor(missingConsentTypes) {
+  constructor(
+    missingConsentTypes,
+    detail = 'Debe otorgar los consentimientos obligatorios antes de continuar',
+  ) {
     super({
       status: 403,
       title: 'Consentimiento requerido',
-      detail: 'Debe otorgar los consentimientos obligatorios antes de continuar',
+      detail,
       type: 'https://api.ciudadverdegastronomica.co/errors/consent-required',
     });
     this.name = 'ConsentRequiredError';

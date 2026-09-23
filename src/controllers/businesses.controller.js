@@ -3,6 +3,7 @@ const zonasService = require('../services/zonas.service');
 const ubicacionService = require('../services/ubicacion.service');
 const horarioService = require('../services/horario.service');
 const franjasUbicacionService = require('../services/franjasUbicacion.service');
+const posicionesEnVivoService = require('../services/posicionesEnVivo.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
 const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
@@ -84,6 +85,16 @@ async function getLocationSlots(req, res) {
 async function putLocationSlots(req, res) {
   const slots = await franjasUbicacionService.reemplazar(req.user.id, req.params.businessId, req.body);
   res.status(200).json(slots);
+}
+
+async function postLiveLocation(req, res) {
+  const result = await posicionesEnVivoService.registrar(req.user.id, req.params.businessId, req.body);
+  res.status(200).json(result);
+}
+
+async function deleteLiveLocation(req, res) {
+  await posicionesEnVivoService.apagar(req.user.id, req.params.businessId);
+  res.status(204).end();
 }
 
 async function reportOutdated(req, res) {
@@ -186,6 +197,8 @@ module.exports = {
   putSchedule,
   getLocationSlots,
   putLocationSlots,
+  postLiveLocation,
+  deleteLiveLocation,
   reportOutdated,
   createProduct,
   listProducts,

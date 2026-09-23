@@ -28,7 +28,8 @@ const ROLE_LABELS: Record<NonNullable<User["role"]>, string> = {
   administrator: "Administrador",
 };
 
-// Los cuatro valores de tipo_consentimiento (CLAUDE.md sección 5) —
+// Los valores de tipo_consentimiento (CLAUDE.md sección 5, más
+// live_location — migración ubicacion-en-vivo) —
 // data_processing/terms_conditions son los obligatorios que login()
 // exige (ver ConsentRequiredModal); assisted_registration y
 // notifications son casos de uso puntuales (registro asistido, Épica
@@ -39,6 +40,7 @@ const CONSENT_LABELS: Record<NonNullable<Consent["type"]>, string> = {
   terms_conditions: "Términos y condiciones",
   assisted_registration: "Registro asistido",
   notifications: "Notificaciones",
+  live_location: "Compartir ubicación en vivo",
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });

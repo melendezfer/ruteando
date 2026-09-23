@@ -200,7 +200,16 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     return map;
   }, [categories]);
 
-  /** Para colorear cada pin por familia (ver category-pin-colors.ts) — el color de un negocio depende de `Category.type`, no solo de su `categoryId`. */
+  /** Categoría completa por id — el pin toma de acá su ícono y color guardados (Category.icon/color, PR 2 de 3). */
+  const categoriesById = useMemo(() => {
+    const map = new Map<number, Category>();
+    categories.forEach((category) => {
+      if (category.id !== undefined) map.set(category.id, category);
+    });
+    return map;
+  }, [categories]);
+
+  /** `Category.type` por id — lo siguen usando el banner/hoja/tarjetas (se pasan a Category.icon/color en el PR 3). */
   const categoryTypeById = useMemo(() => {
     const map = new Map<number, CatalogType>();
     categories.forEach((category) => {
@@ -649,7 +658,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
               center={center}
               userLocation={userLocation}
               businesses={businesses}
-              categoryTypeById={categoryTypeById}
+              categoriesById={categoriesById}
               zones={zones}
               selectedBusinessId={pendingSelection?.id ?? selected?.id ?? bannerHighlightId}
               onSelectBusiness={handleSelectBusiness}

@@ -126,13 +126,25 @@ beforeAll(async () => {
     [usuarioId, CENTRO.lng, CENTRO.lat],
   );
 
+  // Posiciones en vivo (migración ubicacion-en-vivo): unos pocos
+  // cientos de ambulantes compartiendo, ~10 posiciones recientes cada uno
+  // — el acotado de candidatos también las consulta.
+  await pool.query(
+    `INSERT INTO posiciones_en_vivo (negocio_id, punto, registrada_en)
+     SELECT n.id,
+            ST_SetSRID(ST_MakePoint($2 + (random() - 0.5) * 0.3, $3 + (random() - 0.5) * 0.3), 4326)::geography,
+            now() - (g * interval '30 seconds')
+     FROM (SELECT id FROM negocios WHERE usuario_id = $1 LIMIT 300) n, generate_series(0, 9) g`,
+    [usuarioId, CENTRO.lng, CENTRO.lat],
+  );
+
   // Sin esto, el planificador usa estadísticas viejas/por defecto para
   // las tablas recién sembradas (autoanalyze de Postgres es asíncrono y
   // no alcanza a correr en el tiempo de una prueba) y puede subestimar
   // la selectividad de categoria_id/estado, eligiendo un plan que no
   // pasa por el índice espacial en absoluto — verificado a mano: sin
   // ANALYZE, la segunda prueba de abajo elegía otro camino de acceso.
-  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, franjas_ubicacion');
+  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, franjas_ubicacion, posiciones_en_vivo');
 });
 
 afterAll(async () => {

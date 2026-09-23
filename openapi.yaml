@@ -482,6 +482,19 @@ components:
             ningún resultado: un negocio `itinerant`/ambulante sin
             confirmación fresca se ve exactamente igual que uno con ella,
             decisión explícita del usuario al diseñar esta funcionalidad.
+        liveLocation:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/LiveLocation' }]
+          description: >-
+            Posición en vivo de un vendedor `itinerant` que está
+            compartiendo su ubicación con la app abierta, dentro de su
+            horario o de una franja. Cuando no es null, en los listados
+            `latitude`/`longitude`/`distanceMeters` ya son los de esta
+            posición (antes que la franja y la base), y se muestran exactos
+            aunque el negocio haya elegido "zona aproximada" (compartir en
+            vivo es un consentimiento aparte y explícito). Null si la
+            última posición tiene más de 2 minutos, fuera de horario, o en
+            otra modalidad.
         activeLocationSlot:
           nullable: true
           allOf: [{ $ref: '#/components/schemas/ActiveLocationSlot' }]
@@ -748,6 +761,22 @@ components:
         latitude: { type: number, format: double }
         longitude: { type: number, format: double }
         referenceAddress: { type: string, maxLength: 255, nullable: true }
+
+    LiveLocation:
+      type: object
+      properties:
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        updatedAt: { type: string, format: date-time }
+        trail:
+          type: array
+          description: Posiciones de los últimos 15 minutos, de la más antigua a la más reciente (el servidor no guarda más que esto).
+          items:
+            type: object
+            properties:
+              latitude: { type: number, format: double }
+              longitude: { type: number, format: double }
+              recordedAt: { type: string, format: date-time }
 
     ActiveLocationSlot:
       description: Resumen de la franja vigente ahora (sin coordenadas — esas ya viajan como la ubicación efectiva del negocio).
@@ -1168,7 +1197,7 @@ components:
       properties:
         type:
           type: string
-          enum: [data_processing, terms_conditions, assisted_registration, notifications]
+          enum: [data_processing, terms_conditions, assisted_registration, notifications, live_location]
         businessId: { type: string, format: uuid, nullable: true }
         textVersion: { type: string }
         grantedByThirdParty: { type: boolean, default: false }
@@ -1995,7 +2024,7 @@ paths:
           application/json:
             schema:
               type: array
-              maxItems: 21
+              maxItems: 35
               items: { $ref: '#/components/schemas/LocationSlot' }
       responses:
         '200':
@@ -2010,6 +2039,53 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /businesses/{businessId}/live-location:
+    post:
+      tags: [Negocios]
+      summary: Registrar una posición en vivo (solo el dueño, solo itinerant)
+      description: >-
+        La manda el navegador del propio vendedor mientras tiene la app
+        abierta. Requiere el consentimiento `live_location` (403
+        consent-required si falta). Fuera de su horario o de una franja
+        responde 409 con `type` `.../errors/live-location-off-schedule` —
+        el cliente apaga el interruptor. Posiciones a menos de 10 s de la
+        anterior se descartan (`saved: false`). El servidor nunca guarda
+        más de los últimos 15 minutos.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number, format: double }
+                longitude: { type: number, format: double }
+      responses:
+        '200':
+          description: Posición recibida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saved: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Negocios]
+      summary: Apagar la ubicación en vivo (borra el rastro en el acto)
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '204': { description: Apagada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /businesses/{businessId}/outdated-reports:
     post:

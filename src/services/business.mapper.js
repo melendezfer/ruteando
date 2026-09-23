@@ -278,7 +278,26 @@ function toApiBusiness(row) {
       hora_fin: row.franja_hora_fin,
       direccion_referencia: row.franja_direccion_referencia,
     }) : null,
+    liveLocation: toApiLiveLocation(row.vivo_actualizada_en, row.vivo_rastro),
   };
+}
+
+/**
+ * Posición en vivo del ambulante (migración ubicacion-en-vivo): la última
+ * posición (que además ya es latitude/longitude del negocio en listados)
+ * y el rastro de los últimos 15 minutos, en orden, para dibujar por dónde
+ * pasó. null cuando no está compartiendo en vivo AHORA (app cerrada hace
+ * más de 2 min, fuera de horario, u otra modalidad).
+ */
+function toApiLiveLocation(actualizadaEn, rastro) {
+  if (!actualizadaEn || !Array.isArray(rastro) || rastro.length === 0) return null;
+  const trail = rastro.map((p) => ({
+    latitude: Number(p.latitud),
+    longitude: Number(p.longitud),
+    recordedAt: p.registrada_en,
+  }));
+  const ultima = trail[trail.length - 1];
+  return { latitude: ultima.latitude, longitude: ultima.longitude, updatedAt: actualizadaEn, trail };
 }
 
 /** Resumen de la franja vigente — sin coordenadas: esas ya viajan como la ubicación efectiva del negocio. */
@@ -507,6 +526,7 @@ function toApiBusinessProfile({
   availabilityConfirmedAt,
   isOpenNow,
   franjaActiva,
+  enVivo,
 }) {
   return {
     ...toApiBusiness(negocio),
@@ -529,6 +549,7 @@ function toApiBusinessProfile({
     // siendo la ubicación BASE (la que edita el dueño); dónde está el
     // ambulante ahora mismo, si está en una franja, lo dice este campo.
     activeLocationSlot: franjaActiva ? toApiActiveLocationSlot(franjaActiva) : null,
+    liveLocation: enVivo ? toApiLiveLocation(enVivo.vivo_actualizada_en, enVivo.vivo_rastro) : null,
   };
 }
 

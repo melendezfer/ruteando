@@ -45,3 +45,21 @@ describe('locationSlotsInputSchema', () => {
     expect(locationSlotsInputSchema.safeParse([{ ...franja('monday', '08:00', '09:00'), latitude: 10 }]).success).toBe(false);
   });
 });
+
+describe('LOCATION_SLOTS_MAX (5 por día)', () => {
+  // Regresión: con el máximo anterior (21) un vendedor con 3 puntos
+  // diarios todos los días (el caso que motivó la funcionalidad) no podía
+  // agregar ni uno más.
+  const semana = (horas) =>
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].flatMap((day) =>
+      horas.map(([s, e]) => franja(day, s, e)),
+    );
+  it('acepta 3 por día + uno más, y hasta 5 por día', () => {
+    const tres = semana([['05:00', '09:00'], ['12:00', '14:00'], ['17:00', '20:00']]);
+    expect(locationSlotsInputSchema.safeParse([...tres, franja('sunday', '21:00', '22:00')]).success).toBe(true);
+    const cinco = semana([['05:00', '06:00'], ['07:00', '08:00'], ['09:00', '10:00'], ['11:00', '12:00'], ['13:00', '14:00']]);
+    expect(cinco).toHaveLength(35);
+    expect(locationSlotsInputSchema.safeParse(cinco).success).toBe(true);
+    expect(locationSlotsInputSchema.safeParse([...cinco, franja('sunday', '21:00', '22:00')]).success).toBe(false);
+  });
+});

@@ -32,6 +32,8 @@ import { Skeleton } from "@/components/discovery/skeleton";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { SeatingToggle } from "@/components/business/seating-toggle";
 import { MobilityToggle } from "@/components/business/mobility-toggle";
+import { LiveLocationToggle } from "@/components/business/live-location-toggle";
+import { LocationSlotsEditor } from "@/components/business/location-slots-editor";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
 import { BusinessQrCode } from "@/components/business/business-qr-code";
@@ -114,6 +116,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // posición del pin (LocationPinEditor), "Cómo llegar" y la dirección
   // de referencia mostrada se actualizan de inmediato sin recargar.
   const [location, setLocation] = useState(profile.location ?? null);
+  // Modalidad vigente (el interruptor la cambia sin recargar) — decide si
+  // se muestran los paneles de ambulante.
+  const [mobility, setMobility] = useState(profile.mobility ?? "itinerant");
 
   // "Vendiendo ahora" (Fase 2, sin RF asociado — ver CLAUDE.md sección
   // 11/37): mismo criterio que phoneVerified arriba — así, cuando el
@@ -460,7 +465,17 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             categoryId={profile.categoryId}
             contactPhone={profile.contactPhone ?? null}
             initialMobility={profile.mobility ?? "itinerant"}
+            onChange={setMobility}
           />
+        </div>
+      )}
+
+      {/* Solo para un ambulante: compartir la ubicación en vivo (con la
+          app abierta) y los puntos por hora (franjas del día). */}
+      {isOwner && profile.id && mobility === "itinerant" && (
+        <div className="flex flex-col gap-4 px-5 pb-4">
+          <LiveLocationToggle businessId={profile.id} />
+          <LocationSlotsEditor businessId={profile.id} />
         </div>
       )}
 

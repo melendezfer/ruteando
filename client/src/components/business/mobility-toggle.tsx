@@ -14,6 +14,8 @@ interface MobilityToggleProps {
   categoryId: number;
   contactPhone: string | null;
   initialMobility: Mobility;
+  /** Avisa al perfil tras guardar — los paneles de ambulante (ubicación en vivo, puntos por hora) solo se muestran en esa modalidad. */
+  onChange?: (mobility: Mobility) => void;
 }
 
 // 3 modalidades (migración modalidad-fijo-via-publica) — íconos y textos
@@ -49,6 +51,7 @@ export function MobilityToggle({
   categoryId,
   contactPhone,
   initialMobility,
+  onChange,
 }: MobilityToggleProps) {
   const [mobility, setMobility] = useState<Mobility>(initialMobility);
   const [saving, setSaving] = useState(false);
@@ -78,6 +81,7 @@ export function MobilityToggle({
     }
 
     setMobility(next);
+    onChange?.(next);
   }
 
   return (

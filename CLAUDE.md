@@ -6440,7 +6440,8 @@ la única regla de "¿el reloj cae en este rango semanal?", compartida por
   como PUT .../schedule; solo el dueño; una lista no vacía en un negocio
   que no es ambulante da 409; dos franjas que se solapan en cualquier
   minuto de la semana (incluida la nocturna del domingo que pisa el lunes)
-  dan 422; máximo `LOCATION_SLOTS_MAX` (21). La coordenada sigue la regla
+  dan 422; máximo `LOCATION_SLOTS_MAX` (35 desde el PR 2 — ver sección 59;
+  empezó en 21). La coordenada sigue la regla
   de "zona aproximada" de la ubicación base.
 - **Ubicación efectiva**: en `GET /businesses`, `/nearby` y `/zones`, un
   ambulante dentro de una franja aparece en el punto de la franja
@@ -6485,9 +6486,123 @@ consola.
 
 ### Gaps conocidos, no ocultos
 
-- La UI para que el vendedor **edite** sus franjas no existe todavía — la
-  API está completa; el formulario se construye con el pin (PR 2).
+- ~~La UI para que el vendedor edite sus franjas no existe todavía~~ —
+  resuelto en el PR 2 (sección 59, "Mis puntos por hora").
 - Banner, hoja filtrada, perfil, tarjetas y pin siguen dibujando ícono
   por tipo y color por hash hasta los PR 2 y 3.
 - `scripts/loadtest-nearby.js`/`seedLoadTest.js` siguen con el centro
   viejo (4.578, -74.217, sección 25) — no se tocaron en esta rama.
+
+## 59. Íconos, colores y modalidad — PR 2 de 3: pin del mapa y ubicación en vivo
+
+Segunda pieza de la sección 58. Rama `feature/pin-mapa-modalidad-rastro`,
+creada **encima** de la del PR 1 (no de `develop`) porque el PR 1 seguía
+sin fusionar: así nunca hay dos ramas paralelas tocando los mismos
+archivos; al fusionar el #87, este PR queda mostrando solo lo suyo.
+
+### Decisiones del usuario, antes de construir
+
+- Consentimiento para compartir en vivo: **sí**, y el mensaje explica
+  primero el beneficio para el vendedor (que lo encuentren mientras se
+  mueve), no un aviso legal en seco.
+- Solo se comparte **con la app abierta** (sin seguimiento en segundo
+  plano, que una PWA tampoco permite).
+- El rastro dura **15 minutos**.
+- Colores: aprobado por ahora el esquema de 3 tonos por familia (sección
+  58), con una vista previa pendiente de revisión (zapatos, dulces,
+  libros/historietas, cerrajero).
+- "Postres" es categoría legítima — la migración del PR 1 ahora la crea
+  en cualquier ambiente, no solo le asigna ícono si existe.
+
+### El pin
+
+`leaflet-map.tsx#getBusinessIcon`: una sola forma de gota para todas las
+modalidades. **La categoría** = su ícono (blanco, adentro) + su color
+(relleno), ambos leídos de `Category.icon`/`color`
+(`client/src/lib/icons/category-icons.ts`, único mapa de nombre a
+componente). **La modalidad** = una marca chica aparte (círculo blanco
+abajo a la derecha: carrito / sombrilla / local, de
+`semantic-icons.ts#MOBILITY_ICONS`) — nunca reemplaza el ícono de la
+categoría. El SVG de Phosphor se genera con `renderToStaticMarkup`
+(Leaflet dibuja el pin desde un string, fuera del árbol de React),
+cacheado por combinación. El nombre accesible del pin incluye la
+modalidad y "en vivo" (`pinTitle`) — no depende solo del dibujo.
+Desaparece la forma de círculo con carrito dibujado a mano (y su CSS
+`--circle`).
+
+### Ubicación en vivo
+
+- Migración `ubicacion-en-vivo`: tabla `posiciones_en_vivo` y
+  `tipo_consentimiento = 'ubicacion_en_vivo'` (API `live_location`).
+- `POST /businesses/{id}/live-location` (solo el dueño; 409 si no es
+  ambulante; 403 consent-required sin el consentimiento; 409 con `type`
+  `.../live-location-off-schedule` fuera de su horario o franja — el
+  cliente apaga el interruptor solo). Posiciones a menos de 10 s de la
+  anterior se descartan (`saved: false`), serializadas por negocio con un
+  advisory lock. `DELETE` apaga y borra el recorrido en el acto.
+- **No es un historial**: cada inserción borra las posiciones de más de 15
+  minutos de todos los negocios (limpieza perezosa, sin cron).
+- **Se apaga sola, mismo mecanismo que las franjas**: la posición solo
+  cuenta si la última tiene menos de 2 minutos (app cerrada → deja de
+  contar) y si el negocio está en horario o en una franja AHORA.
+- Ubicación efectiva ampliada: **en vivo > franja > base**, en
+  `/businesses`, `/nearby`, `/zones` y el perfil (`liveLocation` con
+  `trail`). El acotado por índice de `/nearby` y `/zones` suma las
+  posiciones en vivo recientes (`candidatosEnRadioSQL`).
+- La posición en vivo se muestra **exacta** aunque el negocio eligió "zona
+  aproximada": ese interruptor protege la ubicación base (ej. la casa);
+  compartir en vivo es un consentimiento aparte cuyo texto dice que los
+  clientes verán la posición exacta.
+- Frontend: `LiveLocationToggle` (watchPosition + reenvío cada 15 s, no
+  guarda nada en el navegador; al salir de la pantalla solo deja de
+  mandar) y `LiveLocationConsentModal`. En el mapa, el ambulante en vivo
+  lleva un anillo que pulsa (respeta `prefers-reduced-motion`) y un rastro
+  punteado del color de su categoría.
+
+### "Mis puntos por hora" (editor de franjas)
+
+`LocationSlotsEditor`, solo para el dueño de un ambulante (aparece y
+desaparece en el momento al cambiar la modalidad): lista agrupada por
+horario ("05:00–09:00 · Todos los días"), agregar eligiendo días, horas,
+referencia y "Usar dónde estoy ahora", y quitar.
+
+### Hallazgos reales en la verificación, no anticipados
+
+1. **El máximo de franjas era demasiado justo**: 21 (3 por día) es
+   exactamente el caso que motivó la funcionalidad (tres puntos diarios,
+   todos los días) — el vendedor de demo no podía agregar ni uno más. Y la
+   UI decía "revisa las horas, no pueden pisarse", un mensaje falso para
+   esa causa. Subido a 35 (5 por día); la UI avisa antes de enviar si se
+   pasaría del tope. Prueba de regresión en
+   `franjasUbicacion.validators.test.js`.
+2. **El pin en vivo quedaba escondido dentro de un grupo de pines**
+   (clustering) — justo cuando más importa verlo. Los ambulantes en vivo
+   ahora se dibujan fuera del `MarkerClusterGroup`, siempre sueltos y por
+   encima (`zIndexOffset`).
+
+### Verificado
+
+Backend 670/670 (8 pruebas nuevas de ubicación en vivo: autorización,
+consentimiento, modalidad, fuera de horario, intervalo mínimo, rastro de
+15 minutos con limpieza perezosa, posición exacta, dejar de contar a los 2
+minutos, DELETE). La prueba del plan de ejecución ahora siembra también
+posiciones en vivo, sin ningún seq scan. Carga k6 (5.000 negocios, 50
+VUs): p95 = 161 ms, p99 = 186 ms, 0 % errores. Frontend lint/tsc/build en
+verde. Playwright contra el servidor real (16 comprobaciones): el
+consentimiento con el beneficio primero y la mención de los 15 minutos y
+la app abierta; encender (consentimiento guardado, posición recibida);
+apagar (recorrido borrado); el editor de franjas (listar agrupado,
+agregar, solape rechazado con mensaje claro, quitar); un puesto en la
+calle no ve estos paneles; y, como consumidor, el pin en vivo con anillo,
+el rastro dibujado, y todo pin con ícono de categoría + marca de
+modalidad + modalidad en su nombre accesible.
+
+### Gaps conocidos, no ocultos
+
+- Banner, hoja filtrada, perfil y tarjetas siguen con el ícono por tipo y
+  el color por hash (`category-pin-colors.ts`) — son el PR 3.
+- "Cómo llegar" sigue apuntando a la ubicación base aunque el ambulante
+  esté en una franja o en vivo — también PR 3 (perfil y tarjetas).
+- Sin notificación al vendedor cuando la ubicación en vivo se apaga sola
+  con la app cerrada — no hay forma de hacerlo sin push (Firebase,
+  pendiente de credenciales, sección 37).

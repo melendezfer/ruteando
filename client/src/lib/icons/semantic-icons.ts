@@ -1,6 +1,7 @@
 import type { Icon } from "@phosphor-icons/react";
 import {
   BookOpen,
+  Broadcast,
   CheckCircle,
   DoorOpen,
   SealCheck,
@@ -38,6 +39,8 @@ export const SEMANTIC_ICONS = {
   openNow: DoorOpen,
   /** El vendedor CONFIRMÓ que está vendiendo (confirmación de disponibilidad en tiempo real). Distinto de "abierto" (horario declarado). */
   confirmedSelling: SealCheck,
+  /** Ubicación en vivo del vendedor ambulante (interruptor, consentimiento). */
+  liveLocation: Broadcast,
   /** Acción completada con éxito (formularios, pasos de un asistente, ajustes guardados). */
   success: CheckCircle,
 } satisfies Record<string, Icon>;

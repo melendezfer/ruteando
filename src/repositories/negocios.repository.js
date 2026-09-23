@@ -377,7 +377,6 @@ function agregarFiltrosComunes(
   let idxQ = null;
   let idxCategoriasAlias = null;
   let idxOfertaTipo = null;
-  let idxHorario = null;
 
   if (categoryId != null) {
     params.push(categoryId);
@@ -423,7 +422,7 @@ function agregarFiltrosComunes(
   // hasActiveOffer): la ubicación efectiva de un ambulante depende de su
   // franja vigente AHORA (lateralFranjaActiva), en cualquier consulta.
   // Una sola vez por consulta, reusado por todos los que lo necesiten.
-  idxHorario = ligarMomentoActual(params);
+  const idxHorario = ligarMomentoActual(params);
 
   if (openNow) {
     clausulas.push(condicionHorarioSQL(idxHorario));

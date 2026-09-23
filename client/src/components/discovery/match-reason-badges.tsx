@@ -1,6 +1,6 @@
 "use client";
 
-import { Tray } from "@phosphor-icons/react/dist/ssr";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 
 // Íconos del registro único (lib/icons/semantic-icons.ts): "nombre del
@@ -23,6 +23,8 @@ interface MatchReasonBadgesProps {
    * demás, no en su lugar.
    */
   matchedCategory: Business["matchedCategory"];
+  /** Para dibujar el chip de categoría con SU ícono y color (Category.icon/color), no uno genérico. */
+  categoryId: number | null | undefined;
   /** Nombre de la categoría a mostrar en el chip cuando `matchedCategory` es true — ya lo tiene cada caller (categoryNameById), no hace falta que el backend lo repita en la respuesta. */
   categoryName: string | null;
   /**
@@ -61,6 +63,7 @@ export function MatchReasonBadges({
   matchType,
   matchedProducts,
   matchedCategory,
+  categoryId,
   categoryName,
   showPrices,
 }: MatchReasonBadgesProps) {
@@ -95,7 +98,7 @@ export function MatchReasonBadges({
       )}
       {showCategory && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 font-sans text-caption font-medium text-text-muted">
-          <Tray size={12} weight="bold" />
+          <CategoryIcon categoryId={categoryId} size="xs" />
           {categoryName}
         </span>
       )}

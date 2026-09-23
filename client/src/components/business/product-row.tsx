@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CaretDown, CaretUp, PencilSimple, Tag, Trash } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react/dist/ssr";
+import { DEFAULT_OFFER_TYPE_ICON, OFFER_TYPE_ICON_BY_NAME } from "@/lib/catalog/offer-type-icons";
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
 import { formatRelativeTimeShort } from "@/lib/format/relative-time";
@@ -42,6 +43,8 @@ interface ProductRowProps {
    * encontró (tipo desactivado después de que el producto ya lo tenía).
    */
   offerTypeName: string | null;
+  /** `OfferType.icon` del mismo tipo — la insignia usa el ícono PROPIO del tipo (Menú = cubiertos, Promoción = porcentaje…), igual que su fila en "Cerca de ti ahora" y su pestaña; el Tag genérico solo si no tiene tipo. */
+  offerTypeIcon: string | null;
 }
 
 /**
@@ -64,6 +67,7 @@ export function ProductRow({
   onDeleted,
   onExpand,
   offerTypeName,
+  offerTypeIcon,
 }: ProductRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -102,9 +106,11 @@ export function ProductRow({
   // business-card.tsx con FavoriteButton) y además el toque burbujearía
   // al padre, así que vive como hermano del botón, no adentro — con
   // stopPropagation() como red de seguridad adicional (mismo criterio).
+  // Lookup directo contra la tabla (regla react-hooks/static-components).
+  const OfferIcon = (offerTypeIcon && OFFER_TYPE_ICON_BY_NAME[offerTypeIcon]) || DEFAULT_OFFER_TYPE_ICON;
   const offerBadge = product.validFrom && (
     <span className="inline-flex items-center gap-1 rounded-full bg-terracota/10 px-2 py-1 font-sans text-caption font-medium text-terracota">
-      <Tag size={12} weight="bold" />
+      <OfferIcon size={12} weight="bold" />
       {offerTypeName ?? "Oferta"}
     </span>
   );
@@ -124,7 +130,11 @@ export function ProductRow({
               {product.price !== undefined ? formatCOP(product.price) : ""}
             </span>
             {product.availabilityUpdatedAt && (
-              <span className="font-sans text-caption text-text-muted">
+              // suppressHydrationWarning: "hace X" depende del reloj — se
+              // calcula en el servidor y otra vez al hidratar; si el minuto
+              // cambia entre las dos pasadas, React lanzaba el error #418
+              // (encontrado verificando con Playwright, PR 3 de íconos).
+              <span className="font-sans text-caption text-text-muted" suppressHydrationWarning>
                 {product.available === false ? "No disponible" : "Disponible"}{" "}
                 {formatRelativeTimeShort(product.availabilityUpdatedAt)}
               </span>
@@ -183,7 +193,8 @@ export function ProductRow({
           )}
           {deleteError && <p className="font-sans text-body-sm text-rojo">{deleteError}</p>}
           {product.validFrom && (
-            <p className="font-sans text-body-sm font-medium text-terracota">
+            // suppressHydrationWarning: mismo motivo — "vence en X" depende del reloj.
+            <p className="font-sans text-body-sm font-medium text-terracota" suppressHydrationWarning>
               {describeOfferValidUntil(product.validUntil)}
             </p>
           )}

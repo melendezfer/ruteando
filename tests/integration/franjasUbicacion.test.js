@@ -164,6 +164,11 @@ describe('ubicación efectiva de un ambulante según su franja vigente', () => {
     const perfil = await request(app).get(`/businesses/${id}`);
     expect(perfil.body.activeLocationSlot).toMatchObject({ referenceAddress: 'Colegio' });
     expect(perfil.body.location.latitude).toBeCloseTo(LEJOS.lat, 5); // `location` sigue siendo la base
+    // En el perfil la franja trae sus coordenadas, para "Cómo llegar" a
+    // donde está ahora (la base se creó con showExactLocation: true).
+    expect(perfil.body.activeLocationSlot.latitude).toBeCloseTo(CENTRO.lat, 5);
+    // En los listados no (ya son latitude/longitude del propio negocio).
+    expect(fila.activeLocationSlot.latitude).toBeNull();
 
     // Cerca de la BASE ya no aparece: ahora mismo está en la franja.
     const cercaBase = await request(app).get('/businesses/nearby').query({ lat: LEJOS.lat, lng: LEJOS.lng, radiusKm: 1, categoryId });

@@ -779,13 +779,20 @@ components:
               recordedAt: { type: string, format: date-time }
 
     ActiveLocationSlot:
-      description: Resumen de la franja vigente ahora (sin coordenadas — esas ya viajan como la ubicación efectiva del negocio).
+      description: >-
+        Resumen de la franja vigente ahora. `latitude`/`longitude` solo
+        vienen llenos en GET /businesses/{businessId} (donde `location` es
+        la base), con la misma regla de "zona aproximada" que la base; en
+        los listados son null porque la ubicación efectiva ya viaja en el
+        propio Business.
       type: object
       properties:
         id: { type: integer }
         startTime: { type: string }
         endTime: { type: string }
         referenceAddress: { type: string, nullable: true }
+        latitude: { type: number, format: double, nullable: true }
+        longitude: { type: number, format: double, nullable: true }
 
     Product:
       type: object

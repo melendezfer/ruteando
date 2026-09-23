@@ -1,8 +1,7 @@
 "use client";
 
+import { useCategoriesWithStatus } from "@/lib/categories/use-categories";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api/client";
-import type { components } from "@/lib/api/schema";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { useBusinessSearch } from "@/lib/discovery/use-business-search";
 import { logSearchEvent } from "@/lib/api/events";
@@ -13,7 +12,6 @@ import { BusinessCard } from "@/components/discovery/business-card";
 import { Skeleton } from "@/components/discovery/skeleton";
 import { PriceOpenNowFields, type PriceOpenNowState } from "@/components/discovery/price-open-now-fields";
 
-type Category = components["schemas"]["Category"];
 
 const NEARBY_RADIUS_KM = 5;
 const LIST_LIMIT = 6;
@@ -43,8 +41,8 @@ interface LastSearch {
 export function HomeScreen({ userFirstName }: HomeScreenProps) {
   const geolocation = useConsumerGeolocation();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  // Caché compartida de categorías (PR 3 de 3), no un fetch propio.
+  const { categories, loading: categoriesLoading } = useCategoriesWithStatus();
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   const [listTitle, setListTitle] = useState("Cerca de ti");
@@ -73,18 +71,6 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
     radiusKm: NEARBY_RADIUS_KM,
     geolocation,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    api.GET("/categories").then(({ data }) => {
-      if (cancelled) return;
-      if (data) setCategories(data);
-      setCategoriesLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const runSearch = useCallback(
     (params: LastSearch) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import Link from "next/link";
 import { CaretDown, CaretUp, MapPin, MapTrifold, NavigationArrow, Star } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
@@ -130,7 +131,10 @@ export function BusinessCard({
           aria-expanded={expanded}
           className="flex flex-1 items-center justify-between gap-3 text-left"
         >
-          <div className="flex flex-col gap-1">
+          {/* Ícono y color guardados de la categoría — la misma fuente que
+              el pin del mapa y las filas del banner (PR 3 de 3). */}
+          <CategoryIcon categoryId={business.categoryId} size="md" className="self-start" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="font-heading text-title-2 font-semibold text-text">{business.name}</span>
             <span className="font-sans text-body-sm text-text-muted">
               {categoryName ?? "Comercio informal"}
@@ -149,6 +153,7 @@ export function BusinessCard({
               matchType={business.matchType}
               matchedProducts={business.matchedProducts}
               matchedCategory={business.matchedCategory}
+              categoryId={business.categoryId}
               categoryName={categoryName}
               showPrices={showPrices}
             />

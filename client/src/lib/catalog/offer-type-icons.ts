@@ -8,7 +8,7 @@ import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
  * texto plano (los 4 sembrados de fábrica: 'fork-knife'/'percent'/'package'/
  * 'calendar-star') — este es el único lugar del frontend que traduce
  * ese texto a un ícono de Phosphor real, mismo criterio que
- * catalog-icons.tsx con `Category.type`. Un tipo de oferta nuevo,
+ * lib/icons/category-icons.ts con `Category.icon`. Un tipo de oferta nuevo,
  * agregado desde el admin CRUD con un nombre de ícono que no está en
  * este mapa, cae en `DEFAULT_OFFER_TYPE_ICON` en vez de romper — no hay
  * forma de que el frontend valide contra el catálogo completo de
@@ -31,7 +31,7 @@ export const DEFAULT_OFFER_TYPE_ICON: Icon = SEMANTIC_ICONS.offer;
  * Para un lookup dentro de un callback (ej. `.map()`) — para el cuerpo
  * de un componente en sí, usar el lookup directo contra
  * `OFFER_TYPE_ICON_BY_NAME`/`DEFAULT_OFFER_TYPE_ICON` (ver
- * catalog-icons.tsx#resolveCatalogIcon, mismo criterio exacto): la regla
+ * lib/icons/category-icons.ts, mismo criterio exacto): la regla
  * `react-hooks/static-components` marca como error asignar a una
  * variable con mayúscula inicial, usada luego como tag JSX, el
  * resultado de una LLAMADA a función en el cuerpo de un componente.

@@ -8,7 +8,7 @@ import { resolveOfferTypeIcon } from "@/lib/catalog/offer-type-icons";
 import type { Icon } from "@phosphor-icons/react";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
-import { resolveCatalogIcon } from "@/lib/catalog/catalog-icons";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
 import type { ConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
@@ -145,7 +145,9 @@ export function FilteredListSheet({
     return offerTypes.find((t) => t.id === tab.offerTypeId)?.name ?? "Oferta";
   }
 
-  function tabIcon(tab: DiscoveryListFilter): Icon {
+  // null = pestaña de CATEGORÍA: se dibuja con <CategoryIcon> (ícono y
+  // color guardados de la categoría), no con un ícono decidido acá.
+  function tabIcon(tab: DiscoveryListFilter): Icon | null {
     // Registro único de íconos (lib/icons/semantic-icons.ts): "abierto
     // ahora" tiene su propio ícono (antes CheckCircle, compartido con
     // "confirmó que vende"); un tipo de oferta puntual usa SU ícono (Menú
@@ -157,7 +159,7 @@ export function FilteredListSheet({
     if (tab.type === "offerType") {
       return resolveOfferTypeIcon(offerTypes.find((t) => t.id === tab.offerTypeId)?.icon);
     }
-    return resolveCatalogIcon(categoryTypeById.get(tab.categoryId));
+    return null;
   }
 
   // Ícono/nombre del tipo de oferta por id (sin RF asociado — ver
@@ -259,7 +261,11 @@ export function FilteredListSheet({
                     : "border-border bg-background text-text-muted hover:text-text"
                 }`}
               >
-                <TabIcon size={16} weight="bold" />
+                {TabIcon ? (
+                  <TabIcon size={16} weight="bold" />
+                ) : (
+                  <CategoryIcon categoryId={tab.type === "category" ? tab.categoryId : null} size="xs" />
+                )}
                 {tabLabel(tab)}
               </button>
             );

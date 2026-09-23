@@ -1,6 +1,7 @@
 "use client";
 
 import { CaretRight, NavigationArrow } from "@phosphor-icons/react/dist/ssr";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
 import { formatDistance } from "@/lib/format/distance";
@@ -76,7 +77,8 @@ export function MapSearchResults({
                 onClick={() => onSelect(business)}
                 className="flex flex-1 items-center justify-between gap-3 text-left hover:bg-background"
               >
-                <div className="flex flex-col gap-0.5">
+                <CategoryIcon categoryId={business.categoryId} size="md" className="self-start" />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="font-heading text-body font-semibold text-text">{business.name}</span>
                   <span className="font-sans text-body-sm text-text-muted">
                     {categoryName ?? "Comercio informal"}
@@ -89,6 +91,7 @@ export function MapSearchResults({
                     matchType={business.matchType}
                     matchedProducts={business.matchedProducts}
                     matchedCategory={business.matchedCategory}
+                    categoryId={business.categoryId}
                     categoryName={categoryName}
                     showPrices={showPrices}
                   />

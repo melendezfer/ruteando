@@ -2,9 +2,8 @@
 
 import { MapPin } from "@phosphor-icons/react/dist/ssr";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
-import { CATALOG_ICON_BY_TYPE, DEFAULT_CATALOG_ICON } from "@/lib/catalog/catalog-icons";
 import type { CatalogType } from "@/lib/catalog/catalog-label";
-import { getCategoryPinColor } from "@/lib/map/category-pin-colors";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import { buildDirectionsUrl } from "@/lib/format/directions";
 import { formatDistance } from "@/lib/format/distance";
 import type { BusinessPin } from "@/components/map/leaflet-map";
@@ -69,20 +68,13 @@ export function DiscoveryRow({
   onCategoryClick,
   onBeforeAction,
 }: DiscoveryRowProps) {
-  const CategoryIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
-  const color = getCategoryPinColor(business.categoryId, catalogType);
   const statusText = business.availabilityConfirmedAt ? "Vendiendo ahora" : "Abierto";
   const locationLabel = resolveLocationActionLabel(business, catalogType);
   const hasCoords = typeof business.latitude === "number" && typeof business.longitude === "number";
 
-  const categoryIcon = (
-    <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-      style={{ backgroundColor: color }}
-    >
-      <CategoryIcon size={18} weight="fill" />
-    </span>
-  );
+  // Ícono y color guardados de la categoría (Category.icon/color) — la
+  // misma fuente que el pin del mapa, nada deducido acá.
+  const categoryIcon = <CategoryIcon categoryId={business.categoryId} size="md" />;
 
   return (
     <div className="flex flex-col">

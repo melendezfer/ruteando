@@ -64,7 +64,7 @@ export interface CategoryVisual {
  * Para usar dentro de un callback (`.map()`) o fuera de un componente —
  * en el cuerpo de un componente, la regla `react-hooks/static-components`
  * no acepta asignar a una variable con mayúscula el resultado de una
- * llamada (ver catalog-icons.tsx); ahí usar `CATEGORY_ICON_BY_NAME` directo.
+ * llamada; ahí usar `CATEGORY_ICON_BY_NAME` directo (ver components/ui/category-icon.tsx).
  */
 export function resolveCategoryVisual(category: Category | null | undefined): CategoryVisual {
   return {

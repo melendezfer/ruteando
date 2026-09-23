@@ -300,13 +300,30 @@ function toApiLiveLocation(actualizadaEn, rastro) {
   return { latitude: ultima.latitude, longitude: ultima.longitude, updatedAt: actualizadaEn, trail };
 }
 
-/** Resumen de la franja vigente — sin coordenadas: esas ya viajan como la ubicación efectiva del negocio. */
-function toApiActiveLocationSlot(row) {
+/**
+ * Resumen de la franja vigente. En los listados, sin coordenadas (ya
+ * viajan como la ubicación efectiva del negocio: latitude/longitude). En
+ * el perfil — donde `location` es la BASE — con coordenadas, para que
+ * "Cómo llegar" lleve a donde está el vendedor ahora; misma regla de "zona
+ * aproximada" que la base (`mostrarExacta`).
+ */
+function toApiActiveLocationSlot(row, { mostrarExacta } = {}) {
+  const conCoordenadas = mostrarExacta !== undefined && row.latitud != null && row.longitud != null;
   return {
     id: Number(row.id),
     startTime: truncarSegundos(row.hora_inicio),
     endTime: truncarSegundos(row.hora_fin),
     referenceAddress: row.direccion_referencia ?? null,
+    latitude: conCoordenadas
+      ? mostrarExacta
+        ? Number(row.latitud)
+        : aproximarCoordenada(Number(row.latitud))
+      : null,
+    longitude: conCoordenadas
+      ? mostrarExacta
+        ? Number(row.longitud)
+        : aproximarCoordenada(Number(row.longitud))
+      : null,
   };
 }
 
@@ -548,7 +565,11 @@ function toApiBusinessProfile({
     // Ver toApiBusiness#activeLocationSlot. En el perfil, `location` sigue
     // siendo la ubicación BASE (la que edita el dueño); dónde está el
     // ambulante ahora mismo, si está en una franja, lo dice este campo.
-    activeLocationSlot: franjaActiva ? toApiActiveLocationSlot(franjaActiva) : null,
+    activeLocationSlot: franjaActiva
+      ? toApiActiveLocationSlot(franjaActiva, {
+          mostrarExacta: esPropietario || Boolean(ubicacion?.mostrar_ubicacion_exacta),
+        })
+      : null,
     liveLocation: enVivo ? toApiLiveLocation(enVivo.vivo_actualizada_en, enVivo.vivo_rastro) : null,
   };
 }

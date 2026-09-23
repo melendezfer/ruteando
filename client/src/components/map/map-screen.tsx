@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/categories/use-categories";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type L from "leaflet";
@@ -116,7 +117,9 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
   const [externalPin, setExternalPin] = useState<BusinessPin | null>(null);
   const handledInitialBusinessIdRef = useRef<string | null>(null);
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  // Caché compartida de categorías (PR 3 de 3) — la misma lista que leen
+  // el banner, la hoja, las tarjetas y el perfil; no un fetch propio.
+  const categories = useCategories();
   const [offerTypes, setOfferTypes] = useState<OfferType[]>([]);
   // Vista de lista filtrada de pantalla completa (redediseño de
   // navegación global, sin RF asociado — ver CLAUDE.md,
@@ -156,16 +159,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
     priceMax: "",
     openNow: false,
   });
-
-  useEffect(() => {
-    let ignore = false;
-    api.GET("/categories").then(({ data }) => {
-      if (!ignore && data) setCategories(data);
-    });
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   useEffect(() => {
     let ignore = false;

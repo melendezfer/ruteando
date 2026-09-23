@@ -13,7 +13,9 @@ import {
   Plus,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
-import { CATALOG_ICON_BY_TYPE, DEFAULT_CATALOG_ICON } from "@/lib/catalog/catalog-icons";
+import { CategoryIcon } from "@/components/ui/category-icon";
+import { formatRelativeTimeShort } from "@/lib/format/relative-time";
+import { MOBILITY_ICONS, MOBILITY_LABELS, SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
@@ -88,6 +90,8 @@ interface BusinessProfileScreenProps {
 // negocios/[businessId]/page.tsx (Server Component), así que importar
 // Leaflet en el módulo de arriba rompería ese render. `ssr: false` lo
 // difiere al navegador.
+const LiveIcon = SEMANTIC_ICONS.liveLocation;
+
 const LocationPinEditor = dynamic(
   () => import("@/components/business/location-pin-editor").then((mod) => mod.LocationPinEditor),
   {
@@ -161,12 +165,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // todas las filas del catálogo a la vez — mismo criterio que
   // categoryNameById en map-screen.tsx: sin esto, cada ProductRow tendría
   // que pedir su propio nombre de tipo por separado.
-  const [offerTypeNameById, setOfferTypeNameById] = useState<Map<number, string>>(new Map());
+  const [offerTypeById, setOfferTypeById] = useState<Map<number, { name: string; icon: string | null }>>(new Map());
   useEffect(() => {
     let ignore = false;
     api.GET("/offer-types").then(({ data }) => {
       if (!ignore && data) {
-        setOfferTypeNameById(new Map(data.map((t) => [t.id!, t.name!])));
+        setOfferTypeById(new Map(data.map((t) => [t.id!, { name: t.name!, icon: t.icon ?? null }])));
       }
     });
     return () => {
@@ -293,15 +297,28 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // depender de eso.
   const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
-  const HeroFallbackIcon = catalogType ? CATALOG_ICON_BY_TYPE[catalogType] : DEFAULT_CATALOG_ICON;
+  // Marca de modalidad — el MISMO ícono que la marca del pin del mapa
+  // (lib/icons/semantic-icons.ts); antes el perfil y el mapa dibujaban el
+  // carrito de dos formas distintas.
+  const MobilityIcon = MOBILITY_ICONS[mobility];
   const catalogSectionLabel = resolveCatalogSectionLabel(catalogType);
   const catalogEmptyState = resolveCatalogEmptyState(catalogType);
   const itemNoun = resolveItemNoun(catalogType);
   const whatsappHref = buildWhatsAppLink(profile.contactPhone, profile.name);
-  const directionsHref =
-    location && location.latitude !== undefined && location.longitude !== undefined
-      ? buildDirectionsUrl(location.latitude, location.longitude)
-      : null;
+  // "Cómo llegar" a donde está el negocio AHORA, con el mismo orden que
+  // el mapa: en vivo > franja vigente > ubicación base. Antes apuntaba
+  // siempre a la base, aunque el ambulante estuviera en otro sitio.
+  const live = profile.liveLocation ?? null;
+  const slot = profile.activeLocationSlot ?? null;
+  const effective =
+    live?.latitude != null && live.longitude != null
+      ? { latitude: live.latitude, longitude: live.longitude }
+      : slot?.latitude != null && slot.longitude != null
+        ? { latitude: slot.latitude, longitude: slot.longitude }
+        : location && location.latitude !== undefined && location.longitude !== undefined
+          ? { latitude: location.latitude, longitude: location.longitude }
+          : null;
+  const directionsHref = effective ? buildDirectionsUrl(effective.latitude, effective.longitude) : null;
 
   return (
     <div className="flex flex-1 flex-col pb-24">
@@ -328,7 +345,10 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           <img src={heroPhoto.url} alt={profile.name ?? "Negocio"} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <HeroFallbackIcon size={64} weight="duotone" className="text-text-muted" />
+            {/* Sin foto: el ícono y color guardados de la categoría, igual
+                que en el pin, el banner y las tarjetas (antes: un ícono
+                gris por tipo de catálogo, solo en este caso). */}
+            <CategoryIcon categoryId={profile.categoryId} size="xl" />
           </div>
         )}
         {/* Revertido a pedido explícito del usuario (sin RF asociado):
@@ -349,15 +369,37 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
       <div className="flex flex-col gap-1 px-5 py-4">
         <h1 className="font-heading text-title-1 font-bold text-text">{profile.name}</h1>
-        <p className="font-sans text-body-sm text-text-muted">
+        <p className="flex flex-wrap items-center gap-1.5 font-sans text-body-sm text-text-muted">
+          <CategoryIcon categoryId={profile.categoryId} size="sm" />
           {categoryName ?? "Comercio informal"}
           {profile.averageRating != null &&
             ` · ${profile.averageRating.toFixed(1)} ★ (${profile.reviewCount ?? 0} reseña${profile.reviewCount === 1 ? "" : "s"})`}
         </p>
-        {location?.referenceAddress && (
-          <p className="font-sans text-body-sm text-text-muted">{location.referenceAddress}</p>
+        {/* Dónde está AHORA, si no es su punto de siempre (en vivo, o en
+            una de sus franjas del día). */}
+        {live ? (
+          // suppressHydrationWarning: "hace X" depende del reloj (ver product-row.tsx).
+          <p
+            className="inline-flex items-center gap-1.5 font-sans text-body-sm font-medium text-terracota"
+            suppressHydrationWarning
+          >
+            <LiveIcon size={16} weight="bold" />
+            En vivo · ubicación actualizada {live.updatedAt ? formatRelativeTimeShort(live.updatedAt) : "hace instantes"}
+          </p>
+        ) : slot ? (
+          <p className="font-sans text-body-sm text-text-muted">
+            Ahora ({slot.startTime}–{slot.endTime}): {slot.referenceAddress ?? "en otro punto del barrio"}
+          </p>
+        ) : (
+          location?.referenceAddress && (
+            <p className="font-sans text-body-sm text-text-muted">{location.referenceAddress}</p>
+          )
         )}
         <div className="mt-1 flex flex-wrap gap-2">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-background px-3 py-1 font-sans text-caption font-semibold text-text">
+            <MobilityIcon size={14} weight="bold" />
+            {MOBILITY_LABELS[mobility]}
+          </span>
           {profile.ownDelivery && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
               <Moped size={16} weight="bold" />
@@ -544,7 +586,10 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             onEdit={(toEdit) => setProductForm({ mode: "edit", product: toEdit })}
             onDeleted={handleProductDeleted}
             offerTypeName={
-              product.offerTypeId != null ? (offerTypeNameById.get(product.offerTypeId) ?? null) : null
+              product.offerTypeId != null ? (offerTypeById.get(product.offerTypeId)?.name ?? null) : null
+            }
+            offerTypeIcon={
+              product.offerTypeId != null ? (offerTypeById.get(product.offerTypeId)?.icon ?? null) : null
             }
             onExpand={(expandedProduct) => {
               if (profile.id && expandedProduct.id) logProductViewEvent(profile.id, expandedProduct.id);

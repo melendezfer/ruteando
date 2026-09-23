@@ -6488,8 +6488,8 @@ consola.
 
 - ~~La UI para que el vendedor edite sus franjas no existe todavía~~ —
   resuelto en el PR 2 (sección 59, "Mis puntos por hora").
-- Banner, hoja filtrada, perfil, tarjetas y pin siguen dibujando ícono
-  por tipo y color por hash hasta los PR 2 y 3.
+- ~~Banner, hoja filtrada, perfil, tarjetas y pin siguen dibujando ícono
+  por tipo y color por hash~~ — resuelto en los PR 2 y 3 (secciones 59 y 60).
 - `scripts/loadtest-nearby.js`/`seedLoadTest.js` siguen con el centro
   viejo (4.578, -74.217, sección 25) — no se tocaron en esta rama.
 
@@ -6599,10 +6599,104 @@ modalidad + modalidad en su nombre accesible.
 
 ### Gaps conocidos, no ocultos
 
-- Banner, hoja filtrada, perfil y tarjetas siguen con el ícono por tipo y
-  el color por hash (`category-pin-colors.ts`) — son el PR 3.
-- "Cómo llegar" sigue apuntando a la ubicación base aunque el ambulante
-  esté en una franja o en vivo — también PR 3 (perfil y tarjetas).
+- ~~Banner, hoja filtrada, perfil y tarjetas siguen con el ícono por tipo
+  y el color por hash~~ — resuelto en el PR 3 (sección 60).
+- ~~"Cómo llegar" sigue apuntando a la ubicación base~~ — resuelto en el
+  PR 3 (sección 60).
 - Sin notificación al vendedor cuando la ubicación en vivo se apaga sola
   con la app cerrada — no hay forma de hacerlo sin push (Firebase,
   pendiente de credenciales, sección 37).
+
+## 60. Íconos, colores y modalidad — PR 3 de 3: el resto de las pantallas
+
+Cierra el rediseño (secciones 58 y 59). Rama `feature/iconos-pantallas`,
+desde `develop` con los PR #87 y #88 ya fusionados.
+
+### Una sola fuente, sin lógica por componente
+
+- `client/src/lib/categories/use-categories.ts` (nuevo): `GET /categories`
+  **una vez por sesión** (caché a nivel de módulo) para todas las
+  pantallas. `map-screen.tsx` y `home-screen.tsx` dejaron de pedir su
+  propia lista.
+- `client/src/components/ui/category-icon.tsx` (nuevo):
+  `<CategoryIcon categoryId size>` es la única forma de dibujar una
+  categoría fuera del pin del mapa. Lee `Category.icon`/`color` de esa
+  caché y los traduce con `lib/icons/category-icons.ts` (el mismo mapa que
+  usa el pin). Siempre la misma forma (círculo del color de la categoría,
+  ícono blanco, peso `fill`) y 4 tamaños fijos (`xs` chips/pestañas, `sm`
+  línea del perfil, `md` filas y tarjetas, `xl` portada sin foto).
+- Lo usan: `DiscoveryRow` (banner y hoja filtrada), la pestaña de
+  categoría de `FilteredListSheet`, `BusinessCard` (/buscar y el resumen
+  del mapa), `MapSearchResults`, el chip de categoría de
+  `MatchReasonBadges` y el perfil (línea de categoría siempre, y portada
+  cuando no hay foto).
+- **Eliminados**: `lib/catalog/catalog-icons.tsx` (ícono por
+  `Category.type`) y `lib/map/category-pin-colors.ts` (color por hash del
+  id). `catalogType` sigue existiendo solo para los textos (Carta/
+  Productos/Servicios, "Ver zona"), nunca para ícono ni color.
+
+### Perfil de negocio
+
+- Marca de modalidad junto a las insignias, con el MISMO ícono que la
+  marca del pin (`MOBILITY_ICONS`).
+- Dónde está ahora: "En vivo · ubicación actualizada hace X" o
+  "Ahora (12:00–14:00): Salida del colegio" en vez de la dirección base.
+- **"Cómo llegar" a la ubicación efectiva**, en el mismo orden que el
+  mapa: en vivo > franja vigente > base. Para eso
+  `BusinessProfile.activeLocationSlot` trae ahora `latitude`/`longitude`
+  (solo en el perfil, donde `location` es la base; con la misma regla de
+  "zona aproximada"). En los listados siguen en null: la ubicación
+  efectiva ya viaja en el propio negocio.
+- La insignia de oferta del catálogo usa el ícono PROPIO del tipo
+  (`OfferType.icon`), igual que su fila en "Cerca de ti ahora" y su
+  pestaña — el Tag genérico solo cuando no tiene tipo.
+
+### Los 13 puntos de la auditoría original
+
+| # | Inconsistencia | Estado | Cómo se verificó |
+|---|---|---|---|
+| 1 | Mapa vs banner/hoja con dibujos distintos | Resuelto | Playwright compara el `<path>` del SVG en pin, banner, hoja, pestaña, tarjeta y perfil: un solo dibujo por categoría |
+| 2 | El perfil mostraba el ícono solo sin foto | Resuelto | Línea de categoría siempre visible (Playwright, todos los perfiles) |
+| 3 | Un tipo de oferta con íconos distintos | Resuelto | Promoción: insignia = pestaña = fila, mismo `<path>` |
+| 4 | Carrito dibujado de dos formas | Resuelto | Marca del pin y chip del perfil, mismo `<path>` |
+| 5 | Pesos/tamaños sin sistema | Resuelto | `CategoryIcon`: un peso (`fill`), 4 tamaños fijos |
+| 6 | Package = bienes y Combo | Resuelto | Solo `offer-type-icons.ts` lo importa |
+| 7 | Tag con 4 significados | Resuelto | Solo `semantic-icons.ts` (oferta genérica) |
+| 8 | Storefront con 3 significados | Resuelto | Solo `semantic-icons.ts` (modalidad local) |
+| 9 | CheckCircle con 2 significados | Resuelto | Sus 4 usos son confirmaciones de éxito; "abierto" y "confirmó que vende" tienen íconos propios |
+| 10 | Heart | Ya era consistente | — |
+| 11 | Hash agrupaba mal los colores | Resuelto | Hash eliminado; color guardado |
+| 12 | Color dependía del id | Resuelto | Playwright: el color dibujado = `Category.color` de la API en todas las superficies |
+| 13 | Colores de categoría vs colores de estado | Resuelto | Paleta validada (sección 58); ninguna categoría usa un token de estado |
+
+Los puntos 6–9 se comprobaron con un análisis de TODAS las importaciones
+de Phosphor en `client/src` (incluidas las de varias líneas, que un grep
+simple no ve).
+
+### Hallazgo real en la verificación
+
+**Error de hidratación de React (#418) intermitente**: los textos "hace X"
+("Disponible hace X min" del catálogo, desde la sección 55; "Confirmado
+hace X"; y la línea nueva "En vivo · actualizada hace X") se calculan en
+el servidor y otra vez al hidratar; si el minuto cambia entre las dos
+pasadas, el texto difiere. Apareció una vez y no se reprodujo al
+reintentar, consistente con esa causa. Se marcaron esos elementos con
+`suppressHydrationWarning`, lo que React recomienda para textos que
+dependen del reloj (el cliente sigue mostrando el valor correcto). Dos
+corridas completas posteriores, limpias.
+
+### Verificado
+
+Backend 670/670; lint de backend y frontend, tsc y build en verde.
+Playwright contra el servidor real: 9 comprobaciones del PR 3 (13
+categorías cruzando hasta 6 superficies cada una), más las del PR 1 (8) y
+el PR 2 (16) como prueba de regresión, todas en verde.
+
+### Gaps conocidos, no ocultos
+
+- Las categorías se cachean por sesión del navegador: una categoría nueva
+  (o un ícono o color cambiado en la base) se ve al recargar la app, no en
+  caliente. No hay panel para editarlas, así que hoy no importa.
+- Zapatos y libros/historietas compartirían el morado de "bienes" (vista
+  previa entregada al usuario); separar tonos es un UPDATE de
+  `categorias.color` si se decide.

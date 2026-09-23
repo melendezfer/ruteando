@@ -1,6 +1,13 @@
 "use client";
 
-import { Storefront, Tag, Tray } from "@phosphor-icons/react/dist/ssr";
+import { Tray } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+// Íconos del registro único (lib/icons/semantic-icons.ts): "nombre del
+// negocio" y "ítem de su carta/catálogo" ya no comparten ícono con
+// "local fijo" (Storefront) ni con "oferta" (Tag).
+const BusinessNameIcon = SEMANTIC_ICONS.businessName;
+const CatalogIcon = SEMANTIC_ICONS.catalog;
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
 
@@ -69,7 +76,7 @@ export function MatchReasonBadges({
     <div className="flex flex-wrap items-center gap-1.5">
       {showName && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 font-sans text-caption font-medium text-text-muted">
-          <Storefront size={12} weight="bold" />
+          <BusinessNameIcon size={12} weight="bold" />
           Nombre del negocio
         </span>
       )}
@@ -78,7 +85,7 @@ export function MatchReasonBadges({
           key={product.name ?? index}
           className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 font-sans text-caption font-medium text-text-muted"
         >
-          <Tag size={12} weight="bold" />
+          <CatalogIcon size={12} weight="bold" />
           {product.name}
           {showPrices && product.price !== undefined ? ` · ${formatCOP(product.price)}` : ""}
         </span>

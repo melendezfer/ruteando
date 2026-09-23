@@ -6339,3 +6339,155 @@ confirmando que los dos almacenes de token no se mezclan).
   sobre una entidad" en el sentido que pidió el usuario. Las fases
   futuras son las que generan las primeras filas reales de auditoría
   fuera de las pruebas.
+
+## 58. Íconos, colores y modalidad — PR 1 de 3: datos y backend
+
+Petición directa del usuario, sin RF asociado, basada en el inventario de
+íconos hecho antes de empezar (13 inconsistencias encontradas). Dividido
+a propósito en 3 PRs **secuenciales** (no en paralelo, para no repetir el
+enredo de archivos compartidos del PR #82): (1) datos/backend — esta
+sección; (2) el pin del mapa; (3) el resto de las pantallas. Propia rama
+(`feature/iconos-modalidad-datos`).
+
+### Modalidad de negocio: 3 valores, sin migrar datos
+
+`movilidad_negocio` pasa de 2 a 3 valores (migración
+`modalidad-fijo-via-publica`): `ambulante` (API `itinerant`),
+`fijo_via_publica` (API `street_stall`, NUEVO — puesto que siempre está
+en el mismo sitio de la calle, sin local) y `local_fijo` (API `fixed`,
+sin cambio de significado). **Se agregó un valor, no se renombró nada**:
+los dos existentes conservan exactamente su significado, así que ningún
+cliente se rompe y no hizo falta migrar filas. Tampoco se reclasificó
+ningún negocio real en silencio (`ubicaciones.tipo = 'puesto'` es una
+pista, pero es otro campo con otro significado) — cada vendedor lo
+corrige desde su perfil. El `down` recrea el ENUM de 2 valores pasando
+`fijo_via_publica` a `local_fijo` (verificado bajando y subiendo).
+
+### Ícono y color guardados por categoría
+
+`categorias.icono` (existía vacía desde schema.sql) ahora tiene un
+nombre kebab-case de Phosphor **propio por categoría** (14: `bread`,
+`hamburger`, `flame`, `cooking-pot`, `cake`, `ice-cream`, `orange-slice`,
+`carrot`, `coffee`, `scissors`, `scales`, `chalkboard-teacher`, `yarn`,
+`pill`), y `categorias.color` (nueva, `VARCHAR(7) NOT NULL DEFAULT
+'#6b7280'`, CHECK de formato hex) reemplaza el hash inestable del id
+(migración `categorias-icono-color`). API: `Category.icon`/`Category.color`.
+
+**Color por familia, no uno por categoría — decisión deliberada**: la
+columna es por categoría, pero hoy los valores son un tono por familia
+(comida `#e8590c` naranja, servicios `#1098ad` turquesa, bienes
+`#9c36b5` morado). Con 14 categorías no existen 14 colores que se
+distingan entre sí y que además no choquen con los colores de estado
+reservados (verde "abierto", violeta de marca/grupos de pines, mostaza de
+zonas, rojo de error, azul del punto "mi ubicación"). La identidad de la
+categoría la carga el ícono; el color, la familia. Validado con
+`validate_palette.js` (skill dataviz) en claro y oscuro: los 3 tonos
+entre sí y contra cada color de estado superan el piso de visión normal
+(ΔE ≥ 15). Separar un tono propio por categoría más adelante es un
+UPDATE, no otra migración.
+
+**Hallazgo al escribir la migración**: las categorías de comida
+originales (Arepas, Empanadas, Fruver, etc.) nunca estuvieron en ninguna
+migración, solo en `scripts/seedDemoBusinesses.js` — un ambiente nuevo
+(staging/producción) solo tenía las 5 categorías que sí venían por
+migración. Esta migración las crea (`INSERT ... ON CONFLICT (nombre) DO
+UPDATE`), incluida "Postres": es una categoría legítima de la familia
+gastronómica, distinta de "Dulces y postres" (decisión explícita del
+usuario — no se borra ni se fusiona).
+
+### "Carta", no "Menú"
+
+El catálogo permanente de un negocio de comida se rotula **"Carta"**
+(`catalog-label.ts`); "Menú" queda reservado para el tipo de oferta
+temporal "Menú" (`tipos_oferta`, sin cambios).
+
+### Un ícono, un significado
+
+`client/src/lib/icons/semantic-icons.ts` (nuevo) es el registro único:
+
+| Ícono | Único significado | Antes también significaba |
+|---|---|---|
+| `Tag` | Oferta con vigencia, genérica | Promoción, "coincidió por un producto" |
+| `Percent` | Tipo de oferta Promoción (`tipos_oferta.icono` pasó de `tag` a `percent`) | — |
+| `Package` | Tipo de oferta Combo | Catálogo de bienes (desaparece en PR 3, que lee `Category.icon`) |
+| `BookOpen` | El catálogo/Carta ("coincidió por un ítem de su carta") | — |
+| `TextAa` | "Coincidió por el nombre del negocio" | — (antes Storefront) |
+| `Storefront` | Modalidad local | Categoría sin resolver, "coincidió por nombre" |
+| `Umbrella` / `ShoppingCartSimple` | Modalidad puesto en la calle / ambulante | — |
+| `DoorOpen` | Abierto ahora según horario (pestaña "Disponibles ahora") | — (antes CheckCircle) |
+| `SealCheck` | El vendedor confirmó que está vendiendo | — (antes CheckCircle) |
+| `CheckCircle` | Acción completada con éxito (formularios) | "Disponibles ahora", "confirmó que vende" |
+
+Aplicado en esta rama: `match-reason-badges.tsx`, las 3 piezas de
+confirmación de disponibilidad, las pestañas de `filtered-list-sheet.tsx`
+(un tipo de oferta puntual usa SU ícono, no el Tag genérico),
+`offer-type-icons.ts` y `mobility-toggle.tsx` (3 opciones). La lectura de
+`Category.icon`/`color` en banner/hoja/perfil/tarjetas y el pin son de
+los PR 2 y 3.
+
+### Franjas del día con ubicación propia (ambulante)
+
+`franjas_ubicacion` (migración `franjas-ubicacion-ambulante`): día,
+`hora_inicio`/`hora_fin` (fin < inicio = franja nocturna, igual que
+`horarios`), `punto`, `direccion_referencia`. Mismo patrón que
+`requiere_horario_negocio`: **sin cron** — una franja cuenta como vigente
+solo si el reloj de Bogotá cae dentro de ella en el momento de la
+consulta. `condicionRangoHorarioSQL()` (negocios.repository.js) es ahora
+la única regla de "¿el reloj cae en este rango semanal?", compartida por
+`horarios` y por las franjas.
+
+- `GET/PUT /businesses/{businessId}/location-slots` — reemplazo completo
+  como PUT .../schedule; solo el dueño; una lista no vacía en un negocio
+  que no es ambulante da 409; dos franjas que se solapan en cualquier
+  minuto de la semana (incluida la nocturna del domingo que pisa el lunes)
+  dan 422; máximo `LOCATION_SLOTS_MAX` (21). La coordenada sigue la regla
+  de "zona aproximada" de la ubicación base.
+- **Ubicación efectiva**: en `GET /businesses`, `/nearby` y `/zones`, un
+  ambulante dentro de una franja aparece en el punto de la franja
+  (lat/lng/distancia/radio/orden/zonas); fuera de toda franja, en su base.
+  Nunca se oculta (decisión B, sección 37). `Business.activeLocationSlot`
+  dice qué franja está vigente. En el perfil, `location` sigue siendo la
+  base y `activeLocationSlot` dice dónde está ahora.
+- **Cómo no se perdió el índice espacial**: `ST_DWithin` sobre
+  `COALESCE(franja, base)` no puede usar índice, así que `/nearby` y
+  `/zones` primero acotan candidatos con `n.id IN (ubicaciones por
+  idx_ubicaciones_punto UNION franjas por idx_franjas_ubicacion_punto)` y
+  después filtran por la efectiva. `nearbyIndexPlan.test.js` siembra
+  ahora también franjas y exige ambos índices sin ningún seq scan.
+- **Costo real, medido**: el orden ya no puede ser KNN por índice (`<->`),
+  es por distancia calculada sobre los candidatos del radio. Prueba de
+  carga k6 (5.000 negocios, 50 VUs): p95 = 184 ms, p99 = 211 ms, 0 %
+  errores — dentro de los umbrales propios (p95 < 300 ms), pero más lento
+  que la medición anterior (p95 97–152 ms; ~290 req/s contra ~450–600).
+  **Hallazgo de entorno**: el comando documentado (`docker run --network
+  host`) no llega al backend de WSL con Docker Desktop (100 % de errores
+  en 0 s) — hay que pasar `-e BASE_URL=http://<IP interna de WSL>:3000`.
+
+### Datos de demo
+
+`seedDemoBusinesses.js`: Arepas Doña Rosa y Perros El Parche pasan a
+`fijo_via_publica`; nuevo **Tintos Don Efra** (Tintos y café, ambulante)
+con 3 franjas todos los días — paradero 5-9am, salida del colegio
+12-2pm, paradero 5-8pm — sobre rayos ya verificados por geocodificación
+inversa.
+
+### Verificado
+
+Suite completa del backend 661/661 (17 pruebas nuevas: solape de franjas,
+CRUD y autorización de franjas, ubicación efectiva en nearby/listado/
+perfil, franjas sin efecto al dejar de ser ambulante, `street_stall`,
+ícono/color de categorías). Frontend: lint/tsc/build en verde. Playwright
+contra el servidor real: interruptor de 3 modalidades (y persistencia
+tras recargar), "Carta" como encabezado, chips con `TextAa`/`BookOpen`,
+pestaña "Disponibles ahora" con `DoorOpen`, y Tintos Don Efra a ~695 m
+(su franja del colegio, vigente al momento de la prueba), sin errores de
+consola.
+
+### Gaps conocidos, no ocultos
+
+- La UI para que el vendedor **edite** sus franjas no existe todavía — la
+  API está completa; el formulario se construye con el pin (PR 2).
+- Banner, hoja filtrada, perfil, tarjetas y pin siguen dibujando ícono
+  por tipo y color por hash hasta los PR 2 y 3.
+- `scripts/loadtest-nearby.js`/`seedLoadTest.js` siguen con el centro
+  viejo (4.578, -74.217, sección 25) — no se tocaron en esta rama.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCartSimple, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { MOBILITY_ICONS, MOBILITY_LABELS } from "@/lib/icons/semantic-icons";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 
@@ -16,13 +16,17 @@ interface MobilityToggleProps {
   initialMobility: Mobility;
 }
 
-const OPTIONS: { value: Mobility; label: string; icon: typeof ShoppingCartSimple }[] = [
-  { value: "itinerant", label: "Ambulante", icon: ShoppingCartSimple },
-  { value: "fixed", label: "Local fijo", icon: Storefront },
-];
+// 3 modalidades (migración modalidad-fijo-via-publica) — íconos y textos
+// desde el registro único (lib/icons/semantic-icons.ts), los mismos que
+// usa la marca de modalidad del pin del mapa.
+const OPTIONS = (["itinerant", "street_stall", "fixed"] as const).map((value) => ({
+  value,
+  label: MOBILITY_LABELS[value],
+  icon: MOBILITY_ICONS[value],
+}));
 
 /**
- * "¿Tu negocio es ambulante o de local fijo?" (petición directa del
+ * "¿Tu negocio es ambulante, un puesto en la calle o un local?" (petición directa del
  * usuario, sin RF asociado — ver CLAUDE.md) — solo visible para el
  * dueño en su propio perfil de negocio. Mismo patrón exacto que
  * OwnDeliveryToggle/HygieneBadgeToggle: cambia con el mismo
@@ -30,14 +34,13 @@ const OPTIONS: { value: Mobility; label: string; icon: typeof ShoppingCartSimple
  * mandando el resto de los campos actuales tal cual para no pisarlos
  * solo por cambiar este interruptor.
  *
- * Segmentado (dos botones), no un checkbox — a diferencia de
+ * Segmentado (tres botones), no un checkbox — a diferencia de
  * ownDelivery/hygieneSelfDeclared (activar/desactivar UNA
- * característica), esto es una elección entre dos estados excluyentes,
+ * característica), esto es una elección entre estados excluyentes,
  * ninguno "apagado" por defecto.
  *
- * El mapa (leaflet-map.tsx) usa este mismo campo para la FORMA del pin
- * (carrito vs. gota clásica) — el color sigue viniendo únicamente de
- * la categoría, ver category-pin-colors.ts.
+ * El mapa usa este mismo campo para la marca de modalidad del pin; el
+ * ícono y el color del pin vienen de la categoría.
  */
 export function MobilityToggle({
   businessId,
@@ -80,7 +83,7 @@ export function MobilityToggle({
   return (
     <div className="flex flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3">
       <span className="font-sans text-body text-text">¿Cómo es tu negocio?</span>
-      <div className="flex gap-2" role="radiogroup" aria-label="Movilidad del negocio">
+      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Modalidad del negocio">
         {OPTIONS.map(({ value, label, icon: Icon }) => {
           const active = mobility === value;
           return (
@@ -91,7 +94,7 @@ export function MobilityToggle({
               aria-checked={active}
               disabled={saving}
               onClick={() => handleChange(value)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-input border px-3 py-2 font-sans text-body-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              className={`flex flex-col items-center justify-center gap-1 rounded-input border px-2 py-2 text-center font-sans text-caption font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                 active
                   ? "border-terracota bg-terracota text-white"
                   : "border-border bg-background text-text hover:bg-surface"

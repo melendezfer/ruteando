@@ -9,6 +9,11 @@
  * criterio que review-tags.ts o hygiene.ts: un solo lugar evita que la
  * sección del perfil y cualquier otro texto que la mencione diverjan).
  *
+ * Terminología (rehacer íconos/colores/modalidad, PR 1 de 3): el catálogo
+ * PERMANENTE de un negocio de comida es la "Carta" — "Menú" queda
+ * reservado para el tipo de oferta temporal "Menú" (tipos_oferta), para
+ * que las dos cosas nunca se confundan en pantalla.
+ *
  * La forma de los datos subyacentes (Product: nombre/descripción/precio/
  * disponible/foto) NO cambia entre los tres tipos — solo el rótulo y el
  * texto de estado vacío que envuelven la misma lista.
@@ -17,13 +22,13 @@
 export type CatalogType = "food" | "goods" | "services";
 
 const CATALOG_SECTION_LABEL: Record<CatalogType, string> = {
-  food: "Menú",
+  food: "Carta",
   goods: "Productos",
   services: "Servicios",
 };
 
 const CATALOG_EMPTY_STATE: Record<CatalogType, string> = {
-  food: "Este negocio todavía no publicó su menú.",
+  food: "Este negocio todavía no publicó su carta.",
   goods: "Este negocio todavía no publicó sus productos.",
   services: "Este negocio todavía no publicó sus servicios.",
 };

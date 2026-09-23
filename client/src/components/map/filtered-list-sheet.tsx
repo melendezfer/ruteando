@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Heart, Tag, X } from "@phosphor-icons/react/dist/ssr";
+import { Heart, X } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+import { resolveOfferTypeIcon } from "@/lib/catalog/offer-type-icons";
 import type { Icon } from "@phosphor-icons/react";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -144,12 +146,18 @@ export function FilteredListSheet({
   }
 
   function tabIcon(tab: DiscoveryListFilter): Icon {
-    if (tab.type === "available_now") return CheckCircle;
+    // Registro único de íconos (lib/icons/semantic-icons.ts): "abierto
+    // ahora" tiene su propio ícono (antes CheckCircle, compartido con
+    // "confirmó que vende"); un tipo de oferta puntual usa SU ícono (Menú
+    // = cubiertos, Promoción = porcentaje...), no el Tag genérico, que
+    // queda solo para "Cerca de ti ahora" (cualquier oferta).
+    if (tab.type === "available_now") return SEMANTIC_ICONS.openNow;
     if (tab.type === "favorites") return Heart;
-    // "active_offers" también cae en Tag — mismo ícono genérico ya
-    // usado para "offerType" (un tipo de oferta puntual), consistente
-    // con el resto de las pestañas de oferta.
-    return tab.type === "category" ? resolveCatalogIcon(categoryTypeById.get(tab.categoryId)) : Tag;
+    if (tab.type === "active_offers") return SEMANTIC_ICONS.offer;
+    if (tab.type === "offerType") {
+      return resolveOfferTypeIcon(offerTypes.find((t) => t.id === tab.offerTypeId)?.icon);
+    }
+    return resolveCatalogIcon(categoryTypeById.get(tab.categoryId));
   }
 
   // Ícono/nombre del tipo de oferta por id (sin RF asociado — ver

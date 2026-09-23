@@ -199,4 +199,11 @@ module.exports = {
   // pago, SIN mostrar costo ni ningún flujo de pago (CLAUDE.md sección
   // 15: nada de UI de precios/facturación durante el piloto).
   FREE_PLAN_MAX_CATALOG_PRODUCTS: 3,
+
+  // Franjas del día con ubicación propia de un vendedor ambulante
+  // (migración franjas-ubicacion-ambulante). Cifra propia, no citada: 3
+  // por día alcanza para el caso descrito (paraderos en la mañana,
+  // colegio al mediodía, paraderos en la noche) con margen, y acota el
+  // tamaño del PUT de reemplazo completo.
+  LOCATION_SLOTS_MAX: 21,
 };

@@ -1,0 +1,47 @@
+const { franjasSeSolapan, locationSlotsInputSchema } = require('../../src/validators/business.validators');
+
+const base = { latitude: 4.6083, longitude: -74.2188 };
+const franja = (day, startTime, endTime) => ({ ...base, day, startTime, endTime });
+
+describe('franjasSeSolapan', () => {
+  it('dos franjas del mismo día que se pisan se solapan', () => {
+    expect(franjasSeSolapan(franja('monday', '08:00', '12:00'), franja('monday', '11:00', '14:00'))).toBe(true);
+  });
+
+  it('tocarse en el borde (12:00-12:00) no cuenta como solape', () => {
+    expect(franjasSeSolapan(franja('monday', '08:00', '12:00'), franja('monday', '12:00', '14:00'))).toBe(false);
+  });
+
+  it('una franja nocturna del lunes pisa la madrugada del martes', () => {
+    expect(franjasSeSolapan(franja('monday', '22:00', '02:00'), franja('tuesday', '01:00', '03:00'))).toBe(true);
+    expect(franjasSeSolapan(franja('monday', '22:00', '02:00'), franja('tuesday', '02:00', '05:00'))).toBe(false);
+  });
+
+  it('la franja nocturna del domingo da la vuelta a la semana y pisa el lunes temprano', () => {
+    expect(franjasSeSolapan(franja('sunday', '23:00', '01:00'), franja('monday', '00:30', '02:00'))).toBe(true);
+  });
+
+  it('mismo horario en días distintos no se solapa', () => {
+    expect(franjasSeSolapan(franja('monday', '08:00', '12:00'), franja('tuesday', '08:00', '12:00'))).toBe(false);
+  });
+});
+
+describe('locationSlotsInputSchema', () => {
+  it('acepta franjas válidas sin solape (caso del tinto: mañana, mediodía, noche)', () => {
+    const r = locationSlotsInputSchema.safeParse([
+      franja('monday', '05:00', '09:00'),
+      franja('monday', '12:00', '14:00'),
+      franja('monday', '17:00', '20:00'),
+    ]);
+    expect(r.success).toBe(true);
+  });
+
+  it('rechaza franjas que se solapan', () => {
+    expect(locationSlotsInputSchema.safeParse([franja('monday', '05:00', '09:00'), franja('monday', '08:00', '10:00')]).success).toBe(false);
+  });
+
+  it('rechaza inicio igual a fin, y coordenadas fuera de Cundinamarca', () => {
+    expect(locationSlotsInputSchema.safeParse([franja('monday', '08:00', '08:00')]).success).toBe(false);
+    expect(locationSlotsInputSchema.safeParse([{ ...franja('monday', '08:00', '09:00'), latitude: 10 }]).success).toBe(false);
+  });
+});

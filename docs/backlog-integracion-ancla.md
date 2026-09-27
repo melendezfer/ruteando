@@ -11,6 +11,7 @@ propongo y qué pruebas haría.
 | 3 | Interruptor rápido de "agotado" en la fila | Pendiente |
 | 4 | Confirmación o deshacer en acciones irreversibles | Pendiente |
 | 5 | Panel de administrador con la API nueva | Pendiente |
+| 6 | Botón de buscar se sale de la hoja en pantallas de 320 px | **Hipótesis sin verificar** |
 
 ---
 
@@ -217,3 +218,25 @@ Hoy se hace por SQL a mano.
 - Cada acción deja una fila en `auditoria_admin` con la acción y la entidad.
 - Playwright: login de admin → módulo visible según el rol → aprobar un
   negocio → aparece en el mapa.
+
+---
+
+## 6. Botón de buscar se sale de la hoja en pantallas de 320 px — hipótesis sin verificar
+
+**Qué se vio.** En una captura de Playwright a 320×568 (tamaño iPhone SE),
+tomada al verificar `fix/credito-osm-visible`, el botón morado de buscar de
+la hoja de búsqueda del mapa (`MapSearchSheet`, fila de `SearchBar`) queda
+cortado: se sale por el borde derecho de la hoja.
+
+**Hipótesis sin verificar.** Parece anterior a ese arreglo (el cambio solo
+tocó la altura de la hoja, no su ancho), y la causa probable es que el campo
+de texto de `SearchBar` no se encoge por debajo de su ancho mínimo por
+defecto. Nada de esto se comprobó todavía.
+
+**Cómo verificarlo.** Misma captura a 320 px con `develop` antes del arreglo
+del crédito; si también se sale, es preexistente. Revisar además `/buscar`
+a 320 px, que usa el mismo `SearchBar`.
+
+**Qué propongo si se confirma.** `min-w-0` en el campo (y `shrink-0` en el
+botón), y una prueba de Playwright a 320 px que falle si el botón queda
+fuera de la hoja.

@@ -157,12 +157,16 @@ beforeAll(async () => {
   await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, senales_venta, franjas_ubicacion, posiciones_en_vivo');
 });
 
+// Con senales_venta sembrada (R5), el borrado en cascada de los negocios
+// sembrados pasaba del timeout por defecto de 5 s: se borran primero los
+// avisos (una sola sentencia por índice) y el hook tiene más margen.
 afterAll(async () => {
+  await pool.query('DELETE FROM senales_venta WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM negocios WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
   await pool.query('DELETE FROM categorias WHERE id = $1', [categoriaId]);
   await pool.end();
-});
+}, 30000);
 
 describe('plan de ejecución de GET /businesses/nearby', () => {
   it('usa el índice GIST idx_ubicaciones_punto y no un seq scan sobre ubicaciones', async () => {

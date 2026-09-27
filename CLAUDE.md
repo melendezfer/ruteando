@@ -6700,3 +6700,36 @@ el PR 2 (16) como prueba de regresión, todas en verde.
 - Zapatos y libros/historietas compartirían el morado de "bienes" (vista
   previa entregada al usuario); separar tonos es un UPDATE de
   `categorias.color` si se decide.
+
+## 61. R5 — "Estoy vendiendo ahora" (aviso propio del vendedor)
+
+Prerrequisito R5 del plan del botón-ancla (`docs/integracion-ancla.md`),
+sin RF asociado. Rama `feature/r5-estoy-vendiendo`. **La especificación
+completa y cada decisión están en `docs/specs/r5-estoy-vendiendo.md`**; la
+guía de prueba manual, en `docs/pruebas/r5-prueba-manual.md`. Lo que hay
+que saber sin abrirlas:
+
+- **Regla "el aviso más reciente manda"**: `availabilityConfirmedAt` es la
+  fecha del último aviso del vendedor si es "vendiendo" y tiene menos de
+  60 min, venga de un aviso propio (`senales_venta`) o de responder una
+  pregunta (`solicitudes_disponibilidad`). Un "no" o "ya no estoy
+  vendiendo" lo deja en null de inmediato. **Bug real corregido**: antes
+  un "no" posterior no apagaba un "sí" anterior (confirmado con una
+  prueba que fallaba contra el código viejo).
+- La regla vive en un solo lugar, `src/repositories/ultimaSenalVenta.js`
+  (antes eran tres copias de la consulta). Cualquier lectura nueva de
+  `availabilityConfirmedAt` debe usarla.
+- `PUT`/`DELETE /businesses/{businessId}/selling-now`, solo el dueño:
+  negocio activo, dentro de su horario o franja (409 con type
+  `selling-now-off-schedule`), 5 min entre avisos (`saved: false`), 30
+  avisos en 24 h móviles (429). Apagar siempre funciona y no cuenta para
+  el tope. El aviso no cambia qué negocios aparecen ni `openNow`.
+- Frontend: `SellingNowCard` arriba del perfil del dueño (solo con el
+  negocio activo), `SellingNowSuggestion` al encender la ubicación en
+  vivo, y responder "no" en el panel de preguntas también apaga el aviso.
+  El vencimiento se calcula en el navegador: el perfil se genera en el
+  servidor sin la sesión del vendedor.
+- `nearbyIndexPlan.test.js` siembra ahora también `senales_venta` y exige
+  los índices `idx_solicitudes_disponibilidad_respondidas` e
+  `idx_senales_venta_negocio`; su `afterAll` borra los avisos primero y
+  tiene 30 s de margen (con 5 s por defecto se pasaba del tiempo).

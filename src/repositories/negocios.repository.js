@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { lateralUltimaSenalVenta } = require('./ultimaSenalVenta');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 const {
   ZONE_RADIUS_METERS,
@@ -226,31 +227,15 @@ function escaparComodinesLike(texto) {
 }
 
 /**
- * LEFT JOIN LATERAL compartido por listar() y cercanos() para traer
- * `disponibilidad_confirmada_en` (Business.availabilityConfirmedAt,
- * sección 11 de CLAUDE.md) — la confirmación "vendiendo ahora" más
- * reciente de cada negocio, solo si sigue fresca. Usa
- * idx_solicitudes_disponibilidad_confirmadas (mismo índice que ya usa
- * solicitudesDisponibilidad.repository.js#obtenerConfirmacionFresca para
- * el perfil individual) — necesario acá también, no solo en el perfil:
- * sin él, esta consulta por negocio terminaría en un seq scan sobre
- * solicitudes_disponibilidad en vez de un index scan a esta escala (ver
- * la prueba de plan de ejecución que lo confirma).
- *
- * `idxFrescura` es el índice ($N) donde el caller ya empujó
+ * `disponibilidad_confirmada_en` (Business.availabilityConfirmedAt) en
+ * listar() y cercanos(): el aviso más reciente del vendedor manda (R5) —
+ * ver src/repositories/ultimaSenalVenta.js, la única definición de esa
+ * regla. `idxFrescura` es el índice ($N) donde el caller ya empujó
  * AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES a `params` — separado de
- * `agregarFiltrosComunes` (que calcula sus propios índices dinámicamente)
- * porque este JOIN va en el FROM, antes que cualquier filtro de WHERE.
+ * `agregarFiltrosComunes` porque este JOIN va en el FROM.
  */
 function lateralDisponibilidadFresca(idxFrescura) {
-  return `LEFT JOIN LATERAL (
-       SELECT sd.respondida_en
-       FROM solicitudes_disponibilidad sd
-       WHERE sd.negocio_id = n.id AND sd.decision = 'confirmada'
-         AND sd.respondida_en > now() - ($${idxFrescura} || ' minutes')::interval
-       ORDER BY sd.respondida_en DESC
-       LIMIT 1
-     ) disp ON true`;
+  return lateralUltimaSenalVenta(idxFrescura);
 }
 
 /**

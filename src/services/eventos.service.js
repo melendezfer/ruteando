@@ -13,6 +13,10 @@ const TIPO_EVENTO_API_TO_DB = {
   favorite_added: 'favorito_agregado',
   review_created: 'resena_creada',
   business_registered: 'registro_negocio',
+  // Solo lo escribe el servidor (R5, senalesVenta.repository.js): está acá
+  // para que las métricas de administración lo traduzcan, pero
+  // eventos.validators.js no lo acepta en POST /events.
+  selling_now_confirmed: 'confirmacion_venta',
 };
 
 async function crear({ usuarioId, ip, type, businessId, metadata }) {

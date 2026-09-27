@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { lateralUltimaSenalVenta } = require('./ultimaSenalVenta');
 const { AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES } = require('../config/constants');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 
@@ -98,14 +99,7 @@ async function listar({ usuarioId, cursor, limit, openNow }) {
        FROM ubicaciones u WHERE u.negocio_id = n.id AND u.es_actual = true
        LIMIT 1
      ) ub ON true
-     LEFT JOIN LATERAL (
-       SELECT sd.respondida_en
-       FROM solicitudes_disponibilidad sd
-       WHERE sd.negocio_id = n.id AND sd.decision = 'confirmada'
-         AND sd.respondida_en > now() - ($${idxFrescura} || ' minutes')::interval
-       ORDER BY sd.respondida_en DESC
-       LIMIT 1
-     ) disp ON true
+     ${lateralUltimaSenalVenta(idxFrescura)}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY f.fecha_creacion DESC, f.negocio_id DESC
      LIMIT $${params.length}`,

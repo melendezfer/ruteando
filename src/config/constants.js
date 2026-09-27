@@ -143,6 +143,17 @@ module.exports = {
   // vigente. Cifra propia.
   AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES: 60,
 
+  // R5 — "Estoy vendiendo ahora" (docs/specs/r5-estoy-vendiendo.md, DP-8).
+  // Cifras propias, a revisar con datos del piloto. El intervalo mínimo
+  // evita filas por un doble toque o por renovar sin sentido (un aviso de
+  // hace menos de 5 min sigue casi igual de fresco); el tope, en una
+  // ventana móvil de 24 h, impide dejar el aviso "siempre encendido" con
+  // toques automáticos (30 cubre una jornada de 12 h renovando cada ~25
+  // min). "Ya no estoy vendiendo" no cuenta para el tope: apagar siempre
+  // tiene que funcionar.
+  SELLING_NOW_MIN_INTERVAL_MINUTES: 5,
+  SELLING_NOW_DAILY_MAX: 30,
+
   // Doble capa de rate limit, mismo criterio que RF-016/RF-025: por
   // negocio (protege al vendedor de que lo saturen de push, sin importar
   // cuántos consumidores distintos preguntan) y por usuario solicitante

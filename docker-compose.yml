@@ -20,6 +20,14 @@ services:
   # dejaron de poder descargarse anónimos desde Docker Hub ("pull access
   # denied") — MinIO movió su distribución oficial a quay.io. Mismo
   # binario, mismo tag `latest`, solo cambia el registro (ver ci.yml).
+  #
+  # Actualización 2026-09-27: quay.io también dejó de servir la imagen
+  # ("unauthorized"). Esta línea sigue funcionando solo en máquinas que ya
+  # la tienen descargada; en una máquina nueva falla. CI usa ahora
+  # `bitnamilegacy/minio:2025.7.23` (ver ci.yml). No se cambió acá a
+  # propósito: la imagen de Bitnami guarda los datos en
+  # /bitnami/minio/data, no en /data, así que cambiarla dejaría sin
+  # montar el volumen `minio_data` (las fotos ya subidas en desarrollo).
   minio:
     image: quay.io/minio/minio:latest
     environment:

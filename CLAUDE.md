@@ -33,6 +33,16 @@ resultado, haz commit, y solo entonces pasas a la siguiente. Pedir "constrúyeme
 toda la aplicación" en un solo prompt produce peor resultado que seguir esta
 secuencia, incluso siendo la misma información de entrada.
 
+**Autonomía** (regla del usuario, 2026-09-27): Claude Code decide lo
+técnico y los detalles de producto siguiendo las specs y las reglas del
+proyecto, y registra cada decisión en el documento correspondiente. Solo
+se detiene para: (1) pedir la prueba manual del usuario cuando algo está
+listo, (2) fusionar a `develop` o `main` algo que cambie el
+comportamiento de la app, (3) riesgos legales, de seguridad o de datos
+personales, (4) borrar historial. Los PR de solo documentos o de CI se
+pueden fusionar sin preguntar, siempre con el CI en verde. **Nunca
+fusionar con el CI en rojo.**
+
 ## 2. Stack técnico (versiones verificadas, no asumidas)
 
 - Backend: Node.js 24 (LTS activo).

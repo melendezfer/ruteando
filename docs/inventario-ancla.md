@@ -108,7 +108,7 @@ Todo lo anterior (menos corazón, pregunta y reseña), más:
 | Código QR | Botones | Descargar PNG, Copiar enlace | Inofensivo |
 | Foto principal | Control de foto | Elegir → vista previa → Subir / Cancelar; Eliminar foto | Subir: **reemplaza y borra la anterior (no)**. Eliminar: **no** (sin confirmación) |
 | "Agregar plato/producto/servicio" | Modal (2 pasos: datos → foto) | Crea el ítem; luego "Listo" / "Continuar sin foto" | Crear: semi (se puede eliminar después) |
-| Editar ítem (lápiz) | Modal | Nombre, precio, descripción, **disponible** | Sí |
+| Editar ítem (lápiz) | Modal | Nombre, precio, descripción, **disponible**, oferta con vigencia | Sí |
 | Eliminar ítem (papelera) | `window.confirm` del navegador | Borra ítem y sus fotos | **No** |
 | Foto de un ítem | Control de foto (en la fila expandida) | Igual que la foto principal | Igual que arriba |
 | "Ideas de tus clientes para mejorar" | Panel de solo lectura | Ver retroalimentación anónima | — |
@@ -224,7 +224,7 @@ Notas:
 | Estado de aprobación | Banner | — |
 | Verificación de teléfono | Sí (SMS simulado en el log) | Proveedor real de SMS |
 | Catálogo (crear, editar, eliminar, fotos) | Sí | Reordenar; campo de categoría del producto |
-| Ofertas con vigencia | Backend (tipos, vigencia, límite 1 gratis) | El formulario de producto siempre manda `offerTypeId: null` → **no se pueden crear ofertas desde la app** |
+| Ofertas con vigencia | Sí: casilla "Es una oferta con vigencia" en el formulario del ítem (tipo, Solo hoy / Este mes / Personalizado). Límite 1 gratis | — (ver la corrección al final) |
 | Retroalimentación privada | Sí | — |
 | Varios negocios | Selector | Selector sin foto ni categoría |
 | Notificaciones push | Backend listo | Firebase sin credenciales, sin registro del token en el navegador |
@@ -241,7 +241,7 @@ Notas:
 | Ubicación en vivo | Interruptor en su negocio (solo ambulante) | Consentimiento la 1.ª vez; comparte cada 15 s con la app abierta | Se apaga sola fuera de horario/franja o si la app se cierra 2 min |
 | Puntos por hora | "Mis puntos por hora" (solo ambulante) | Agregar/quitar franjas | Máx. 35 |
 | Ajustar ubicación base | Mapa con pin arrastrable | Arrastrar / "Usar mi ubicación" → Guardar | — |
-| Ofertas | — | **Solo por API** | Ver hueco abajo |
+| Ofertas | Formulario del ítem (Agregar o lápiz) | Casilla "Es una oferta con vigencia" → tipo + vigencia | Máx. 1 oferta vigente en plan gratis |
 | Domicilios, bancas, higiene, modalidad, zona aproximada | Interruptores en su negocio | Un toque | Reversibles |
 | Fotos | Control de foto | Subir reemplaza; eliminar sin confirmar | — |
 | QR | Tarjeta QR | Descargar / copiar | — |
@@ -253,8 +253,8 @@ Notas:
 
 1. **No hay "marcar agotado" rápido**: la acción más frecuente de un vendedor
    exige abrir el modal de edición. Candidata natural para el botón-ancla.
-2. **No se pueden crear ofertas desde la app**: el backend las soporta, la UI
-   siempre envía `offerTypeId: null`.
+2. ~~No se pueden crear ofertas desde la app~~ — **error de este inventario**,
+   ver la corrección al final.
 3. **Acciones irreversibles sin confirmación**: eliminar foto, subir una foto
    que reemplaza (borra la anterior), quitar una franja, responder una
    pregunta de disponibilidad, publicar una reseña.
@@ -273,12 +273,23 @@ Notas:
 11. **Sin pantalla para editar negocio/horario** después del registro.
 12. **Esquinas saturadas**: en el Mapa y en el perfil de negocio las cuatro
     esquinas ya están ocupadas (logo, nav de 4 círculos, "Volver",
-    corazón/engranaje, crédito OSM, zoom de Leaflet). La nav flotante del
-    mapa mide ~230 px de alto y queda justo encima del crédito de
-    OpenStreetMap (que por licencia debe verse) — no verificado en pantalla
-    si llega a taparlo; cualquier botón nuevo en esa esquina lo arriesga.
+    corazón/engranaje, crédito OSM, zoom de Leaflet). **Comprobado después
+    con capturas (iPhone SE y Pixel 7)**: el círculo grande de la nav tapa la
+    parte de arriba del texto "OpenStreetMap" y el logo "Ruteando" tapa el
+    ícono de "Leaflet". Ver `docs/backlog-integracion-ancla.md`, punto 2.
 13. **El vendedor solo recibe preguntas con la pantalla abierta** (sin push).
 14. **Nav flotante sin estado activo**: no marca en qué pantalla estás.
 15. **`/buscar` sin botón para limpiar la búsqueda.**
 16. **Registro asistido** vive en la app normal con el rol de admin viejo, no
     en el panel nuevo.
+
+---
+
+## Corrección (2026-09-26)
+
+La primera versión de este inventario decía que el formulario de producto
+"siempre manda `offerTypeId: null`" y que las ofertas no se podían crear desde
+la app. **Era falso**: leí solo la rama del formulario para ítems normales.
+Con la casilla "Es una oferta con vigencia" encendida, el formulario envía el
+tipo y la vigencia. Lo comprobé en la app real con Playwright: la petición
+salió con `"offerTypeId":2` (Promoción) y la oferta apareció en el catálogo.

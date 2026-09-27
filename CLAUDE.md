@@ -355,6 +355,12 @@ Tres tipos de rama únicamente (no las seis de Git Flow completo):
   minúsculas con guiones (ej. `feature/business-registration`,
   `feature/map-search`).
 
+**Las ramas de trabajo (`feature/`, `fix/`) salen siempre de `develop`,
+nunca de `main`.** `main` va muy por detrás de `develop` (en septiembre de
+2026, ~200 commits; ni siquiera tenía el formulario de productos), así que
+una rama desde `main` no tiene el código sobre el que se quiere trabajar.
+Solo un `hotfix/` de producción sale de `main`.
+
 Commits en formato Conventional Commits 1.0.0 (`feat:`, `fix:`, `chore:`,
 `test:`, etc.). Cada Pull Request hacia `develop` requiere: estilo/lint en
 verde, pruebas unitarias e de integración en verde, y revisión humana antes
@@ -375,6 +381,16 @@ Cada épica debe cerrar con, como mínimo:
 
 No declarar una épica "terminada" solo porque el endpoint responde 200 en
 el caso feliz — eso es necesario, no suficiente.
+
+**Hallazgos sin verificar.** Un hallazgo sacado solo de leer el código
+(un bug, un "esto no existe", un "esto no funciona") se escribe como
+**"hipótesis sin verificar"** — en documentos, PRs, CLAUDE.md y mensajes —
+hasta probarlo con la app corriendo o con una prueba automatizada. Recién
+ahí se puede afirmar. Motivo real: el inventario del botón-ancla
+(`docs/inventario-ancla.md`) afirmó que el formulario de producto "siempre
+manda `offerTypeId: null`" y que no se podían crear ofertas desde la app;
+era falso (solo se había leído la rama del formulario para ítems normales)
+y se descubrió recién al intentar reproducirlo con Playwright.
 
 ## 9. Ambientes
 

@@ -62,17 +62,22 @@ jobs:
       # levanta a mano con el comando completo, igual que en
       # docker-compose.yml.
       #
-      # quay.io, no Docker Hub (2026-09-11): `minio/minio` y `minio/mc`
-      # dejaron de poder descargarse anónimos desde Docker Hub ("pull
-      # access denied") — MinIO movió su distribución oficial a quay.io.
-      # Mismo binario, mismo tag `latest`, solo cambia el registro.
+      # Imagen congelada de Bitnami, con versión fija (2026-09-27): MinIO
+      # dejó de distribuir imágenes anónimas — Docker Hub (`minio/minio`,
+      # desde 2026-09-11) y después quay.io (`quay.io/minio/minio`, con
+      # `latest` y con tags RELEASE.* fijos) responden "unauthorized", y
+      # el binario de dl.min.io responde 410. `bitnamilegacy/*` es el
+      # repositorio congelado de Bitnami en Docker Hub: sus tags no se
+      # vuelven a publicar, así que la versión no cambia sola. Diferencias
+      # con la imagen oficial: el servidor arranca solo (sin `server
+      # /data`) y el cliente necesita `mc` como primer argumento.
       - name: Iniciar MinIO
         run: |
           docker run -d --name minio \
             -e MINIO_ROOT_USER=ci-placeholder \
             -e MINIO_ROOT_PASSWORD=ci-placeholder \
             -p 9000:9000 \
-            quay.io/minio/minio:latest server /data
+            bitnamilegacy/minio:2025.7.23
 
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
@@ -94,10 +99,10 @@ jobs:
         run: |
           docker run --rm --network host \
             -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
-            quay.io/minio/mc:latest mb --ignore-existing local/ruteando-media-ci
+            bitnamilegacy/minio-client:2025.7.21 mc mb --ignore-existing local/ruteando-media-ci
           docker run --rm --network host \
             -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
-            quay.io/minio/mc:latest anonymous set download local/ruteando-media-ci
+            bitnamilegacy/minio-client:2025.7.21 mc anonymous set download local/ruteando-media-ci
 
       - run: npm test
 

@@ -23,13 +23,20 @@ interface BusinessSummarySheetProps {
  */
 export function BusinessSummarySheet({ business, categoryName, onClose, showPrices }: BusinessSummarySheetProps) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[1000] px-3 pb-3">
-      <div className="relative">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-3">
+      {/*
+        Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
+        arriba sigue usable): así la hoja nunca sube hasta la franja de
+        arriba del mapa, donde vive el crédito de OpenStreetMap
+        (fix/credito-osm-visible, e2e/credito-osm.spec.ts). La hoja misma
+        mide como mucho min(<alto de siempre>, 100% de este contenedor).
+      */}
+      <div className="pointer-events-auto relative max-h-full overflow-y-auto pt-3">
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar resumen del negocio"
-          className="absolute -top-3 -right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
+          className="absolute top-0 -right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
         >
           <X size={16} weight="bold" />
         </button>

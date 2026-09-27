@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Circle, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { AttributionControl, Circle, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import type { components } from "@/lib/api/schema";
 import { describeVariety } from "@/lib/zones/zone-format";
@@ -95,7 +95,19 @@ export function LeafletMap({
     // confiable dentro de un contenedor cuyo alto viene de `flex-1`
     // directamente (ver el comentario en map-screen.tsx con el detalle,
     // encontrado verificando el mapa contra un navegador real).
-    <MapContainer center={[center.lat, center.lng]} zoom={14} scrollWheelZoom className="h-full w-full">
+    // Crédito de OpenStreetMap arriba a la derecha, no en su esquina por
+    // defecto (abajo a la derecha): ahí lo pisaban el círculo grande de
+    // MainFloatingNav y el logo "Ruteando" en celulares chicos (medido en
+    // iPhone SE y Pixel 7). La licencia de OSM (ODbL) exige que se vea
+    // siempre. La prueba e2e/credito-osm.spec.ts falla si algo lo tapa.
+    <MapContainer
+      center={[center.lat, center.lng]}
+      zoom={14}
+      scrollWheelZoom
+      attributionControl={false}
+      className="h-full w-full"
+    >
+      <AttributionControl position="topright" />
       <FitToResults center={center} userLocation={userLocation} businesses={businesses} />
       <ExposeMapInstance onMapReady={onMapReady} />
       <TileLayer

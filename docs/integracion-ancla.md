@@ -1,6 +1,8 @@
 # Integración del botón-ancla en RUTEANDO
 
-Versión 0.2 · 2026-09-27 · Estado: **borrador para revisión — verificado contra el código**
+Versión 0.3 · 2026-09-27 · Estado: **verificado contra el código; decisiones DI-01 a DI-07 tomadas**
+
+> **Cambios v0.3:** decisiones DI-01 a DI-07 tomadas por el usuario (sección 9) y cinco prerrequisitos nuevos, R10 a R14 (sección 2), salidos de la verificación de la v0.2.
 
 Fuentes: `docs/inventario-ancla.md`, `docs/backlog-integracion-ancla.md` (RUTEANDO) y la spec del botón-ancla (Fases 1 y 3, hallazgos HM-01 a HM-18).
 
@@ -30,11 +32,11 @@ Fuentes: `docs/inventario-ancla.md`, `docs/backlog-integracion-ancla.md` (RUTEAN
 
 | Tema | Propuesta | Decisión pendiente |
 |---|---|---|
-| Cómo llega el código a RUTEANDO | Consumir los paquetes `core` y `react` del repo `boton-ancla` por versión (etiqueta de Git). Opciones: (a) dependencia de Git con etiqueta; (b) paquete en GitHub Packages; (c) copia versionada con un script. | **DI-01** |
+| Cómo llega el código a RUTEANDO | Consumir los paquetes `core` y `react` del repo `boton-ancla` por versión (etiqueta de Git). Opciones: (a) dependencia de Git con etiqueta; (b) paquete en GitHub Packages; (c) copia versionada con un script. | **DI-01: decidido (c)** — copia versionada por script desde una etiqueta (la primera es `v0.3.0`) + `transpilePackages` de Next |
 | Interruptor | Una bandera `NEXT_PUBLIC_ANCLA` más el modo elegido por el usuario en Ajustes. En producción empieza apagado. | — |
 | Estilos | El ancla usa los tokens de RUTEANDO (`terracota`, `surface`, `border`, `text`, `text-muted`); sin colores escritos a mano (D-19). **[Verificado]** los cinco existen como `--color-*` en `client/src/app/globals.css` (ojo: `terracota` hoy es violeta, `#5b3df5`). | — |
 | Íconos | Phosphor desde `@phosphor-icons/react/dist/ssr`, registrados en `semantic-icons.ts`. **[Verificado]** es la ruta que usan los componentes (45 importaciones); `@phosphor-icons/react` a secas solo se importa para el tipo `Icon`. | — |
-| Capa (z-index) | **[Corregido]** El borrador suponía que los modales van por encima de las hojas. No es así: la mayoría de los modales usa `z-50`, **por debajo** de las hojas del mapa (`z-[1000]`). Un ancla en `> z-[1000]` quedaría **encima** de casi todos los modales, no debajo. Ver el orden real en DI-02 (sección 9). | **DI-02**: resuelto en la sección 9; falta decidir la escala |
+| Capa (z-index) | **[Corregido]** El borrador suponía que los modales van por encima de las hojas. No es así: la mayoría de los modales usa `z-50`, **por debajo** de las hojas del mapa (`z-[1000]`). Un ancla en `> z-[1000]` quedaría **encima** de casi todos los modales, no debajo. Ver el orden real en DI-02 (sección 9). | **DI-02: decidido** — escala nombrada (flotantes 40, hojas 1000, ancla 1050, modales 1100) y todos los modales a 1100 antes de I1 (R14) |
 | Rutas sin ancla | `/login`, `/register`, recuperar/restablecer, `/legal/*`, `/admin/*`. **[Verificado]** existen: `(auth)/login`, `(auth)/register`, `(auth)/recuperar-contrasena`, `(auth)/restablecer-contrasena`, `legal/terminos-condiciones`, `legal/tratamiento-datos`, `admin/`, `admin/login`, `admin/dashboard`. `/favoritos` es solo un `redirect` a `/mapa?favoritesOnly=true`. | — |
 
 ---
@@ -54,6 +56,11 @@ Sale del backlog y del inventario. **Bloquea** indica qué frena cada punto.
 | R7 | Editar negocio y horario después del registro | Perfil del vendedor completo | **[Verificado] Pendiente, con matiz**: el horario solo se edita en el asistente (`PUT .../schedule` no tiene otra pantalla) y tampoco hay UI para nombre, descripción, categoría ni teléfono (el backend `PATCH /businesses/{id}` sí lo permite). Lo que **sí** se edita ya desde el perfil: interruptores (domicilios, bancas, higiene, modalidad), ubicación en el mapa, franjas del ambulante, fotos y catálogo |
 | R8 | Botón "Limpiar búsqueda" en `/buscar` | Acción del ancla en Buscar | **[Verificado] Pendiente**: "Limpiar búsqueda" solo existe dentro de la hoja de búsqueda del mapa (`map-search-sheet.tsx`), no en `home-screen.tsx` |
 | R9 | Hoja de búsqueda a 320 px | Pantallas pequeñas | Hipótesis sin verificar (necesita la app corriendo a 320 px) |
+| R10 | **Nuevo (v0.3).** WhatsApp y acceso a la Carta en la hoja resumen del negocio (mapa), con la interfaz normal | Capa "Resumen del negocio" del ancla (4.1) | Pendiente — hoy la hoja no los tiene (verificado en v0.2) |
+| R11 | **Nuevo (v0.3).** Lista del grupo de pines: al tocar un grupo, ver sus negocios en una lista (versión sin ancla primero, principio 1) | Capa "Grupo de pines" del ancla (4.1) | Pendiente — hoy tocar un grupo solo acerca el mapa |
+| R12 | **Nuevo (v0.3).** Frescura en los pines ("confirmado hace X" o marca equivalente) | Principio 5 (frescura visible) en el mapa | Pendiente — las tarjetas ya la muestran, los pines no |
+| R13 | **Nuevo (v0.3).** Zoom de un dedo en el mapa (HM-18 del repo `boton-ancla`), **siempre**, con o sin ancla | DI-03 | Pendiente |
+| R14 | **Nuevo (v0.3).** Escala de capas nombrada (flotantes 40, hojas 1000, ancla 1050, modales 1100) y todos los modales a 1100. Incluye verificar con la app corriendo la hipótesis del mapa chico del dueño sin `isolate` | **I1** (debe estar antes) | Pendiente |
 
 **R5, detalle de la verificación.** `availabilityConfirmedAt` ("confirmado hace X") sale **solo** de filas de `solicitudes_disponibilidad` con `decision = 'confirmada'` (`negocios.repository.js` y `favoritos.repository.js`), y la única escritura de `decision` es `PATCH /availability-requests/{id}/respond`, que necesita una pregunta previa de un consumidor. No hay ninguna ruta, botón ni texto "Estoy vendiendo ahora" en el backend ni en el cliente. Lo más parecido que existe es la **ubicación en vivo** (`POST /businesses/{id}/live-location`), que es proactiva pero solo para ambulantes y no marca `availabilityConfirmedAt`. Construir R5 exige backend (una confirmación sin pregunta previa, con la misma frescura de 60 min), no solo un botón.
 
@@ -68,7 +75,7 @@ En la prueba manual, la demo se percibe más pulida que RUTEANDO. Se traen estas
 - Aviso con "Deshacer" (C-03, C-21).
 - Frescura del dato en pines y tarjetas ("confirmado hace X"). **[Corregido]** en tarjetas ya existe: `BusinessCard` muestra `AvailabilityConfirmedBadge` y `DiscoveryRow` dice "Vendiendo ahora" cuando hay confirmación. Lo que falta es solo en los **pines** (`leaflet-map.tsx` no usa `availabilityConfirmedAt`).
 - Hoja del negocio con acciones claras y "Ver perfil completo".
-- Zoom de un dedo en el mapa (HM-18), útil aunque el ancla esté apagada.
+- Zoom de un dedo en el mapa (HM-18), útil aunque el ancla esté apagada. **Decidido (v0.3): siempre, con o sin ancla (R13).**
 - Métricas locales opcionales para las pruebas con personas.
 
 ---
@@ -84,7 +91,7 @@ Convención: **90°** es la posición de arriba (volver o inofensiva). P1 a P4 v
 | Mapa | Mi ubicación | Buscar | Favoritos | Mi perfil / Mi negocio | Zoom |
 
 - **Joystick:** mueve el mapa (HM-11); apuntar y elegir pines y grupos (HM-12a).
-- **Decisión DI-03:** hoy la navegación flotante tiene "Perfil". Con Zoom (pedido por 2 de 2 personas) no cabe "Disponibles ahora" ni "Ofertas cerca"; quedan en el carrusel superior y en "Ver todas". Alternativa: cambiar Favoritos por "Disponibles ahora".
+- **Decisión DI-03:** hoy la navegación flotante tiene "Perfil". Con Zoom (pedido por 2 de 2 personas) no cabe "Disponibles ahora" ni "Ofertas cerca"; quedan en el carrusel superior y en "Ver todas". Alternativa: cambiar Favoritos por "Disponibles ahora". **Decidido (v0.3):** Mi ubicación · Buscar · Favoritos · Mi perfil · Zoom. Con el ancla encendida se ocultan los `+/−` de Leaflet; con el ancla apagada se muestran. El zoom de un dedo (R13) está siempre.
 
 **Capas del mapa**
 
@@ -169,7 +176,7 @@ Entrada (`/login`, `/register`, recuperar), textos legales y panel de administra
 
 | Pantalla | Obligatorias (nunca se tapan) | Preferidas (se evitan) |
 |---|---|---|
-| Mapa | Crédito de OpenStreetMap | Logo "Ruteando", botones +/− de zoom, tarjeta de comparación de zonas |
+| Mapa | Crédito de OpenStreetMap | Logo "Ruteando", botones +/− de zoom (solo con el ancla apagada; con el ancla encendida se ocultan, DI-03), tarjeta de comparación de zonas |
 | Perfil de negocio | Crédito OSM del mapa chico (dueño) | "Volver", corazón o engranaje |
 | Todas | Áreas seguras del sistema | — |
 
@@ -199,7 +206,7 @@ Cada etapa termina con pruebas automáticas y **prueba manual en PC y celular** 
 
 | Etapa | Contenido | Criterio de salida |
 |---|---|---|
-| I0 | Prerrequisitos R1 a R5 y R8 (R6 y R7 en paralelo, porque bloquean el piloto, no la integración). **[Corregido]** R1 ya está hecho | Cada uno fusionado con sus pruebas |
+| I0 | Prerrequisitos R1 a R5 y R8 (R6 y R7 en paralelo, porque bloquean el piloto, no la integración). **[Corregido]** R1 ya está hecho. **v0.3:** también R10 a R14; R14 es obligatorio antes de I1 | Cada uno fusionado con sus pruebas |
 | I1 | Infraestructura: dependencia (DI-01), bandera, proveedor, tokens, modos en Ajustes, respaldo con la navegación de hoy | Con el ancla apagada, RUTEANDO se ve y funciona igual que antes |
 | I2 | Mapa del consumidor, con capas, joystick y apuntar y elegir | Recorrido "buscar y llegar a un negocio" solo deslizando |
 | I3 | Perfil del negocio (visitante) | Contactar y llegar a un negocio sin salir del ancla |
@@ -219,17 +226,17 @@ Cada etapa termina con pruebas automáticas y **prueba manual en PC y celular** 
 
 ---
 
-## 9. Decisiones pendientes
+## 9. Decisiones (tomadas en v0.3)
 
-| ID | Pregunta | Propuesta | Opinión (Claude, v0.2) |
-|---|---|---|---|
-| DI-01 | ¿Cómo llega el código del ancla a RUTEANDO? | Dependencia de Git con etiqueta de versión; si da problemas con el monorepo, GitHub Packages | **En desacuerdo con la opción (a).** npm no instala un subdirectorio de un monorepo desde Git, y `@boton-ancla/core` y `@boton-ancla/react` exportan `.ts` sin compilar (`exports: ./src/index.ts`), con `react` dependiendo de `core` por `"*"` vía workspaces. El repo tampoco tiene etiquetas todavía. Para empezar, la (c) es la más simple: copiar los dos paquetes por etiqueta con un script y compilarlos con `transpilePackages` de Next. GitHub Packages tiene sentido cuando los paquetes tengan su propio paso de compilación. |
-| DI-02 | Orden real de capas (z-index) en RUTEANDO | Verificar en el código antes de I1 | **[Verificado]** Orden real, de abajo hacia arriba en el contexto raíz: mapa (`isolate`: Leaflet queda contenido y compite como una sola capa) → tarjeta de zonas `z-30` → flotantes (`FloatingActionStack`, `BackButton`, engranaje, logo) `z-40` → modales `z-50` (consentimiento obligatorio, eliminar cuenta, formulario de producto y su paso de foto, sello de higiene) → hojas del mapa `z-[1000]` (búsqueda, resumen, lista filtrada) → modal de ubicación en vivo `z-[1100]`. **Opinión:** fijar una escala nombrada antes de I1 (por ejemplo flotantes 40, hojas 1000, ancla 1050, modales 1100) y subir todos los modales a 1100, en vez de que el ancla se oculte a mano en cada modal. **Hipótesis sin verificar:** el mapa chico del perfil del dueño (`location-pin-editor.tsx`) no está envuelto en `isolate`; sus paneles de Leaflet podrían pintarse encima de los modales `z-50` de esa misma pantalla (tal vez por eso el modal de ubicación en vivo usa 1100). |
-| DI-03 | ¿Qué opciones van en el mapa? | Mi ubicación · Buscar · Favoritos · Mi perfil · Zoom | **De acuerdo**, con una condición: Zoom ya existe como `+/−` de Leaflet arriba a la izquierda. Si el ancla trae su propio zoom (o el zoom de un dedo, HM-18), conviene ocultar los `+/−` para no tener dos controles de lo mismo. Mantendría Favoritos antes que "Disponibles ahora", que ya tiene el carrusel y "Ver todas". |
-| DI-04 | ¿Se puede cancelar "Preguntar si está vendiendo"? | Agregarlo en el backend para volverla reversible | **De acuerdo, pero sin prisa.** Hoy no hay forma de cancelar (verificado). Mientras no exista el push (Fase 6), el vendedor solo ve la pregunta con su perfil abierto y la pregunta vence sola a los 10 min, así que el costo de no poder cancelar es bajo. Además, cancelar debería seguir contando para el límite de preguntas, para que no se use para esquivarlo. |
-| DI-05 | ¿Ancla en el panel de administrador? | No en esta integración; revisar con el panel terminado | **De acuerdo.** El panel nuevo todavía no tiene ningún módulo (`ADMIN_MODULES = []`); no hay nada que agregarle. |
-| DI-06 | Ícono de "Estoy vendiendo ahora" | Elegirlo al construir R5 | **Usar `SealCheck`.** Ya está registrado como `confirmedSelling` ("el vendedor confirmó que está vendiendo"), que es justo el hecho que produce R5. Usar otro ícono para lo mismo rompería "un ícono, un significado". |
-| DI-07 | ¿El vendedor con ancla apagada ve "Estoy vendiendo ahora" como botón fijo? | Sí: la función debe existir sin el ancla (principio 1) | **De acuerdo.** Un matiz: R5 necesita backend (ver el detalle de R5). Hay que decidir si la confirmación propia cuenta igual que responder una pregunta en `availabilityConfirmedAt` (misma frescura de 60 min), para no tener dos "confirmado hace X" distintos. |
+| ID | Pregunta | Propuesta | Opinión (Claude, v0.2) | Decisión (usuario, v0.3) |
+|---|---|---|---|---|
+| DI-01 | ¿Cómo llega el código del ancla a RUTEANDO? | Dependencia de Git con etiqueta de versión; si da problemas con el monorepo, GitHub Packages | **En desacuerdo con la opción (a).** npm no instala un subdirectorio de un monorepo desde Git, y `@boton-ancla/core` y `@boton-ancla/react` exportan `.ts` sin compilar (`exports: ./src/index.ts`), con `react` dependiendo de `core` por `"*"` vía workspaces. **[Corregido v0.3]** El repo ya tiene la etiqueta `v0.3.0`. Para empezar, la (c) es la más simple: copiar los dos paquetes por etiqueta con un script y compilarlos con `transpilePackages` de Next. GitHub Packages tiene sentido cuando los paquetes tengan su propio paso de compilación. | **Opción (c):** copia versionada por script (desde la etiqueta `v0.3.0`) + `transpilePackages`. |
+| DI-02 | Orden real de capas (z-index) en RUTEANDO | Verificar en el código antes de I1 | **[Verificado]** Orden real, de abajo hacia arriba en el contexto raíz: mapa (`isolate`: Leaflet queda contenido y compite como una sola capa) → tarjeta de zonas `z-30` → flotantes (`FloatingActionStack`, `BackButton`, engranaje, logo) `z-40` → modales `z-50` (consentimiento obligatorio, eliminar cuenta, formulario de producto y su paso de foto, sello de higiene) → hojas del mapa `z-[1000]` (búsqueda, resumen, lista filtrada) → modal de ubicación en vivo `z-[1100]`. **Opinión:** fijar una escala nombrada antes de I1 (por ejemplo flotantes 40, hojas 1000, ancla 1050, modales 1100) y subir todos los modales a 1100, en vez de que el ancla se oculte a mano en cada modal. **Hipótesis sin verificar:** el mapa chico del perfil del dueño (`location-pin-editor.tsx`) no está envuelto en `isolate`; sus paneles de Leaflet podrían pintarse encima de los modales `z-50` de esa misma pantalla (tal vez por eso el modal de ubicación en vivo usa 1100). | **Escala nombrada** (flotantes 40, hojas 1000, ancla 1050, modales 1100) y **todos los modales a 1100 antes de I1** (R14). La hipótesis del mapa chico del dueño se verifica con la app corriendo. |
+| DI-03 | ¿Qué opciones van en el mapa? | Mi ubicación · Buscar · Favoritos · Mi perfil · Zoom | **De acuerdo**, con una condición: Zoom ya existe como `+/−` de Leaflet arriba a la izquierda. Si el ancla trae su propio zoom (o el zoom de un dedo, HM-18), conviene ocultar los `+/−` para no tener dos controles de lo mismo. Mantendría Favoritos antes que "Disponibles ahora", que ya tiene el carrusel y "Ver todas". | **De acuerdo.** Ancla encendida: se ocultan los `+/−` de Leaflet; ancla apagada: se muestran. El zoom de un dedo (HM-18) se trae siempre (R13). |
+| DI-04 | ¿Se puede cancelar "Preguntar si está vendiendo"? | Agregarlo en el backend para volverla reversible | **De acuerdo, pero sin prisa.** Hoy no hay forma de cancelar (verificado). Mientras no exista el push (Fase 6), el vendedor solo ve la pregunta con su perfil abierto y la pregunta vence sola a los 10 min, así que el costo de no poder cancelar es bajo. Además, cancelar debería seguir contando para el límite de preguntas, para que no se use para esquivarlo. | **De acuerdo** con la opinión. |
+| DI-05 | ¿Ancla en el panel de administrador? | No en esta integración; revisar con el panel terminado | **De acuerdo.** El panel nuevo todavía no tiene ningún módulo (`ADMIN_MODULES = []`); no hay nada que agregarle. | **De acuerdo** con la opinión. |
+| DI-06 | Ícono de "Estoy vendiendo ahora" | Elegirlo al construir R5 | **Usar `SealCheck`.** Ya está registrado como `confirmedSelling` ("el vendedor confirmó que está vendiendo"), que es justo el hecho que produce R5. Usar otro ícono para lo mismo rompería "un ícono, un significado". | **`SealCheck`.** |
+| DI-07 | ¿El vendedor con ancla apagada ve "Estoy vendiendo ahora" como botón fijo? | Sí: la función debe existir sin el ancla (principio 1) | **De acuerdo.** Un matiz: R5 necesita backend (ver el detalle de R5). Hay que decidir si la confirmación propia cuenta igual que responder una pregunta en `availabilityConfirmedAt` (misma frescura de 60 min), para no tener dos "confirmado hace X" distintos. | **De acuerdo.** La confirmación propia cuenta igual que responder una pregunta en `availabilityConfirmedAt` (misma frescura de 60 min). Especificación: `docs/specs/r5-estoy-vendiendo.md` (rama `docs/r5-estoy-vendiendo`). |
 
 ---
 

@@ -40,7 +40,7 @@ Node.js 24 + Express 5 + PostgreSQL 18/PostGIS 3.6 (REST, contrato en `openapi.y
 
 **En PR, esperando prueba manual del usuario:**
 - PR #93 — R5 "Estoy vendiendo ahora" (aviso propio del vendedor). Guía: `docs/pruebas/r5-prueba-manual.md`.
-- `fix/pulido-visual` — arreglos visuales A1–A9 (A9: contraste de "No disponible" y bordes de campos). Guía: `docs/pruebas/pulido-visual-prueba-manual.md`.
+- PR #94 `fix/pulido-visual` — arreglos visuales A1–A9 (A9: contraste de "No disponible" y bordes de campos). Guía: `docs/pruebas/pulido-visual-prueba-manual.md`.
 - `fix/credito-osm-visible` — crédito de OpenStreetMap visible (incluido también en `fix/pulido-visual`).
 
 **Sigue:**
@@ -48,6 +48,7 @@ Node.js 24 + Express 5 + PostgreSQL 18/PostGIS 3.6 (REST, contrato en `openapi.y
 2. Prerrequisitos del ancla R3, R4, R6–R14 (`docs/integracion-ancla.md` §2).
 3. Integración del botón-ancla (etapas I1–I6).
 4. Pendientes sin proveedor: correo, SMS y push (Firebase).
+5. Bug verificado: un negocio con más productos que el límite gratis (3) no puede editar ninguno (409). Bloquea R3 (CLAUDE.md §62).
 
 ## Dónde está cada cosa
 

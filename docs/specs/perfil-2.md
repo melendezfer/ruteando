@@ -55,6 +55,7 @@ Estados que conservan color, **siempre en versión suave** (fondo tenue + texto 
 | `terracota-50` | `#efebfe` | Fondo del grado 2, tinte de íconos de categoría |
 | `terracota-100` | `#dfd8fd` | Borde suave, tinte de portada sin foto (nunca con texto encima, ver §2.3) |
 | `borde-control` | `#8c8c8c` | Borde de campos y controles (3:1); ya lo agrega A9 |
+| `estrella` | `#b0701a` | Estrellas de calificación e íconos dorados (3:1); ya lo agrega A9 |
 | `verde-suave` / `verde-texto` | `#e8f5e9` / `#1b5e20` | Estado verde |
 | `ambar-suave` / `ambar-texto` | `#fff4e0` / `#7a4a00` | Estado ámbar |
 | `rojo-suave` / `rojo-texto` | `#fdecec` / `#b3261e` | Destructivo |
@@ -84,7 +85,9 @@ Se retiran de la interfaz: los tres colores por familia de categoría (`categori
 - Borde de los campos de texto (`border-border`, `#e0e0e0`) sobre blanco = **1.32:1**. WCAG 1.4.11 pide 3:1 para el borde que identifica un control. Se corrige en A9 con el token `borde-control`. Los bordes de tarjetas son decorativos y pueden seguir en `border`.
 - Pasan hoy: el verde de "Abierto ahora" (5.13:1), el rojo de error (5.62:1) y las insignias moradas sobre `terracota/10` (5.28:1).
 
-Prueba automática: `client/src/lib/theme/contrast.test.ts` (A9) lee los tokens de `globals.css`, calcula cada par de esta tabla y falla si alguno baja de su umbral. Al agregar un token o un par, se agrega a esa prueba.
+Prueba automática: `tests/unit/contrasteTokens.test.js` (A9, PR #94) lee los tokens de `globals.css`, calcula cada par y falla si alguno baja de su umbral; corre en CI con la suite del backend. Al agregar un token o un par, se agrega a esa prueba.
+
+**Encontrado al medir en A9, ya corregido allí:** estrellas de calificar en `mostaza` (2.10:1; los íconos piden 3:1) → token `estrella` (`#b0701a`, 4.06:1); verde sobre `verde/10` (4.49:1) → token `verde-texto` (`#1b5e20`). Esta paleta los hereda.
 
 ### 2.4 Categorías y pines sin colores por familia
 

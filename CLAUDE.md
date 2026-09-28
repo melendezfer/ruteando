@@ -6726,3 +6726,70 @@ el PR 2 (16) como prueba de regresión, todas en verde.
 - Zapatos y libros/historietas compartirían el morado de "bienes" (vista
   previa entregada al usuario); separar tonos es un UPDATE de
   `categorias.color` si se decide.
+
+## 62. Pulido visual A1–A9 (`fix/pulido-visual`)
+
+Hallazgos de la revisión del usuario en celular, verificados con la app
+corriendo (Playwright, 320 y 412 px) **antes** de corregir. Incluye
+`fix/credito-osm-visible` (crédito de OSM arriba a la derecha), que se
+prueba junto. Guía de prueba manual: `docs/pruebas/pulido-visual-prueba-manual.md`.
+
+- **A1 — flotantes tapaban contenido** (confirmado: estrellas y "Enviar mi
+  aporte", "Eliminar cuenta", última fila de la carta, última tarjeta de
+  Buscar, incluso con la página bajada hasta el final).
+  `FloatingActionStack` deja ahora, donde está montado, un espacio de la
+  altura real de los flotantes (medida con `ResizeObserver`); el mapa, que
+  no se desplaza, pasa `reserveSpace={false}`. Prueba permanente:
+  `client/e2e/flotantes-no-tapan.spec.ts` (baja hasta el final y pregunta
+  al navegador qué hay encima de cada texto y control; los flotantes
+  llevan `data-floating-action`).
+- **A2** — en su propio negocio el dueño solo ve "Mapa"; WhatsApp y
+  Cómo llegar son acciones del cliente.
+- **A3** — cada flotante muestra un nombre corto (`FloatingAction.shortLabel`):
+  Ubicarme, Buscar, Perfil, Favoritos, Mapa, WhatsApp, Llegar. "Volver al
+  mapa" usa el ícono de mapa (antes brújula). A 320 px "Ubicarme" chocaba
+  con la palabra "Ruteando" del logo del mapa (lo detectó la prueba de
+  A1): la palabra se ve desde 360 px; más angosto, solo el ícono.
+- **A4** — horario con reloj. `semantic-icons.ts` suma `schedule` (Clock),
+  `viewOnMap` (MapTrifold) y `directions` (NavigationArrow).
+- **A5** — "Ver ubicación", "Ver zona" y "Ver en mapa" hacían exactamente
+  lo mismo (verificado tocando cada una: centran el mapa y abren el
+  resumen de ese negocio). Queda un solo texto, "Ver en el mapa", igual
+  que en /buscar. "Cómo llegar" en las filas usaba el logo de Ruteando
+  como ícono; ahora la flecha de navegación, como en el resto.
+- **A6** — sin permiso de ubicación el mapa abría en zoom 11 (toda la
+  región, medido) y el aviso ocupaba 4 líneas a 320 px. Ahora: Ciudad
+  Verde a zoom 15 (solo se encuadran los resultados con ubicación del
+  usuario o una búsqueda activa) y el aviso en una línea. **Bug real
+  encontrado**: el centro por defecto del mapa seguía en `(4.578, -74.217)`,
+  el centroide de todo Soacha — el mismo error ya corregido en los datos
+  de demo (§25) pero no en `map-screen.tsx`.
+- **A7** — la carta dice "Disponible" o "Agotado" ("No disponible" en
+  servicios), y la hora solo si cambió hoy en Bogotá
+  (`formatTimeIfToday`): "Agotado desde las 11:07 a. m." (verificado).
+- **A8** — insignias compactas y con texto corto ("Domicilios",
+  "Bancas"; el texto completo va como nombre accesible): a 320 px pasan de
+  una por línea a dos líneas.
+- **A9 — contraste, medido por programa** (`tests/unit/contrasteTokens.test.js`,
+  lee los tokens reales de `globals.css` y corre en CI con la suite del
+  backend). Fallaban: "No disponible" (ámbar sobre ámbar/20, 1.73:1),
+  borde de los campos (`#e0e0e0`, 1.32:1; WCAG 1.4.11 pide 3:1),
+  estrellas de calificar (mostaza 2.10:1; vacías 1.32:1) y verde sobre
+  verde/10 (4.49:1). Tokens nuevos: `ambar-suave`/`ambar-texto`,
+  `borde-control` (solo en `<input>`, `<select>`, `<textarea>`; las
+  tarjetas siguen con `border`), `estrella`, `verde-texto`. La prueba
+  también falla si algún componente vuelve a usar `text-ambar` como texto.
+
+**Otros hallazgos, no corregidos en esta rama:**
+- Jest de la raíz tomaba los archivos de Playwright de `client/e2e`
+  (llegaron con `fix/credito-osm-visible`) y habría roto el CI: se agregó
+  `jest.testPathIgnorePatterns` con `<rootDir>/client/` en `package.json`.
+- **Bug verificado con la app, pendiente**: un negocio con más productos de
+  carta que el límite gratis (3) — los de demo se sembraron antes del
+  límite — no puede editar ninguno, ni siquiera marcarlo agotado: el PATCH
+  vuelve a aplicar el límite y responde 409. Bloquearía R3 ("¿Qué se
+  acabó?"). El límite debería aplicarse solo al crear o al convertir una
+  oferta en producto de carta.
+- Con la migración de R5 (PR #93) aplicada en una base local, la prueba
+  `nearbyIndexPlan` de esta rama falla porque R5 retira un índice; es del
+  entorno (verificado recreando el índice: pasa). En CI la base es nueva.

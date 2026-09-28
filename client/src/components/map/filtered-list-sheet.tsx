@@ -9,7 +9,6 @@ import type { Icon } from "@phosphor-icons/react";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { CategoryIcon } from "@/components/ui/category-icon";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
 import type { ConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
@@ -54,7 +53,6 @@ interface FilteredListSheetProps {
    * criterio que `availableNow`: sin fetch propio acá).
    */
   activeOffers: DiscoveryOffer[];
-  categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
   offerTypes: OfferType[];
   geolocation: ConsumerGeolocation;
@@ -99,7 +97,6 @@ export function FilteredListSheet({
   filter,
   availableNow,
   activeOffers,
-  categoryTypeById,
   categoryNameById,
   offerTypes,
   geolocation,
@@ -319,7 +316,6 @@ export function FilteredListSheet({
                     <DiscoveryRow
                       key={business.id}
                       business={business}
-                      catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
                       categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
                       onOpenDetail={handleOpenProfile}
                       onViewOnMap={onViewOnMap}

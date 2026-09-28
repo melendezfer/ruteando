@@ -133,7 +133,7 @@ export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
               <Star
                 size={36}
                 weight={value <= (hoverRating || rating) ? "fill" : "regular"}
-                className={value <= (hoverRating || rating) ? "text-mostaza" : "text-border"}
+                className={value <= (hoverRating || rating) ? "text-estrella" : "text-borde-control"}
               />
             </button>
           ))}
@@ -181,7 +181,7 @@ export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
               maxLength={1000}
               value={comment}
               onChange={(event) => setComment(event.target.value)}
-              className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+              className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
             />
           </div>
         </>

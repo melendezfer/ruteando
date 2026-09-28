@@ -115,7 +115,7 @@ export function MapSearchSheet({
                 <select
                   value={filters.radiusKm}
                   onChange={(event) => onFiltersChange({ ...filters, radiusKm: Number(event.target.value) })}
-                  className="rounded-input border border-border px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                  className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                 >
                   {RADIUS_OPTIONS.map((km) => (
                     <option key={km} value={km}>

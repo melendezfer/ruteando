@@ -1,9 +1,17 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export interface FloatingAction {
   icon: ReactNode;
   /** aria-label del botón/enlace — también su nombre accesible para pruebas. */
   label: string;
+  /**
+   * Nombre corto que se ve junto al círculo (A3, fix/pulido-visual): un
+   * ícono solo (brújula, flecha) no se entendía. Una o dos palabras
+   * ("Mapa", "Llegar"). Sin él, el círculo va solo.
+   */
+  shortLabel?: string;
   /** Si viene, la acción es un enlace externo (se abre en una pestaña nueva) — ej. wa.me, Google Maps. */
   href?: string;
   /** Si viene, la acción es un botón local (recentrar el mapa, navegar dentro de la app con el router, abrir un panel, etc). */
@@ -17,62 +25,86 @@ interface FloatingActionStackProps {
    * pegado a la esquina); el resto son círculos chicos (h-12 w-12, con
    * borde), apilados encima en el orden dado. Un `null` en cualquier
    * posición se omite sin dejar un hueco ni afectar el tamaño de los
-   * demás — así el caller puede condicionar una acción (ej. "centrar
-   * mapa", solo con mapa visible) sin tener que recalcular qué queda
-   * "grande" cuando falta: si el primero no-nulo cambia de una llamada a
-   * otra, automáticamente hereda el tamaño grande.
+   * demás.
    */
   actions: (FloatingAction | null)[];
+  /**
+   * A1 (fix/pulido-visual): por defecto el componente deja, donde está
+   * montado (al final del contenido de la pantalla), un espacio vacío de
+   * la altura real de los flotantes — así, con la página desplazada hasta
+   * el final, nada queda debajo de ellos. `false` solo para pantallas que
+   * no se desplazan (el mapa), donde ese espacio agregaría un scroll que
+   * no existe.
+   */
+  reserveSpace?: boolean;
 }
+
+/** Distancia del stack al borde inferior (`bottom-6`) más un respiro. */
+const MARGEN_INFERIOR_PX = 24 + 16;
 
 /**
  * Ver CLAUDE.md, sección "FloatingActionStack" — esta es la única fuente
- * de verdad de su especificación (props, tamaños, colores); no
- * documentarla aparte. Nació en la Épica F4 para el perfil de negocio
- * (WhatsApp como principal, "Cómo llegar" como secundaria, dos acciones
- * fijas `primary`/`secondary`) y se generalizó después para el Mapa
- * (Épica F3). Redediseño de navegación global (sin RF asociado, petición
- * directa del usuario): `primary`/`secondary` (siempre exactamente 2
- * posiciones) se reemplazó por `actions` (un array de N, hoy hasta 4 en
- * la navegación global de Mapa/Buscar/Favoritos/Perfil) — mismo lenguaje
- * visual, sin límite fijo de posiciones. `BottomNavBar` (barra fija
- * horizontal) ya no existe en ningún lado del proyecto (redediseño de
- * navegación global) — este stack nunca necesita compensar espacio para
- * ella.
+ * de verdad de su especificación (props, tamaños, colores).
  */
-export function FloatingActionStack({ actions }: FloatingActionStackProps) {
+export function FloatingActionStack({ actions, reserveSpace = true }: FloatingActionStackProps) {
   const visible = actions.filter((action): action is FloatingAction => action != null);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const [alto, setAlto] = useState(0);
+
+  useEffect(() => {
+    const el = stackRef.current;
+    if (!el || !reserveSpace) return;
+    const observer = new ResizeObserver(() => setAlto(el.getBoundingClientRect().height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [reserveSpace, visible.length]);
+
   if (visible.length === 0) return null;
 
   return (
-    <div className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-center gap-3">
-      {visible.map((action, index) => (
-        <FloatingActionButton
-          key={action.label}
-          action={action}
-          className={
-            index === 0
-              ? "flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl transition-transform hover:scale-105"
-              : "flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg transition-transform hover:scale-105"
-          }
-        />
-      ))}
-    </div>
+    <>
+      {reserveSpace && <div aria-hidden="true" style={{ height: alto ? alto + MARGEN_INFERIOR_PX : 0 }} />}
+      <div
+        ref={stackRef}
+        data-floating-action
+        className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-end gap-3"
+      >
+        {visible.map((action, index) => (
+          <FloatingActionButton key={action.label} action={action} principal={index === 0} />
+        ))}
+      </div>
+    </>
   );
 }
 
-function FloatingActionButton({ action, className }: { action: FloatingAction; className: string }) {
+function FloatingActionButton({ action, principal }: { action: FloatingAction; principal: boolean }) {
+  const circulo = principal
+    ? "flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl"
+    : "flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg";
+  const contenido = (
+    <>
+      {action.shortLabel && (
+        <span className="rounded-full bg-surface/95 px-2.5 py-1 font-sans text-body-sm font-semibold text-text shadow-md">
+          {action.shortLabel}
+        </span>
+      )}
+      <span className={circulo}>{action.icon}</span>
+    </>
+  );
+  // Los círculos chicos (48 px) se corren 8 px para quedar centrados sobre el grande (64 px).
+  const fila = `flex items-center gap-2 transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
+
   if (action.href) {
     return (
-      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={action.onClick} aria-label={action.label} className={className}>
-        {action.icon}
+      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={action.onClick} aria-label={action.label} className={fila}>
+        {contenido}
       </a>
     );
   }
 
   return (
-    <button type="button" onClick={action.onClick} aria-label={action.label} className={className}>
-      {action.icon}
+    <button type="button" onClick={action.onClick} aria-label={action.label} className={fila}>
+      {contenido}
     </button>
   );
 }

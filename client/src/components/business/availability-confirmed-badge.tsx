@@ -25,7 +25,7 @@ export function AvailabilityConfirmedBadge({ confirmedAt }: AvailabilityConfirme
     // suppressHydrationWarning: "confirmado hace X" depende del reloj y el
     // perfil se renderiza también en el servidor (ver product-row.tsx).
     <span
-      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-verde/10 px-3 py-1 font-sans text-caption font-semibold text-verde"
+      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-verde/10 px-3 py-1 font-sans text-caption font-semibold text-verde-texto"
       suppressHydrationWarning
     >
       <ConfirmedSellingIcon size={16} weight="bold" />

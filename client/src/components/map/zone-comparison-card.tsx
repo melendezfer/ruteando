@@ -1,6 +1,9 @@
 "use client";
 
-import { ArrowRight, MapTrifold } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
 import type { components } from "@/lib/api/schema";
 import { describeVariety, estimateWalkingMinutes } from "@/lib/zones/zone-format";
 
@@ -51,7 +54,7 @@ export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardPr
   return (
     <div className="absolute left-3 right-3 top-7 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
       <div className="flex items-start gap-2">
-        <MapTrifold size={20} weight="duotone" className="mt-0.5 shrink-0 text-mostaza" />
+        <ViewOnMapIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-estrella" />
         <p className="font-sans text-body-sm text-text">
           Estás cerca de una zona con {describeVariety(currentZone.categoryCount ?? 0)}. A ~{minutes} min
           caminando hay una zona con {describeVariety(betterZone.categoryCount ?? 0)}.

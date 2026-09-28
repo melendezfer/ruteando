@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { WheelEvent as ReactWheelEvent } from "react";
 import { CaretRight } from "@phosphor-icons/react/dist/ssr";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
 interface DiscoveryBannerProps {
   /** "Disponibles ahora" — ya filtrados a `openNow=true` y ordenados (ver lib/discovery/available-now.ts), este componente no vuelve a decidir quién entra ni en qué orden. */
   businesses: BusinessPin[];
-  categoryTypeById: Map<number, CatalogType>;
   /** Nombre de categoría por id (`GET /categories`, ya resuelto en map-screen.tsx) — el ícono de color solo no comunica de qué categoría se trata, esto agrega el texto en las tarjetas y en la vista rápida del ⓘ. */
   categoryNameById: Map<number, string>;
   /** El pin resaltado en el mapa en este momento — solo para el borde de la tarjeta activa, ver map-screen.tsx. */
@@ -55,7 +53,6 @@ const RESUME_AFTER_IDLE_MS = 6000;
  */
 function DiscoveryBusinessCarousel({
   businesses,
-  categoryTypeById,
   categoryNameById,
   activeId,
   onActiveChange,
@@ -65,7 +62,6 @@ function DiscoveryBusinessCarousel({
   onOpenList,
 }: {
   businesses: BusinessPin[];
-  categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
   activeId: string | null;
   onActiveChange: (business: BusinessPin) => void;
@@ -195,7 +191,6 @@ function DiscoveryBusinessCarousel({
           >
             <DiscoveryRow
               business={business}
-              catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
               categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
               onOpenDetail={onOpenDetail}
               onViewOnMap={onViewOnMap}
@@ -254,7 +249,6 @@ function DiscoveryBusinessCarousel({
  */
 export function DiscoveryBanner({
   businesses,
-  categoryTypeById,
   categoryNameById,
   activeId,
   onActiveChange,
@@ -269,7 +263,6 @@ export function DiscoveryBanner({
     <div className="border-b border-border bg-surface">
       <DiscoveryBusinessCarousel
         businesses={businesses}
-        categoryTypeById={categoryTypeById}
         categoryNameById={categoryNameById}
         activeId={activeId}
         onActiveChange={onActiveChange}

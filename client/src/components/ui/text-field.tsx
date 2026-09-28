@@ -27,7 +27,7 @@ export function TextField({ label, error, id, className = "", ...props }: TextFi
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         className={`rounded-input border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40 ${
-          error ? "border-rojo" : "border-border"
+          error ? "border-rojo" : "border-borde-control"
         } ${className}`}
         {...props}
       />

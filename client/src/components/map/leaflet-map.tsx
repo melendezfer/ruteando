@@ -30,9 +30,19 @@ export interface BusinessPin extends Business {
 // compartido: frontend y backend son dos codebases separadas sin un
 // paquete común, y este valor rara vez cambia.
 const ZONE_CIRCLE_RADIUS_METERS = 200;
+/** Zoom "de barrio" sin ubicación del usuario (A6): Ciudad Verde completa, calles legibles. */
+const NEIGHBORHOOD_ZOOM = 15;
 
 interface LeafletMapProps {
   center: { lat: number; lng: number };
+  /**
+   * A6 (fix/pulido-visual): encuadrar todos los resultados solo tiene
+   * sentido con un punto de referencia (la ubicación del usuario) o con
+   * una búsqueda activa. Sin ninguno de los dos, encuadrarlos alejaba el
+   * mapa hasta toda la región (zoom 11, medido): ahí se queda en `center`
+   * a nivel de barrio.
+   */
+  fitToResults?: boolean;
   userLocation: { lat: number; lng: number } | null;
   businesses: BusinessPin[];
   /** Categoría completa por id — el pin toma de acá su ÍCONO y su COLOR (`Category.icon`/`color`, guardados en la base). Una categoría todavía sin cargar cae al ícono y gris de respaldo (lib/icons/category-icons.ts). */
@@ -78,6 +88,7 @@ interface LeafletMapProps {
  */
 export function LeafletMap({
   center,
+  fitToResults = true,
   userLocation,
   businesses,
   categoriesById,
@@ -108,7 +119,7 @@ export function LeafletMap({
       className="h-full w-full"
     >
       <AttributionControl position="topright" />
-      <FitToResults center={center} userLocation={userLocation} businesses={businesses} />
+      <FitToResults center={center} userLocation={userLocation} businesses={businesses} fit={fitToResults} />
       <ExposeMapInstance onMapReady={onMapReady} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -235,7 +246,9 @@ function FitToResults({
   center,
   userLocation,
   businesses,
+  fit,
 }: {
+  fit: boolean;
   center: { lat: number; lng: number };
   userLocation: { lat: number; lng: number } | null;
   businesses: BusinessPin[];
@@ -246,13 +259,18 @@ function FitToResults({
     const points: [number, number][] = businesses.map((b) => [b.latitude, b.longitude]);
     if (userLocation) points.push([userLocation.lat, userLocation.lng]);
 
+    if (!fit) {
+      map.setView([center.lat, center.lng], NEIGHBORHOOD_ZOOM);
+      return;
+    }
+
     if (points.length === 0) {
       map.setView([center.lat, center.lng], map.getZoom());
       return;
     }
 
     map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
-  }, [map, businesses, userLocation, center.lat, center.lng]);
+  }, [map, businesses, userLocation, center.lat, center.lng, fit]);
 
   return null;
 }

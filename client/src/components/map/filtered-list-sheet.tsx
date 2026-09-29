@@ -9,7 +9,6 @@ import type { Icon } from "@phosphor-icons/react";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { CategoryIcon } from "@/components/ui/category-icon";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
 import type { ConsumerGeolocation } from "@/lib/geo/use-geolocation";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import { DiscoveryRow } from "@/components/discovery/discovery-row";
@@ -54,7 +53,6 @@ interface FilteredListSheetProps {
    * criterio que `availableNow`: sin fetch propio acá).
    */
   activeOffers: DiscoveryOffer[];
-  categoryTypeById: Map<number, CatalogType>;
   categoryNameById: Map<number, string>;
   offerTypes: OfferType[];
   geolocation: ConsumerGeolocation;
@@ -99,7 +97,6 @@ export function FilteredListSheet({
   filter,
   availableNow,
   activeOffers,
-  categoryTypeById,
   categoryNameById,
   offerTypes,
   geolocation,
@@ -234,8 +231,15 @@ export function FilteredListSheet({
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[1000] px-3 pb-3">
-      <div className="relative flex max-h-[70vh] flex-col rounded-card border border-border bg-surface shadow-lg">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-3">
+      {/*
+        Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
+        arriba sigue usable): así la hoja nunca sube hasta la franja de
+        arriba del mapa, donde vive el crédito de OpenStreetMap
+        (fix/credito-osm-visible, e2e/credito-osm.spec.ts). La hoja misma
+        mide como mucho min(<alto de siempre>, 100% de este contenedor).
+      */}
+      <div className="pointer-events-auto relative flex max-h-[min(70vh,100%)] flex-col rounded-card border border-border bg-surface shadow-lg">
         <button
           type="button"
           onClick={onClose}
@@ -312,7 +316,6 @@ export function FilteredListSheet({
                     <DiscoveryRow
                       key={business.id}
                       business={business}
-                      catalogType={business.categoryId != null ? (categoryTypeById.get(business.categoryId) ?? null) : null}
                       categoryName={business.categoryId != null ? (categoryNameById.get(business.categoryId) ?? null) : null}
                       onOpenDetail={handleOpenProfile}
                       onViewOnMap={onViewOnMap}

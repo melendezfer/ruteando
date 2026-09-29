@@ -103,7 +103,7 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
                       required
                       value={day.openTime}
                       onChange={(event) => updateDay(value, { openTime: event.target.value })}
-                      className="rounded-input border border-border px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                      className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
@@ -115,7 +115,7 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
                       required
                       value={day.closeTime}
                       onChange={(event) => updateDay(value, { closeTime: event.target.value })}
-                      className="rounded-input border border-border px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                      className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                     />
                   </label>
                 </div>

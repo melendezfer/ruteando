@@ -18,3 +18,23 @@ export function formatRelativeTimeShort(iso: string, now: Date = new Date()): st
   const dias = Math.round(horas / 24);
   return dias === 1 ? "hace 1 día" : `hace ${dias} días`;
 }
+
+const HORA_BOGOTA = new Intl.DateTimeFormat("es-CO", {
+  timeZone: "America/Bogota",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+const FECHA_BOGOTA = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" });
+
+/**
+ * A7 (fix/pulido-visual): la hora ("11:00 a. m.") en que ocurrió `iso`, solo
+ * si fue HOY en Bogotá; `null` si fue otro día. Así la fila del producto
+ * dice "Agotado desde las 11:00 a. m." cuando es un dato de hoy, y solo
+ * "Agotado" cuando es viejo (un "hace 5 días" no le sirve a nadie).
+ */
+export function formatTimeIfToday(iso: string, now: Date = new Date()): string | null {
+  const fecha = new Date(iso);
+  if (FECHA_BOGOTA.format(fecha) !== FECHA_BOGOTA.format(now)) return null;
+  return HORA_BOGOTA.format(fecha);
+}

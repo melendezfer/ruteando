@@ -120,7 +120,7 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
           required
           value={type}
           onChange={(event) => setType(event.target.value as LocationType)}
-          className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+          className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
         >
           {LOCATION_TYPES.map((option) => (
             <option key={option.value} value={option.value}>

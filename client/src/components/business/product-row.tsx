@@ -6,7 +6,7 @@ import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react/d
 import { DEFAULT_OFFER_TYPE_ICON, OFFER_TYPE_ICON_BY_NAME } from "@/lib/catalog/offer-type-icons";
 import type { components } from "@/lib/api/schema";
 import { formatCOP } from "@/lib/format/currency";
-import { formatRelativeTimeShort } from "@/lib/format/relative-time";
+import { formatTimeIfToday } from "@/lib/format/relative-time";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { uploadProductPhoto, deletePhoto, type UploadedPhoto } from "@/lib/api/photos";
 import { deleteProduct } from "@/lib/api/products";
@@ -45,6 +45,12 @@ interface ProductRowProps {
   offerTypeName: string | null;
   /** `OfferType.icon` del mismo tipo — la insignia usa el ícono PROPIO del tipo (Menú = cubiertos, Promoción = porcentaje…), igual que su fila en "Cerca de ti ahora" y su pestaña; el Tag genérico solo si no tiene tipo. */
   offerTypeIcon: string | null;
+  /**
+   * A7: cómo se dice "no disponible" en este negocio — "Agotado" para
+   * platos y productos, "No disponible" para servicios (un servicio no se
+   * agota). Lo decide business-profile-screen.tsx según el tipo de categoría.
+   */
+  unavailableLabel?: string;
 }
 
 /**
@@ -68,6 +74,7 @@ export function ProductRow({
   onExpand,
   offerTypeName,
   offerTypeIcon,
+  unavailableLabel = "Agotado",
 }: ProductRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -129,23 +136,16 @@ export function ProductRow({
             <span className="font-sans text-body-sm text-text-muted">
               {product.price !== undefined ? formatCOP(product.price) : ""}
             </span>
-            {product.availabilityUpdatedAt && (
-              // suppressHydrationWarning: "hace X" depende del reloj — se
-              // calcula en el servidor y otra vez al hidratar; si el minuto
-              // cambia entre las dos pasadas, React lanzaba el error #418
-              // (encontrado verificando con Playwright, PR 3 de íconos).
-              <span className="font-sans text-caption text-text-muted" suppressHydrationWarning>
-                {product.available === false ? "No disponible" : "Disponible"}{" "}
-                {formatRelativeTimeShort(product.availabilityUpdatedAt)}
-              </span>
-            )}
+            {/* A7 + A9 (fix/pulido-visual): "Disponible" o "Agotado", y la
+                hora solo si cambió hoy. Agotado en ámbar suave (6.86:1);
+                antes era ámbar sólido sobre ámbar/20 = 1.73:1. */}
+            <AvailabilityLine
+              available={product.available !== false}
+              since={product.availabilityUpdatedAt ?? null}
+              unavailableLabel={unavailableLabel}
+            />
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {product.available === false && (
-              <span className="rounded-full bg-ambar/20 px-2 py-1 font-sans text-caption font-medium uppercase tracking-wide text-ambar">
-                No disponible
-              </span>
-            )}
             {expanded ? (
               <CaretUp size={20} className="text-text-muted" />
             ) : (
@@ -226,5 +226,30 @@ export function ProductRow({
         </div>
       )}
     </div>
+  );
+}
+
+function AvailabilityLine({
+  available,
+  since,
+  unavailableLabel,
+}: {
+  available: boolean;
+  since: string | null;
+  unavailableLabel: string;
+}) {
+  const hora = since ? formatTimeIfToday(since) : null;
+  const texto = `${available ? "Disponible" : unavailableLabel}${hora ? ` desde las ${hora}` : ""}`;
+  return (
+    <span
+      suppressHydrationWarning
+      className={
+        available
+          ? "font-sans text-caption font-medium text-verde"
+          : "w-fit rounded-full bg-ambar-suave px-2 py-0.5 font-sans text-caption font-semibold text-ambar-texto"
+      }
+    >
+      {texto}
+    </span>
   );
 }

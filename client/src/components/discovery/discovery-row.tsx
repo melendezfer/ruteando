@@ -1,28 +1,22 @@
 "use client";
 
-import { MapPin } from "@phosphor-icons/react/dist/ssr";
-import { RuteandoLogo } from "@/components/ui/ruteando-logo";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { buildDirectionsUrl } from "@/lib/format/directions";
 import { formatDistance } from "@/lib/format/distance";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 
-/**
- * Wording de la acción de ubicación por tipo de negocio (petición
- * directa del usuario): un local fijo se "ve en el mapa" (una dirección
- * concreta); un ambulante "se ve" donde esté ahora (misma acción
- * técnica, wording honesto sobre que se mueve); un servicio se enmarca
- * como una zona que atiende, no un punto fijo al que "llegar".
- */
-function resolveLocationActionLabel(business: BusinessPin, catalogType: CatalogType | null): string {
-  if (catalogType === "services") return "Ver zona";
-  return business.mobility === "itinerant" ? "Ver ubicación" : "Ver en mapa";
-}
+// A5 (fix/pulido-visual): "Ver ubicación", "Ver en mapa" y "Ver zona" hacían
+// exactamente lo mismo (verificado con la app: centran el mapa y abren el
+// resumen del negocio). Queda un solo texto, "Ver en el mapa", con el mismo
+// ícono que "Ver en el mapa" de /buscar. "Cómo llegar" usaba el logo de
+// Ruteando como ícono; ahora usa el de navegación, igual que en el resto.
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
+const DirectionsIcon = SEMANTIC_ICONS.directions;
+
 
 interface DiscoveryRowProps {
   business: BusinessPin;
-  catalogType: CatalogType | null;
   categoryName: string | null;
   onOpenDetail: (business: BusinessPin) => void;
   onViewOnMap: (business: BusinessPin) => void;
@@ -44,7 +38,7 @@ interface DiscoveryRowProps {
 /**
  * Fila compacta de negocio — una sola línea densa (ícono de categoría +
  * nombre + estado + distancia), con la categoría en texto y los accesos
- * ("Ver ubicación/en el mapa/zona" + "Cómo llegar") inmediatamente
+ * ("Ver en el mapa" + "Cómo llegar") inmediatamente
  * debajo. Redediseño de navegación global (sin RF asociado, petición
  * directa del usuario) — reemplaza a la vieja `DiscoveryBusinessRowContent`
  * de `discovery-banner.tsx` (3 líneas, ícono decorativo): esta es la
@@ -61,7 +55,6 @@ interface DiscoveryRowProps {
  */
 export function DiscoveryRow({
   business,
-  catalogType,
   categoryName,
   onOpenDetail,
   onViewOnMap,
@@ -69,7 +62,6 @@ export function DiscoveryRow({
   onBeforeAction,
 }: DiscoveryRowProps) {
   const statusText = business.availabilityConfirmedAt ? "Vendiendo ahora" : "Abierto";
-  const locationLabel = resolveLocationActionLabel(business, catalogType);
   const hasCoords = typeof business.latitude === "number" && typeof business.longitude === "number";
 
   // Ícono y color guardados de la categoría (Category.icon/color) — la
@@ -143,8 +135,8 @@ export function DiscoveryRow({
           }}
           className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-sans text-caption font-medium text-terracota"
         >
-          <MapPin size={14} weight="bold" />
-          {locationLabel}
+          <ViewOnMapIcon size={14} weight="bold" />
+          Ver en el mapa
         </button>
         {hasCoords && (
           <a
@@ -154,7 +146,7 @@ export function DiscoveryRow({
             onClick={() => onBeforeAction?.()}
             className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-sans text-caption font-medium text-terracota"
           >
-            <RuteandoLogo size={14} />
+            <DirectionsIcon size={14} weight="bold" />
             Cómo llegar
           </a>
         )}

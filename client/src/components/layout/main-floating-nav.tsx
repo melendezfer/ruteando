@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Compass, Crosshair, Heart, MagnifyingGlass, UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { Crosshair, Heart, MagnifyingGlass, UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { FloatingActionStack, type FloatingAction } from "@/components/ui/floating-action-stack";
 
 interface MainFloatingNavProps {
@@ -32,7 +33,11 @@ interface MainFloatingNavProps {
    * `/buscar` (default de este componente cuando no se pasa nada).
    */
   onSearch?: () => void;
+  /** `false` en el mapa (no se desplaza): ver FloatingActionStack#reserveSpace. */
+  reserveSpace?: boolean;
 }
+
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
 
 /**
  * Redediseño de navegación global (sin RF asociado, petición directa del
@@ -50,14 +55,15 @@ interface MainFloatingNavProps {
  * documentado para este componente (CLAUDE.md, "no expone un estado
  * activo distinto"); no se pidió agregarlo.
  */
-export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch }: MainFloatingNavProps) {
+export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, reserveSpace = true }: MainFloatingNavProps) {
   const router = useRouter();
 
   const mapAction: FloatingAction = onCenterMap
-    ? { icon: <Crosshair size={26} weight="fill" />, label: "Mi ubicación", onClick: onCenterMap }
+    ? { icon: <Crosshair size={26} weight="fill" />, label: "Mi ubicación", shortLabel: "Ubicarme", onClick: onCenterMap }
     : {
-        icon: <Compass size={26} weight="fill" />,
+        icon: <ViewOnMapIcon size={26} weight="fill" />,
         label: "Volver al mapa",
+        shortLabel: "Mapa",
         onClick: onBackToMap ?? (() => router.push("/mapa")),
       };
 
@@ -66,11 +72,13 @@ export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch }: MainFloa
     {
       icon: <MagnifyingGlass size={22} weight="bold" />,
       label: "Buscar",
+      shortLabel: "Buscar",
       onClick: onSearch ?? (() => router.push("/buscar")),
     },
     {
       icon: <UserCircle size={22} weight="bold" />,
       label: "Perfil",
+      shortLabel: "Perfil",
       onClick: () => router.push("/perfil"),
     },
     {
@@ -81,9 +89,10 @@ export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch }: MainFloa
       // separada — decisión explícita del usuario.
       icon: <Heart size={20} weight="bold" />,
       label: "Favoritos",
+      shortLabel: "Favoritos",
       onClick: () => router.push("/mapa?favoritesOnly=true"),
     },
   ];
 
-  return <FloatingActionStack actions={actions} />;
+  return <FloatingActionStack actions={actions} reserveSpace={reserveSpace} />;
 }

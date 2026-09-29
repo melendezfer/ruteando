@@ -136,7 +136,14 @@ async function actualizar(usuarioId, id, input) {
   const vigenciaInicio = input.validFrom !== undefined ? input.validFrom : producto.vigencia_inicio;
 
   await validarLimiteOfertaGratis(negocio, { vigenciaInicio, excluirProductoId: id });
-  await validarLimiteCatalogoGratis(negocio, { vigenciaInicio, excluirProductoId: id });
+  // El cupo de carta solo se revisa cuando el producto ENTRA a la carta
+  // (era una oferta con vigencia y se le quita). Un producto que ya era de
+  // carta no ocupa un cupo nuevo al editarlo: sin esto, un negocio con más
+  // productos que el límite (datos anteriores al límite, o un plan pago que
+  // volvió a gratis) no podía editar ninguno ni marcarlo agotado (fix/pulido-visual).
+  if (producto.vigencia_inicio != null && vigenciaInicio == null) {
+    await validarLimiteCatalogoGratis(negocio, { vigenciaInicio, excluirProductoId: id });
+  }
 
   const actualizado = await productosRepo.actualizar(id, {
     categoriaId: input.categoryId !== undefined ? input.categoryId : producto.categoria_id,

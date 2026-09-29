@@ -1,6 +1,9 @@
 "use client";
 
-import { CaretRight, NavigationArrow } from "@phosphor-icons/react/dist/ssr";
+import { CaretRight } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+const DirectionsIcon = SEMANTIC_ICONS.directions;
 import { CategoryIcon } from "@/components/ui/category-icon";
 import type { BusinessPin } from "@/components/map/leaflet-map";
 import { MatchReasonBadges } from "@/components/discovery/match-reason-badges";
@@ -112,7 +115,7 @@ export function MapSearchResults({
                 onClick={(event) => event.stopPropagation()}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-terracota hover:bg-background"
               >
-                <NavigationArrow size={16} weight="bold" />
+                <DirectionsIcon size={16} weight="bold" />
               </a>
             </div>
           );

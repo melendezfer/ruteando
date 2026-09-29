@@ -71,8 +71,15 @@ export function MapSearchSheet({
   onClose,
 }: MapSearchSheetProps) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[1000] px-3 pb-3">
-      <div className="relative flex max-h-[75vh] flex-col rounded-card border border-border bg-surface shadow-lg">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-3">
+      {/*
+        Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
+        arriba sigue usable): así la hoja nunca sube hasta la franja de
+        arriba del mapa, donde vive el crédito de OpenStreetMap
+        (fix/credito-osm-visible, e2e/credito-osm.spec.ts). La hoja misma
+        mide como mucho min(<alto de siempre>, 100% de este contenedor).
+      */}
+      <div className="pointer-events-auto relative flex max-h-[min(75vh,100%)] flex-col rounded-card border border-border bg-surface shadow-lg">
         <button
           type="button"
           onClick={onClose}
@@ -108,7 +115,7 @@ export function MapSearchSheet({
                 <select
                   value={filters.radiusKm}
                   onChange={(event) => onFiltersChange({ ...filters, radiusKm: Number(event.target.value) })}
-                  className="rounded-input border border-border px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                  className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                 >
                   {RADIUS_OPTIONS.map((km) => (
                     <option key={km} value={km}>

@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start -p 3001 -H 0.0.0.0",
     "lint": "eslint",
-    "generate:api": "openapi-typescript ../openapi.yaml -o src/lib/api/schema.ts"
+    "generate:api": "openapi-typescript ../openapi.yaml -o src/lib/api/schema.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -24,6 +25,7 @@
     "react-leaflet-cluster": "^4.1.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/leaflet.markercluster": "^1.5.6",

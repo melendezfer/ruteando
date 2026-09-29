@@ -26,7 +26,7 @@ interface StatusContent {
 const STATUS_CONTENT: Record<Exclude<BusinessStatus, "active">, StatusContent> = {
   pending: {
     icon: Clock,
-    classes: "border-ambar/40 bg-ambar/10 text-ambar",
+    classes: "border-ambar/40 bg-ambar-suave text-ambar-texto",
     title: "Tu negocio está en revisión",
     description:
       "Un administrador todavía tiene que aprobarlo — hasta entonces no aparece en el mapa ni en las búsquedas.",

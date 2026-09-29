@@ -56,7 +56,7 @@ export function OfferRow({ offer, offerType, onOpenDetail }: OfferRowProps) {
       className="flex w-full flex-col gap-1.5 rounded-card border border-border bg-background px-3 py-2.5 text-left"
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mostaza/15 text-mostaza">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mostaza/15 text-estrella">
           <Icon size={16} weight="bold" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">

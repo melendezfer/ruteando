@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import Link from "next/link";
-import { CaretDown, CaretUp, MapPin, MapTrifold, NavigationArrow, Star } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp, Star } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { Skeleton } from "@/components/discovery/skeleton";
@@ -15,6 +16,10 @@ import { buildDirectionsUrl } from "@/lib/format/directions";
 import { pickLatestPhoto } from "@/lib/photos/pick-latest-photo";
 
 type Business = components["schemas"]["Business"];
+
+const ScheduleIcon = SEMANTIC_ICONS.schedule;
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
+const DirectionsIcon = SEMANTIC_ICONS.directions;
 type BusinessProfile = components["schemas"]["BusinessProfile"];
 
 const TODAY_INDEX_TO_DAY: Record<number, string> = {
@@ -194,11 +199,11 @@ export function BusinessCard({
                 />
               )}
               <p className="flex items-center gap-1.5 font-sans text-body-sm text-text">
-                <MapPin size={16} className="text-terracota" />
+                <ScheduleIcon size={16} className="text-terracota" />
                 {isOpenToday ? `Hoy: ${todaySchedule!.openTime} – ${todaySchedule!.closeTime}` : "Cerrado hoy"}
               </p>
               <p className="flex items-center gap-1.5 font-sans text-body-sm text-text">
-                <Star size={16} weight="fill" className="text-mostaza" />
+                <Star size={16} weight="fill" className="text-estrella" />
                 {profile.averageRating != null
                   ? `${profile.averageRating.toFixed(1)} (${profile.reviewCount} reseña${profile.reviewCount === 1 ? "" : "s"})`
                   : "Todavía sin reseñas"}
@@ -221,7 +226,7 @@ export function BusinessCard({
                     href={`/mapa?businessId=${business.id}`}
                     className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"
                   >
-                    <MapTrifold size={16} weight="bold" />
+                    <ViewOnMapIcon size={16} weight="bold" />
                     Ver en el mapa
                   </Link>
                 )}
@@ -240,7 +245,7 @@ export function BusinessCard({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"
                   >
-                    <NavigationArrow size={16} weight="bold" />
+                    <DirectionsIcon size={16} weight="bold" />
                     Cómo llegar
                   </a>
                 )}

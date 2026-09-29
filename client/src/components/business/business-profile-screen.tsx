@@ -6,10 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Chair,
-  Compass,
   Gear,
   Moped,
-  NavigationArrow,
   Plus,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
@@ -91,6 +89,12 @@ interface BusinessProfileScreenProps {
 // Leaflet en el módulo de arriba rompería ese render. `ssr: false` lo
 // difiere al navegador.
 const LiveIcon = SEMANTIC_ICONS.liveLocation;
+
+// A8 (fix/pulido-visual): insignias compactas y con texto corto para que
+// fluyan varias por línea en el celular (a 320 px ocupaban una línea cada una).
+const BADGE_CLASS = "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 font-sans text-caption font-semibold";
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
+const DirectionsIcon = SEMANTIC_ICONS.directions;
 
 const LocationPinEditor = dynamic(
   () => import("@/components/business/location-pin-editor").then((mod) => mod.LocationPinEditor),
@@ -395,21 +399,21 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             <p className="font-sans text-body-sm text-text-muted">{location.referenceAddress}</p>
           )
         )}
-        <div className="mt-1 flex flex-wrap gap-2">
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-background px-3 py-1 font-sans text-caption font-semibold text-text">
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <span className={`${BADGE_CLASS} bg-background text-text`}>
             <MobilityIcon size={14} weight="bold" />
             {MOBILITY_LABELS[mobility]}
           </span>
           {profile.ownDelivery && (
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
-              <Moped size={16} weight="bold" />
-              Hace domicilios propios
+            <span aria-label="Hace domicilios propios" className={`${BADGE_CLASS} bg-terracota/10 text-terracota`}>
+              <Moped size={14} weight="bold" />
+              Domicilios
             </span>
           )}
           {profile.seatingAvailable && (
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-terracota/10 px-3 py-1 font-sans text-caption font-semibold text-terracota">
-              <Chair size={16} weight="bold" />
-              Tiene bancas/asientos
+            <span aria-label="Tiene bancas o asientos" className={`${BADGE_CLASS} bg-terracota/10 text-terracota`}>
+              <Chair size={14} weight="bold" />
+              Bancas
             </span>
           )}
           {profile.hygieneSelfDeclared && <HygieneBadge />}
@@ -588,6 +592,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             offerTypeName={
               product.offerTypeId != null ? (offerTypeById.get(product.offerTypeId)?.name ?? null) : null
             }
+            unavailableLabel={catalogType === "services" ? "No disponible" : "Agotado"}
             offerTypeIcon={
               product.offerTypeId != null ? (offerTypeById.get(product.offerTypeId)?.icon ?? null) : null
             }
@@ -656,22 +661,27 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
+      {/* A2 (fix/pulido-visual): WhatsApp y Cómo llegar son acciones del
+          cliente — el dueño no se escribe ni se busca a sí mismo, así que en
+          su propio negocio solo queda "Volver al mapa". */}
       <FloatingActionStack
         actions={[
-          whatsappHref
+          whatsappHref && !isOwner
             ? {
                 icon: <WhatsappLogo size={32} weight="fill" />,
                 label: "Contactar por WhatsApp",
+                shortLabel: "WhatsApp",
                 href: whatsappHref,
                 onClick: () => {
                   if (profile.id) logContactClickEvent(profile.id);
                 },
               }
             : null,
-          directionsHref
+          directionsHref && !isOwner
             ? {
-                icon: <NavigationArrow size={22} weight="fill" />,
+                icon: <DirectionsIcon size={22} weight="fill" />,
                 label: "Cómo llegar",
+                shortLabel: "Llegar",
                 href: directionsHref,
               }
             : null,
@@ -685,8 +695,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           // (a diferencia de WhatsApp/Cómo llegar, que dependen de que
           // el negocio tenga esos datos).
           {
-            icon: <Compass size={22} weight="fill" />,
+            icon: <ViewOnMapIcon size={22} weight="fill" />,
             label: "Volver al mapa",
+            shortLabel: "Mapa",
             onClick: () => router.push("/mapa"),
           },
         ]}

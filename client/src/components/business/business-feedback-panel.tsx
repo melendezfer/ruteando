@@ -78,7 +78,7 @@ export function BusinessFeedbackPanel({ businessId }: BusinessFeedbackPanelProps
                     key={position}
                     size={16}
                     weight={position <= (item.rating ?? 0) ? "fill" : "regular"}
-                    className={position <= (item.rating ?? 0) ? "text-mostaza" : "text-border"}
+                    className={position <= (item.rating ?? 0) ? "text-estrella" : "text-borde-control"}
                   />
                 ))}
               </div>

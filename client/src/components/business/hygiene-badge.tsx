@@ -26,11 +26,11 @@ export function HygieneBadge({ className = "" }: HygieneBadgeProps) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`${HYGIENE_BADGE_LABEL} — no es una certificación oficial, toca para ver la aclaración`}
-        className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-verde/10 px-3 py-1 font-sans text-caption font-semibold text-verde ${className}`}
+        className={`inline-flex w-fit items-center gap-1 rounded-full bg-verde/10 px-2 py-0.5 font-sans text-caption font-semibold text-verde-texto ${className}`}
       >
-        <ShieldCheck size={16} weight="bold" />
+        <ShieldCheck size={14} weight="bold" />
         {HYGIENE_BADGE_LABEL}
-        <Info size={14} weight="bold" />
+        <Info size={12} weight="bold" />
       </button>
 
       {open && (

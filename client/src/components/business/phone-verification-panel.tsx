@@ -76,7 +76,7 @@ export function PhoneVerificationPanel({ businessId, contactPhone, onVerified }:
 
   if (!contactPhone) {
     return (
-      <div className="rounded-card border border-ambar/40 bg-ambar/10 px-4 py-3">
+      <div className="rounded-card border border-ambar/40 bg-ambar-suave px-4 py-3">
         <p className="font-sans text-body-sm text-text">
           Este negocio todavía no tiene un teléfono de contacto registrado — agrégalo para poder
           verificarlo y que aparezca en el mapa.
@@ -86,9 +86,9 @@ export function PhoneVerificationPanel({ businessId, contactPhone, onVerified }:
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-card border border-ambar/40 bg-ambar/10 px-4 py-3">
+    <div className="flex flex-col gap-3 rounded-card border border-ambar/40 bg-ambar-suave px-4 py-3">
       <div className="flex items-start gap-2">
-        <ShieldWarning size={20} weight="fill" className="mt-0.5 shrink-0 text-ambar" />
+        <ShieldWarning size={20} weight="fill" className="mt-0.5 shrink-0 text-ambar-texto" />
         <div className="flex flex-col gap-0.5">
           <p className="font-sans text-body font-medium text-text">Verifica tu teléfono</p>
           <p className="font-sans text-body-sm text-text-muted">

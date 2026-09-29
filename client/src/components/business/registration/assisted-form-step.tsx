@@ -125,7 +125,7 @@ export function AssistedFormStep({
               set("businessCategoryId", event.target.value ? Number(event.target.value) : "")
             }
             className={`rounded-input border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40 ${
-              fieldErrors["business.categoryId"] ? "border-rojo" : "border-border"
+              fieldErrors["business.categoryId"] ? "border-rojo" : "border-borde-control"
             }`}
           >
             <option value="">{categoriesLoading ? "Cargando categorías…" : "Selecciona una categoría"}</option>
@@ -150,7 +150,7 @@ export function AssistedFormStep({
             maxLength={2000}
             value={values.businessDescription}
             onChange={(event) => set("businessDescription", event.target.value)}
-            className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+            className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
           />
         </div>
 

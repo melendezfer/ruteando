@@ -110,7 +110,7 @@ export function AccountDeletionRequestModal({ onCancel, onSubmitted }: AccountDe
             maxLength={1000}
             value={comment}
             onChange={(event) => setComment(event.target.value)}
-            className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+            className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
           />
         </div>
 

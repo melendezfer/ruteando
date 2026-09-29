@@ -1,6 +1,9 @@
 "use client";
 
-import { ArrowRight, MapTrifold } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
+
+const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
 import type { components } from "@/lib/api/schema";
 import { describeVariety, estimateWalkingMinutes } from "@/lib/zones/zone-format";
 
@@ -31,6 +34,10 @@ interface ZoneComparisonCardProps {
  * fija del mapa (con un offset medido a mano que se rompió dos veces,
  * Fases 1 y 3). Esa caja ya no existe — el buscador vive en una hoja
  * inferior (`MapSearchSheet`), así que no hay nada arriba que esquivar.
+ *
+ * `top-7` (no `top-3`): desde fix/credito-osm-visible el crédito de
+ * OpenStreetMap vive arriba a la derecha del mapa (~17px de alto, pegado
+ * al borde), y la tarjeta ocupa todo el ancho — con `top-3` lo tapaba.
  */
 export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardProps) {
   if (zones.length === 0) return null;
@@ -45,9 +52,9 @@ export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardPr
   const minutes = estimateWalkingMinutes(betterZone.distanceMeters ?? 0);
 
   return (
-    <div className="absolute left-3 right-3 top-3 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+    <div className="absolute left-3 right-3 top-7 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
       <div className="flex items-start gap-2">
-        <MapTrifold size={20} weight="duotone" className="mt-0.5 shrink-0 text-mostaza" />
+        <ViewOnMapIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-estrella" />
         <p className="font-sans text-body-sm text-text">
           Estás cerca de una zona con {describeVariety(currentZone.categoryCount ?? 0)}. A ~{minutes} min
           caminando hay una zona con {describeVariety(betterZone.categoryCount ?? 0)}.

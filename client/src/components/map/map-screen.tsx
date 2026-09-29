@@ -20,7 +20,6 @@ import { FilteredListSheet, type DiscoveryListFilter } from "@/components/map/fi
 import type { DiscoveryOffer } from "@/components/discovery/offer-row";
 import { sortAvailableNow } from "@/lib/discovery/available-now";
 import type { BusinessPin } from "@/components/map/leaflet-map";
-import type { CatalogType } from "@/lib/catalog/catalog-label";
 
 type Category = components["schemas"]["Category"];
 type BusinessZone = components["schemas"]["BusinessZone"];
@@ -30,7 +29,10 @@ type OfferType = components["schemas"]["OfferType"];
 // scripts/seedLoadTest.js en el backend) — solo se usa cuando el
 // consumidor no concede geolocalización y todavía no hay ningún negocio
 // real para calcular un centro a partir de sus coordenadas.
-const DEFAULT_CENTER = { lat: 4.578, lng: -74.217 };
+// Centro de Ciudad Verde (A6, fix/pulido-visual). Antes (4.578, -74.217): el
+// centroide de todo el municipio de Soacha, el mismo error que ya se había
+// corregido en los datos de demo (CLAUDE.md §25) pero no acá.
+const DEFAULT_CENTER = { lat: 4.6083, lng: -74.2188 };
 const MAP_RESULTS_LIMIT = 50;
 const DEFAULT_MAP_RADIUS_KM = 5;
 const LOCATE_ME_ZOOM = 16;
@@ -203,15 +205,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
   }, [categories]);
 
   /** `Category.type` por id — lo siguen usando el banner/hoja/tarjetas (se pasan a Category.icon/color en el PR 3). */
-  const categoryTypeById = useMemo(() => {
-    const map = new Map<number, CatalogType>();
-    categories.forEach((category) => {
-      if (category.id !== undefined && category.type !== undefined) {
-        map.set(category.id, category.type);
-      }
-    });
-    return map;
-  }, [categories]);
 
   // Banner de descubrimiento, familia "Disponibles ahora" (Fase 1, sin
   // RF asociado) — resaltado del pin correspondiente al deslizar entre
@@ -448,8 +441,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
   let center = DEFAULT_CENTER;
   if (geolocation.status === "granted" && geolocation.coords) {
     center = geolocation.coords;
-  } else if (businesses.length > 0) {
-    center = { lat: businesses[0].latitude, lng: businesses[0].longitude };
   }
 
   const userLocation = geolocation.status === "granted" ? geolocation.coords : null;
@@ -588,9 +579,9 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
   return (
     <div className="flex flex-1 flex-col pb-6">
       {showLocationHint && (
-        <p className="bg-ambar/10 px-4 py-2 font-sans text-body-sm text-text-muted">
-          No pudimos acceder a tu ubicación. Mostrando negocios de Ciudad Verde — toca el botón de ubicación para
-          intentar de nuevo.
+        // A6: una sola línea. Reintentar ya está en el botón "Ubicarme".
+        <p className="truncate bg-ambar-suave px-4 py-1.5 font-sans text-body-sm text-ambar-texto">
+          Sin tu ubicación: te mostramos Ciudad Verde.
         </p>
       )}
 
@@ -603,7 +594,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
       {!listFilter && (
         <DiscoveryBanner
           businesses={discoveryBusinesses}
-          categoryTypeById={categoryTypeById}
           categoryNameById={categoryNameById}
           activeId={bannerHighlightId}
           onActiveChange={handleBannerActiveChange}
@@ -649,6 +639,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           ) : (
             <LeafletMap
               center={center}
+              fitToResults={Boolean(userLocation) || query.trim() !== ""}
               userLocation={userLocation}
               businesses={businesses}
               categoriesById={categoriesById}
@@ -707,7 +698,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
             filter={listFilter}
             availableNow={discoveryBusinesses}
             activeOffers={discoveryOffers}
-            categoryTypeById={categoryTypeById}
             categoryNameById={categoryNameById}
             offerTypes={offerTypes}
             geolocation={geolocation}
@@ -719,7 +709,10 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         {showMap && (
           <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-surface/90 px-3 py-2 shadow-lg backdrop-blur">
             <RuteandoLogo size={28} />
-            <span className="font-heading text-title-2 font-bold text-terracota">Ruteando</span>
+            {/* A3 (fix/pulido-visual): a 320 px los nombres de los flotantes chocaban
+                con la palabra (medido con la prueba e2e flotantes-no-tapan): desde
+                360 px se ve completa; más angosto, solo el ícono. */}
+            <span className="hidden font-heading text-title-2 font-bold text-terracota min-[360px]:inline">Ruteando</span>
           </div>
         )}
 
@@ -727,6 +720,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           onCenterMap={showMap ? handleLocateMe : undefined}
           onBackToMap={!showMap ? handleBackToMap : undefined}
           onSearch={handleToggleSearchSheet}
+          reserveSpace={false}
         />
       </div>
     </div>

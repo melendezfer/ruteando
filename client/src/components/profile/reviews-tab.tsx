@@ -15,8 +15,8 @@ const REVIEWS_LIMIT = 50;
 const DATE_FORMATTER = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" });
 
 const STATUS_BADGE: Record<ModerationStatus, { label: string; className: string }> = {
-  pending: { label: "Pendiente de revisión", className: "bg-ambar/20 text-ambar" },
-  approved: { label: "Aprobada", className: "bg-verde/15 text-verde" },
+  pending: { label: "Pendiente de revisión", className: "bg-ambar-suave text-ambar-texto" },
+  approved: { label: "Aprobada", className: "bg-verde/15 text-verde-texto" },
   rejected: { label: "Rechazada", className: "bg-rojo/15 text-rojo" },
 };
 
@@ -93,7 +93,7 @@ export function ReviewsTab() {
                   key={position}
                   size={16}
                   weight={position <= (review.rating ?? 0) ? "fill" : "regular"}
-                  className={position <= (review.rating ?? 0) ? "text-mostaza" : "text-border"}
+                  className={position <= (review.rating ?? 0) ? "text-estrella" : "text-borde-control"}
                 />
               ))}
             </div>

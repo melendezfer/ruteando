@@ -3,7 +3,10 @@ import {
   BookOpen,
   Broadcast,
   CheckCircle,
+  Clock,
   DoorOpen,
+  MapTrifold,
+  NavigationArrow,
   SealCheck,
   ShoppingCartSimple,
   Storefront,
@@ -43,6 +46,12 @@ export const SEMANTIC_ICONS = {
   liveLocation: Broadcast,
   /** Acción completada con éxito (formularios, pasos de un asistente, ajustes guardados). */
   success: CheckCircle,
+  /** Horario (el de hoy o el de la semana). MapPin queda solo para "dónde está" (referencia, ubicación). */
+  schedule: Clock,
+  /** Ver este negocio (o ir) en el mapa de RUTEANDO: "Ver en el mapa", "Volver al mapa". */
+  viewOnMap: MapTrifold,
+  /** Cómo llegar: abre la navegación externa (Google Maps) hacia el negocio. */
+  directions: NavigationArrow,
 } satisfies Record<string, Icon>;
 
 type Mobility = NonNullable<components["schemas"]["Business"]["mobility"]>;

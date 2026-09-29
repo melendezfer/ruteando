@@ -33,7 +33,7 @@ export function LiveLocationConsentModal({ accepting, error, onAccept, onClose }
     >
       <div className="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-card bg-surface p-5 sm:rounded-card">
         <div className="flex items-start justify-between gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-terracota/10 text-terracota">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-terracota-50 text-terracota">
             <LiveIcon size={24} weight="bold" />
           </span>
           <button

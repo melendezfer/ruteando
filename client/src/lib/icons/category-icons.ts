@@ -52,8 +52,14 @@ export const CATEGORY_ICON_BY_NAME: Record<string, Icon> = {
 /** Categoría sin ícono asignado todavía (o todavía sin cargar). */
 export const DEFAULT_CATEGORY_ICON: Icon = DotsThreeCircle;
 
-/** Mismo gris neutro que el DEFAULT de la columna `categorias.color`. */
-export const DEFAULT_CATEGORY_COLOR = "#6b7280";
+/**
+ * Color del pin de CUALQUIER categoría: el morado de la marca (Perfil 2.0,
+ * Parte B, docs/specs/perfil-2.md §2.4, decisión P2-01). La categoría se
+ * reconoce por su ícono; `Category.color` se conserva en la base (sin
+ * migración) por si las pruebas con personas piden volver a un tinte por
+ * familia SOLO en los pines — en ese caso, devolver `category.color` acá.
+ */
+export const CATEGORY_PIN_COLOR = "var(--color-terracota)";
 
 export interface CategoryVisual {
   Icon: Icon;
@@ -69,6 +75,6 @@ export interface CategoryVisual {
 export function resolveCategoryVisual(category: Category | null | undefined): CategoryVisual {
   return {
     Icon: (category?.icon && CATEGORY_ICON_BY_NAME[category.icon]) || DEFAULT_CATEGORY_ICON,
-    color: category?.color ?? DEFAULT_CATEGORY_COLOR,
+    color: CATEGORY_PIN_COLOR,
   };
 }

@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import { Crosshair } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
+import { distanceMeters } from "@/lib/geo/distance";
 import { Button } from "@/components/ui/button";
 import { getBusinessFormErrorMessage } from "@/lib/api/error-messages";
 import type { components } from "@/lib/api/schema";
@@ -34,17 +35,14 @@ interface LocationPinEditorProps {
  * `location-step.tsx`). Nada nuevo del lado del backend:
  * `PUT /businesses/{businessId}/location` ya existía completo (Épica 2)
  * y ya inserta una fila de historial nueva por cada llamada — este
- * control solo cambia `latitude`/`longitude`, preservando `type`/
- * `referenceAddress`/`showExactLocation` tal cual venían (decisión
- * confirmada con el usuario antes de implementar: el tipo de ubicación
- * y la dirección de referencia se siguen editando donde ya se editaban,
- * no acá — este control es solo "ajustar el punto").
+ * control cambia `latitude`/`longitude` y, desde el Perfil 2.0 (C3), la
+ * referencia textual; preserva `type`/`showExactLocation` tal cual venían.
  *
  * Sin guardado automático al arrastrar (decisión confirmada con el
  * usuario) — cada PUT inserta una fila nueva en `ubicaciones` (nunca
  * sobrescribe), así que guardar en cada pixel de un arrastre llenaría
  * el historial de filas ruidosas. El pin se mueve libremente y solo se
- * confirma con "Guardar nueva ubicación".
+ * confirma con "Guardar ubicación".
  *
  * `navigator.geolocation.getCurrentPosition` se llama acá directo, sin
  * reusar `useConsumerGeolocation` (`lib/geo/use-geolocation.ts`) — ese
@@ -54,6 +52,15 @@ interface LocationPinEditorProps {
  * (tocando "Usar mi ubicación actual") sería una interrupción sin
  * ningún beneficio la mayoría de las veces que se abre esta pantalla.
  */
+/**
+ * Perfil 2.0, C3 (docs/specs/perfil-2.md §5): la referencia ("frente al
+ * parque") se edita JUNTO al mapa, y si el pin se movió más de este umbral
+ * sin tocar la referencia, antes de guardar se pregunta si cambió — antes
+ * el editor la conservaba sin preguntar y quedaba desalineada del punto.
+ */
+export const REFERENCE_PROMPT_THRESHOLD_METERS = 30;
+const REFERENCE_MAX_CHARS = 255;
+
 export function LocationPinEditor({ businessId, location, onSaved }: LocationPinEditorProps) {
   const [pin, setPin] = useState<{ lat: number; lng: number }>({
     lat: location.latitude,
@@ -62,9 +69,15 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
   const [saving, setSaving] = useState(false);
   const [gettingCurrentLocation, setGettingCurrentLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savedReference = location.referenceAddress ?? "";
+  const [reference, setReference] = useState(savedReference);
+  // Metros que se movió el pin, mientras se pregunta si cambió la referencia.
+  const [confirmingMove, setConfirmingMove] = useState<number | null>(null);
 
   const icon = useMemo(() => createDraggablePinIcon(), []);
-  const dirty = pin.lat !== location.latitude || pin.lng !== location.longitude;
+  const pinMoved = pin.lat !== location.latitude || pin.lng !== location.longitude;
+  const referenceChanged = reference.trim() !== savedReference;
+  const dirty = pinMoved || referenceChanged;
 
   function handleUseCurrentLocation() {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
@@ -88,10 +101,21 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
 
   function handleCancel() {
     setPin({ lat: location.latitude, lng: location.longitude });
+    setReference(savedReference);
+    setConfirmingMove(null);
     setError(null);
   }
 
-  async function handleSave() {
+  function handleSaveClick() {
+    const moved = distanceMeters({ lat: location.latitude, lng: location.longitude }, pin);
+    if (pinMoved && !referenceChanged && moved > REFERENCE_PROMPT_THRESHOLD_METERS) {
+      setConfirmingMove(Math.round(moved));
+      return;
+    }
+    void save(reference);
+  }
+
+  async function save(referenceToSave: string) {
     setSaving(true);
     setError(null);
 
@@ -99,7 +123,7 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
       params: { path: { businessId } },
       body: {
         type: location.type,
-        referenceAddress: location.referenceAddress ?? undefined,
+        referenceAddress: referenceToSave.trim() ? referenceToSave.trim() : undefined,
         latitude: pin.lat,
         longitude: pin.lng,
         showExactLocation: location.showExactLocation,
@@ -113,12 +137,14 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
       return;
     }
 
+    setConfirmingMove(null);
+    setReference(data.referenceAddress ?? "");
     onSaved(data);
   }
 
   return (
     <div className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-3">
-      <p className="font-sans text-body font-medium text-text">Ajustar ubicación en el mapa</p>
+      <p className="font-sans text-body font-medium text-text">Tu punto en el mapa</p>
       <p className="font-sans text-body-sm text-text-muted">
         Arrastra el pin hasta donde realmente atiendes — útil si eres ambulante o si atiendes desde un
         punto distinto al que quedó registrado.
@@ -156,23 +182,71 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
         Usar mi ubicación actual
       </Button>
 
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={`reference-${businessId}`} className="font-sans text-body-sm font-medium text-text">
+          Referencia (cómo te encuentran)
+        </label>
+        <input
+          id={`reference-${businessId}`}
+          type="text"
+          maxLength={REFERENCE_MAX_CHARS}
+          placeholder="Ej: frente al parque de la Cra 33"
+          value={reference}
+          onChange={(event) => setReference(event.target.value)}
+          className="min-h-11 rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+        />
+        <p className="font-sans text-body-sm text-text-muted">
+          Tus clientes la ven tal cual: no escribas tu dirección de casa si no quieres que se vea.
+        </p>
+      </div>
+
       {error && <p className="font-sans text-body-sm text-rojo">{error}</p>}
 
-      {dirty && (
-        <div className="flex gap-2">
-          <Button type="button" onClick={handleSave} loading={saving} className="flex-1 justify-center">
-            Guardar nueva ubicación
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleCancel}
-            disabled={saving}
-            className="flex-1 justify-center"
-          >
-            Cancelar
-          </Button>
+      {confirmingMove !== null ? (
+        <div role="alertdialog" aria-labelledby={`move-prompt-${businessId}`} className="flex flex-col gap-3 rounded-card bg-terracota-50 p-3">
+          <p id={`move-prompt-${businessId}`} className="font-sans text-body font-medium text-text">
+            Moviste tu punto {confirmingMove} m. ¿Cambió tu referencia?
+          </p>
+          <input
+            aria-label="Nueva referencia"
+            type="text"
+            maxLength={REFERENCE_MAX_CHARS}
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            className="min-h-11 rounded-input border border-borde-control bg-surface px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+          />
+          <div className="flex gap-2">
+            <Button type="button" onClick={() => void save(reference)} loading={saving} className="flex-1 justify-center">
+              Guardar
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void save(savedReference)}
+              disabled={saving}
+              className="flex-1 justify-center"
+            >
+              Sigue igual
+            </Button>
+          </div>
         </div>
+      ) : (
+        dirty && (
+          <div className="flex gap-2">
+            <Button type="button" onClick={handleSaveClick} loading={saving} className="flex-1 justify-center">
+              Guardar ubicación
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCancel}
+              disabled={saving}
+              className="flex-1 justify-center"
+            >
+              Cancelar
+            </Button>
+          </div>
+        )
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { CATEGORY_ICON_BY_NAME, DEFAULT_CATEGORY_COLOR, DEFAULT_CATEGORY_ICON } from "@/lib/icons/category-icons";
+import { CATEGORY_ICON_BY_NAME, DEFAULT_CATEGORY_ICON } from "@/lib/icons/category-icons";
 import { useCategoriesById } from "@/lib/categories/use-categories";
 
 /**
@@ -10,9 +10,10 @@ import { useCategoriesById } from "@/lib/categories/use-categories";
  * la caché compartida de categorías; ningún componente decide por su
  * cuenta qué ícono o qué color le toca a una categoría.
  *
- * Siempre la misma forma: círculo del color de la categoría con el ícono
- * en blanco, peso `fill` — la misma lectura que el pin del mapa (gota del
- * color de la categoría con el ícono blanco adentro). Tamaños fijos
+ * Siempre la misma forma: ícono morado sobre tinte morado (Perfil 2.0,
+ * Parte B, docs/specs/perfil-2.md §2.4 — antes, círculo del color de la
+ * familia con el ícono blanco). La categoría se reconoce por el ícono;
+ * `Category.color` se conserva en la base pero ya no se pinta. Tamaños fijos
  * (antes cada pantalla usaba el suyo y un peso distinto: fill 18px en las
  * filas, duotone 64px gris en la portada, bold 12px en las insignias).
  */
@@ -35,13 +36,11 @@ export function CategoryIcon({ categoryId, size = "md", className = "" }: Catego
   // Lookup directo contra la tabla (no una llamada a función): la regla
   // react-hooks/static-components lo exige en el cuerpo de un componente.
   const Icon = (category?.icon && CATEGORY_ICON_BY_NAME[category.icon]) || DEFAULT_CATEGORY_ICON;
-  const color = category?.color ?? DEFAULT_CATEGORY_COLOR;
   const { circle, icon } = SIZES[size];
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-full text-white ${circle} ${className}`}
-      style={{ backgroundColor: color }}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-terracota-50 text-terracota ${circle} ${className}`}
       aria-hidden="true"
     >
       <Icon size={icon} weight="fill" />

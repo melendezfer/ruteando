@@ -6848,3 +6848,73 @@ activa la acción) o al pasar el mouse (PC, `group-hover`, que en Tailwind
 4 solo aplica con puntero real). El `aria-label` no cambia nunca. Sin
 almacenamiento disponible, cada carga cuenta como primera visita (se ven).
 Prueba: `client/e2e/letreros-flotantes.spec.ts`.
+
+## 63. Perfil 2.0 — Etapa 1: Ajustes del negocio (C3) y paleta morada (Parte B)
+
+Spec: `docs/specs/perfil-2.md` (§2 paleta, §5 C3). Rama
+`feature/perfil-2-ajustes`, que sale de `feature/r5-estoy-vendiendo` (el
+usuario prueba R5 y el Perfil 2.0 juntos) con `develop` mezclado. Guía:
+`docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+**Ajustes del negocio** (`/negocios/[businessId]/ajustes`,
+`components/business/settings/`): seis familias plegables
+(`SettingsFamily`: `button` con `aria-expanded`/`aria-controls`, línea de
+resumen con la familia cerrada, contenido montado solo al abrir porque
+Leaflet no mide bien dentro de un bloque oculto). Los controles que ya
+existían se movieron sin cambiar su lógica; lo nuevo:
+- **Identidad** editable después del registro (R7): nombre, categoría,
+  descripción con contador (120 visibles, 500 máximo en esta pantalla; el
+  backend admite 2000).
+- **WhatsApp** editable. Cambiarlo ya quitaba la verificación en el backend
+  (`negocios.repository.js#actualizar`, verificado leyendo; la hipótesis de
+  que no lo hacía era falsa); la UI ahora lo avisa antes de guardar.
+- **Horario** editable (R7), reusando `ScheduleStep` del asistente
+  (`onBack` opcional, `submitLabel`).
+- **Referencia junto al mapa** en `LocationPinEditor` y aviso al mover el
+  pin más de `REFERENCE_PROMPT_THRESHOLD_METERS` (30 m) sin tocar la
+  referencia: "Moviste tu punto X m. ¿Cambió tu referencia?" (Guardar /
+  Sigue igual).
+- La pantalla pide el perfil en el navegador (con el token del dueño) para
+  recibir la ubicación exacta; otra persona ve "Solo el dueño…".
+- Los interruptores que usan `PATCH /businesses/{id}` reciben SIEMPRE los
+  valores vigentes (`patchBase`): si no, cambiar el nombre y después un
+  interruptor devolvía el nombre viejo (prueba e2e de regresión). Los
+  interruptores ganaron `onChange` opcional para mantener los resúmenes.
+
+**Perfil del dueño**: ya no apila los ajustes. Quedan la franja "Así ven tu
+negocio tus clientes" + botón **Ajustes del negocio** (el engranaje también
+lleva ahí; `/cuenta` queda al final de Ajustes como "Mi cuenta"), el estado
+del negocio, "Estoy vendiendo ahora" (R5), las preguntas de clientes, un
+aviso corto si falta verificar el teléfono (enlaza a Ajustes, donde
+Confianza abre sola) y la carta. Las acciones del día pasan al Tablero en
+la Etapa 2.
+
+**Paleta (Parte B)**: tokens `terracota-50`, `terracota-100` (solo fondos
+sin texto y bordes: 4.48:1), `verde-suave`, `rojo-suave`, `rojo-texto`,
+con sus pares en `tests/unit/contrasteTokens.test.js`. Botón secundario =
+grado 2 (borde y texto morados). `CategoryIcon` = ícono morado sobre
+`terracota-50`; pines del mapa morados con ícono blanco
+(`CATEGORY_PIN_COLOR` en `category-icons.ts`, único lugar para volver a un
+tinte por familia si las pruebas con personas lo piden — P2-01);
+`categorias.color` se conserva sin uso. Grupos de pines blancos con borde y
+número morados. Estados en versión suave: "Abierto ahora" (verde suave),
+"Cerrado ahora" (ámbar suave), destructivos en rojo suave; "No estoy
+vendiendo" dejó de ser rojo (no es destructivo). Botones de editar/eliminar
+producto y de responder preguntas pasaron de 36 a 44 px (spec §8).
+
+**Decisión**: medios de pago y zona/costo de domicilio (spec §7.3) necesitan
+migración y endpoints; se dejan para la Etapa 3, donde se muestran en
+"Cómo comprar" del perfil del cliente. "Cómo comprar" de Ajustes tiene por
+ahora WhatsApp, domicilios y bancas.
+
+**Hallazgo**: el `schema.ts` del cliente (generado, no versionado) había
+quedado sin las rutas de R5 tras mezclar ramas: `npm run generate:api`.
+El seed tiene dos "Arepas Doña Rosa" con dueños distintos; las pruebas
+buscan el negocio por `GET /users/me/businesses`, no por nombre.
+
+**Verificado**: backend 719/719; e2e 30/30 (7 nuevas en
+`client/e2e/ajustes-negocio.spec.ts`: perfil corto, familias y resúmenes,
+editar identidad sin que un interruptor pise el nombre, aviso al mover el
+pin >30 m y referencia guardada, solo referencia sin aviso, horario, otra
+persona sin acceso, 320 px sin desplazamiento horizontal); capturas a
+390 px del perfil del dueño, Ajustes y el mapa.

@@ -23,6 +23,14 @@
    */
   --color-terracota: #5b3df5;
   --color-terracota-dark: #4830c2;
+  /*
+   * Perfil 2.0, Parte B (docs/specs/perfil-2.md §2): una sola familia
+   * morada con tintes. -50 = fondo del grado 2 y tinte de íconos de
+   * categoría (terracota encima: 5.24:1); -100 = bordes suaves y fondos
+   * SIN texto encima (terracota sobre -100 da 4.48:1, no pasa AA).
+   */
+  --color-terracota-50: #efebfe;
+  --color-terracota-100: #dfd8fd;
   --color-mostaza: #e3a857;
   /* Estrellas de calificación e íconos dorados (A9): mostaza da 2.10:1 sobre blanco; los íconos piden 3:1. */
   --color-estrella: #b0701a;
@@ -31,6 +39,8 @@
   --color-verde: #2e7d32;
   /* Texto verde sobre tinte verde (A9): verde sobre verde/10 da 4.49:1; este, 7.0:1 o más. */
   --color-verde-texto: #1b5e20;
+  /* Estado verde en versión suave (Parte B): fondo tenue + verde-texto (7.0:1). */
+  --color-verde-suave: #e8f5e9;
   --color-ambar: #f9a825; /* advertencia, estados pendientes */
   /*
    * A9 (fix/pulido-visual): el ámbar sólido como texto no pasa AA
@@ -41,6 +51,9 @@
   --color-ambar-suave: #fff4e0;
   --color-ambar-texto: #7a4a00;
   --color-rojo: #c62828;
+  /* Rojo solo para acciones destructivas, en versión suave (Parte B). */
+  --color-rojo-suave: #fdecec;
+  --color-rojo-texto: #b3261e;
 
   /* Texto, fondo y bordes — Documento 08, tabla 8 */
   --color-background: #fafafa;
@@ -112,14 +125,19 @@
 @theme inline {
   --color-terracota: var(--color-terracota);
   --color-terracota-dark: var(--color-terracota-dark);
+  --color-terracota-50: var(--color-terracota-50);
+  --color-terracota-100: var(--color-terracota-100);
   --color-mostaza: var(--color-mostaza);
   --color-estrella: var(--color-estrella);
   --color-verde: var(--color-verde);
   --color-verde-texto: var(--color-verde-texto);
+  --color-verde-suave: var(--color-verde-suave);
   --color-ambar: var(--color-ambar);
   --color-ambar-suave: var(--color-ambar-suave);
   --color-ambar-texto: var(--color-ambar-texto);
   --color-rojo: var(--color-rojo);
+  --color-rojo-suave: var(--color-rojo-suave);
+  --color-rojo-texto: var(--color-rojo-texto);
 
   --color-background: var(--color-background);
   --color-background-dark: var(--color-background-dark);

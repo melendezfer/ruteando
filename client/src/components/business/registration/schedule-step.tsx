@@ -19,10 +19,12 @@ interface ScheduleStepProps {
   submitting: boolean;
   error: string | null;
   onSubmit: (values: WeekSchedule) => void;
-  onBack: () => void;
+  /** Sin él no hay botón "Atrás" (Ajustes del negocio reusa este editor fuera del asistente). */
+  onBack?: () => void;
+  submitLabel?: string;
 }
 
-const DAYS: { value: Day; label: string }[] = [
+export const DAYS: { value: Day; label: string }[] = [
   { value: "monday", label: "Lunes" },
   { value: "tuesday", label: "Martes" },
   { value: "wednesday", label: "Miércoles" },
@@ -46,7 +48,14 @@ export const DEFAULT_WEEK_SCHEDULE: WeekSchedule = DAYS.reduce((acc, { value }) 
  * antes de enviar es esa misma igualdad, para no hacer un viaje redondo
  * al servidor por un error que ya se puede detectar en el cliente.
  */
-export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBack }: ScheduleStepProps) {
+export function ScheduleStep({
+  initialValues,
+  submitting,
+  error,
+  onSubmit,
+  onBack,
+  submitLabel = "Finalizar registro",
+}: ScheduleStepProps) {
   const [schedule, setSchedule] = useState<WeekSchedule>(initialValues);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -130,11 +139,13 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
       )}
 
       <div className="mt-auto flex gap-3 pt-2">
-        <Button type="button" variant="secondary" onClick={onBack} className="flex-1">
-          Atrás
-        </Button>
+        {onBack && (
+          <Button type="button" variant="secondary" onClick={onBack} className="flex-1">
+            Atrás
+          </Button>
+        )}
         <Button type="submit" loading={submitting} className="flex-1">
-          Finalizar registro
+          {submitLabel}
         </Button>
       </div>
     </form>

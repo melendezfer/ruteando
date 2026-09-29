@@ -11,6 +11,8 @@ interface OwnDeliveryToggleProps {
   categoryId: number;
   contactPhone: string | null;
   initialOwnDelivery: boolean;
+  /** Avisa el valor ya guardado (Ajustes del negocio lo usa para el resumen de su familia). */
+  onChange?: (value: boolean) => void;
 }
 
 /**
@@ -32,6 +34,7 @@ export function OwnDeliveryToggle({
   categoryId,
   contactPhone,
   initialOwnDelivery,
+  onChange,
 }: OwnDeliveryToggleProps) {
   const [ownDelivery, setOwnDelivery] = useState(initialOwnDelivery);
   const [saving, setSaving] = useState(false);
@@ -61,6 +64,7 @@ export function OwnDeliveryToggle({
     }
 
     setOwnDelivery(next);
+    onChange?.(next);
   }
 
   return (

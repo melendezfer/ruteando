@@ -16,8 +16,8 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" })
 
 const STATUS_BADGE: Record<ModerationStatus, { label: string; className: string }> = {
   pending: { label: "Pendiente de revisión", className: "bg-ambar-suave text-ambar-texto" },
-  approved: { label: "Aprobada", className: "bg-verde/15 text-verde-texto" },
-  rejected: { label: "Rechazada", className: "bg-rojo/15 text-rojo" },
+  approved: { label: "Aprobada", className: "bg-verde-suave text-verde-texto" },
+  rejected: { label: "Rechazada", className: "bg-rojo-suave text-rojo-texto" },
 };
 
 /**
@@ -103,7 +103,7 @@ export function ReviewsTab() {
                 {review.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full bg-terracota/10 px-2.5 py-1 font-sans text-caption font-medium text-terracota"
+                    className="rounded-full bg-terracota-50 px-2.5 py-1 font-sans text-caption font-medium text-terracota"
                   >
                     {REVIEW_TAG_LABELS[tag]}
                   </span>

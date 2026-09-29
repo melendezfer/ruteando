@@ -21,7 +21,9 @@ export function Button({
   const variantClasses =
     variant === "primary"
       ? "bg-terracota text-white hover:bg-terracota-dark"
-      : "border border-border bg-surface text-text hover:bg-background";
+      : // Grado 2 de la paleta (Perfil 2.0, docs/specs/perfil-2.md §2.1):
+        // borde y texto morados, tinte suave al pasar el dedo/mouse.
+        "border border-terracota bg-surface text-terracota hover:bg-terracota-50";
 
   return (
     <button

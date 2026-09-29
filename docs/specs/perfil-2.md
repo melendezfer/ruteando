@@ -338,11 +338,15 @@ Cada entrega: su rama desde `develop`, pruebas, guía de prueba manual y **prueb
 
 ---
 
+## 11.1 Avance
+
+- **Etapa 1 (2026-09-29, `feature/perfil-2-ajustes`)**: paleta (entrega 1) y C3 Ajustes con R7 (identidad y horario), WhatsApp editable y referencia junto al mapa. Medios de pago y zona/costo de domicilio pasan a la Etapa 3 (con C1). Detalle: CLAUDE.md §63.
+
 ## 12. Decisiones pendientes
 
 | ID | Pregunta | Propuesta |
 |---|---|---|
-| P2-01 | ¿Pines morados o con tinte por familia? | Morados (§2.4); revisar en I6 |
+| P2-01 | ¿Pines morados o con tinte por familia? | Morados (§2.4), **aplicado en la Etapa 1**; revisar en I6 |
 | P2-02 | ¿Ruta del tablero? | `/tablero`; `/perfil` sigue llevando ahí al vendedor |
 | P2-03 | ¿Las secciones de la carta son libres o de una lista? | Libres (texto del vendedor), con sugerencias según la categoría |
 | P2-04 | ¿Medio de pago por defecto? | `efectivo`, para no dejar el recuadro vacío |

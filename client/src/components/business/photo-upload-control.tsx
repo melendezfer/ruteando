@@ -173,7 +173,7 @@ export function PhotoUploadControl({
               onClick={handleDeleteCurrent}
               disabled={deleting}
               aria-label={`Eliminar ${label.toLowerCase()}`}
-              className="flex h-btn w-12 shrink-0 items-center justify-center rounded-input border border-border text-rojo transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-btn w-12 shrink-0 items-center justify-center rounded-input border border-rojo-texto/30 bg-rojo-suave text-rojo-texto transition-colors hover:bg-rojo-suave disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash size={18} weight="bold" />
             </button>

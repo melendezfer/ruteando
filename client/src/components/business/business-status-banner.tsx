@@ -33,13 +33,13 @@ const STATUS_CONTENT: Record<Exclude<BusinessStatus, "active">, StatusContent> =
   },
   rejected: {
     icon: XCircle,
-    classes: "border-rojo/40 bg-rojo/10 text-rojo",
+    classes: "border-rojo-texto/30 bg-rojo-suave text-rojo-texto",
     title: "Tu negocio fue rechazado",
     description: "Un administrador no lo aprobó. Corrige lo que corresponda y vuelve a contactarnos.",
   },
   suspended: {
     icon: Prohibit,
-    classes: "border-rojo/40 bg-rojo/10 text-rojo",
+    classes: "border-rojo-texto/30 bg-rojo-suave text-rojo-texto",
     title: "Tu negocio está suspendido",
     description:
       "Un administrador lo suspendió — no aparece en el mapa ni en las búsquedas. Contáctanos si crees que fue un error.",

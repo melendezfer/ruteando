@@ -38,7 +38,7 @@ export function SellingNowCard({ businessId, confirmedAt, onChange }: SellingNow
       <div className="flex items-start gap-3">
         <span
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
-            active ? "bg-verde/10 text-verde" : "bg-terracota/10 text-terracota"
+            active ? "bg-verde-suave text-verde-texto" : "bg-terracota-50 text-terracota"
           }`}
         >
           <ConfirmedSellingIcon size={24} weight="fill" />

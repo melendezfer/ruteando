@@ -473,6 +473,32 @@ describe('Límite de catálogo del plan gratis (FREE_PLAN_MAX_CATALOG_PRODUCTS)'
     expect(res.status).toBe(409);
   });
 
+  it('un negocio con más productos de carta que el límite puede editarlos y marcarlos agotados (regresión)', async () => {
+    const { vendor, negocio } = await registrarVendedorConNegocio();
+
+    for (const nombre of ['Plato 1', 'Plato 2', 'Plato 3']) {
+      await crearProducto(vendor.accessToken, negocio.id, { name: nombre });
+    }
+    // El 4to entra por SQL: simula datos anteriores al límite.
+    const { rows } = await pool.query(
+      `INSERT INTO productos (negocio_id, nombre, precio) VALUES ($1, 'Plato 4', 5000) RETURNING id`,
+      [negocio.id],
+    );
+
+    const agotado = await request(app)
+      .patch(`/products/${rows[0].id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Plato 4', price: 5000, available: false });
+    expect(agotado.status).toBe(200);
+    expect(agotado.body.available).toBe(false);
+
+    const precio = await request(app)
+      .patch(`/products/${rows[0].id}`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ name: 'Plato 4', price: 6000 });
+    expect(precio.status).toBe(200);
+  });
+
   it('plan pago: sin límite de productos de catálogo', async () => {
     const { vendor, negocio } = await registrarVendedorConNegocio();
     await pool.query("UPDATE negocios SET plan = 'pago' WHERE id = $1", [negocio.id]);

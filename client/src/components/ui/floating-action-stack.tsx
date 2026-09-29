@@ -2,6 +2,37 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+/**
+ * 1a (fix/pulido-visual): los letreros cortos solo se ven solos durante
+ * las primeras LETREROS_VISITAS visitas (una visita = una sesión del
+ * navegador); después, solo al mantener presionado (celular) o al pasar
+ * el mouse (PC). El aria-label no depende de esto: siempre está.
+ */
+const LETREROS_VISITAS = 3;
+const CLAVE_VISITAS = "ruteando.flotantes.visitas";
+const CLAVE_SESION = "ruteando.flotantes.contada";
+const PRESION_LARGA_MS = 450;
+
+let visitasCache: number | null = null;
+
+/** Cuenta la visita una sola vez por sesión; sin almacenamiento, trata cada carga como primera. */
+function visitasActuales(): number {
+  if (visitasCache !== null) return visitasCache;
+  let visitas = 1;
+  try {
+    visitas = Number(window.localStorage.getItem(CLAVE_VISITAS) ?? "0") || 0;
+    if (!window.sessionStorage.getItem(CLAVE_SESION)) {
+      visitas += 1;
+      window.localStorage.setItem(CLAVE_VISITAS, String(visitas));
+      window.sessionStorage.setItem(CLAVE_SESION, "1");
+    }
+  } catch {
+    visitas = 1;
+  }
+  visitasCache = visitas;
+  return visitas;
+}
+
 export interface FloatingAction {
   icon: ReactNode;
   /** aria-label del botón/enlace — también su nombre accesible para pruebas. */
@@ -50,6 +81,13 @@ export function FloatingActionStack({ actions, reserveSpace = true }: FloatingAc
   const visible = actions.filter((action): action is FloatingAction => action != null);
   const stackRef = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
+  const [letrerosSiempre, setLetrerosSiempre] = useState(false);
+
+  useEffect(() => {
+    // Se lee en el cliente (no en el render) para no desalinear la hidratación.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLetrerosSiempre(visitasActuales() <= LETREROS_VISITAS);
+  }, []);
 
   useEffect(() => {
     const el = stackRef.current;
@@ -70,21 +108,77 @@ export function FloatingActionStack({ actions, reserveSpace = true }: FloatingAc
         className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-end gap-3"
       >
         {visible.map((action, index) => (
-          <FloatingActionButton key={action.label} action={action} principal={index === 0} />
+          <FloatingActionButton
+            key={action.label}
+            action={action}
+            principal={index === 0}
+            letreroSiempre={letrerosSiempre}
+          />
         ))}
       </div>
     </>
   );
 }
 
-function FloatingActionButton({ action, principal }: { action: FloatingAction; principal: boolean }) {
+function FloatingActionButton({
+  action,
+  principal,
+  letreroSiempre,
+}: {
+  action: FloatingAction;
+  principal: boolean;
+  letreroSiempre: boolean;
+}) {
+  const [presionado, setPresionado] = useState(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fuePresionLarga = useRef(false);
+
+  useEffect(() => () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+  }, []);
+
+  const empezarPresion = () => {
+    fuePresionLarga.current = false;
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(() => {
+      fuePresionLarga.current = true;
+      setPresionado(true);
+    }, PRESION_LARGA_MS);
+  };
+  const terminarPresion = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    // El letrero se queda un momento para que se alcance a leer al soltar.
+    if (fuePresionLarga.current) {
+      temporizador.current = setTimeout(() => setPresionado(false), 1500);
+    }
+  };
+  const manejarClic = (event: React.MouseEvent) => {
+    // Mantener presionado es para leer el letrero, no para activar la acción.
+    if (fuePresionLarga.current) {
+      event.preventDefault();
+      fuePresionLarga.current = false;
+      return;
+    }
+    action.onClick?.();
+  };
+  const eventosPresion = {
+    onPointerDown: empezarPresion,
+    onPointerUp: terminarPresion,
+    onPointerLeave: terminarPresion,
+    onPointerCancel: terminarPresion,
+    onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
+  };
+
   const circulo = principal
     ? "flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl"
     : "flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg";
   const contenido = (
     <>
       {action.shortLabel && (
-        <span className="rounded-full bg-surface/95 px-2.5 py-1 font-sans text-body-sm font-semibold text-text shadow-md">
+        <span
+          data-floating-label
+          className={`${letreroSiempre || presionado ? "inline-block" : "hidden group-hover:inline-block"} rounded-full bg-surface/95 px-2.5 py-1 font-sans text-body-sm font-semibold text-text shadow-md select-none`}
+        >
           {action.shortLabel}
         </span>
       )}
@@ -92,18 +186,18 @@ function FloatingActionButton({ action, principal }: { action: FloatingAction; p
     </>
   );
   // Los círculos chicos (48 px) se corren 8 px para quedar centrados sobre el grande (64 px).
-  const fila = `flex items-center gap-2 transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
+  const fila = `group flex items-center gap-2 select-none [-webkit-touch-callout:none] transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
 
   if (action.href) {
     return (
-      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={action.onClick} aria-label={action.label} className={fila}>
+      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={manejarClic} aria-label={action.label} className={fila} {...eventosPresion}>
         {contenido}
       </a>
     );
   }
 
   return (
-    <button type="button" onClick={action.onClick} aria-label={action.label} className={fila}>
+    <button type="button" onClick={manejarClic} aria-label={action.label} className={fila} {...eventosPresion}>
       {contenido}
     </button>
   );

@@ -6784,12 +6784,27 @@ prueba junto. Guía de prueba manual: `docs/pruebas/pulido-visual-prueba-manual.
 - Jest de la raíz tomaba los archivos de Playwright de `client/e2e`
   (llegaron con `fix/credito-osm-visible`) y habría roto el CI: se agregó
   `jest.testPathIgnorePatterns` con `<rootDir>/client/` en `package.json`.
-- **Bug verificado con la app, pendiente**: un negocio con más productos de
-  carta que el límite gratis (3) — los de demo se sembraron antes del
-  límite — no puede editar ninguno, ni siquiera marcarlo agotado: el PATCH
-  vuelve a aplicar el límite y responde 409. Bloquearía R3 ("¿Qué se
-  acabó?"). El límite debería aplicarse solo al crear o al convertir una
-  oferta en producto de carta.
+- **Bug verificado con la app, corregido en esta misma rama (1b)**: un
+  negocio con más productos de carta que el límite gratis (3) — los de
+  demo se sembraron antes del límite — no podía editar ninguno, ni
+  siquiera marcarlo agotado: el PATCH volvía a aplicar el límite (409).
+  Ahora `productos.service.js#actualizar` solo lo revisa cuando el
+  producto ENTRA a la carta (era oferta con vigencia y se le quita);
+  crear sigue igual. Prueba de regresión en `products.test.js` (4to
+  producto sembrado por SQL → PATCH agotado/precio → 200), que falla sin
+  el arreglo.
 - Con la migración de R5 (PR #93) aplicada en una base local, la prueba
-  `nearbyIndexPlan` de esta rama falla porque R5 retira un índice; es del
-  entorno (verificado recreando el índice: pasa). En CI la base es nueva.
+  `nearbyIndexPlan` de esta rama fallaba porque R5 retira un índice. Se
+  reconstruyó la base local desde cero (1c): respaldo con `pg_dump`, luego
+  `DROP DATABASE ruteando_dev WITH (FORCE)` + `CREATE DATABASE`,
+  `npm run migrate:up` y `npm run seed:demo`. Suite completa: 692/692.
+
+**1a — letreros de los flotantes solo al principio**: los nombres cortos
+(Ubicarme, Mapa, Buscar, Perfil, Favoritos, WhatsApp, Llegar) se ven solos
+en las primeras 3 visitas (una visita = una sesión del navegador, contada
+en `localStorage` `ruteando.flotantes.visitas`); después solo el ícono, y
+el nombre aparece al mantener presionado ~0,5 s (celular; soltar no
+activa la acción) o al pasar el mouse (PC, `group-hover`, que en Tailwind
+4 solo aplica con puntero real). El `aria-label` no cambia nunca. Sin
+almacenamiento disponible, cada carga cuenta como primera visita (se ven).
+Prueba: `client/e2e/letreros-flotantes.spec.ts`.

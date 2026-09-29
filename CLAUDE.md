@@ -6918,3 +6918,38 @@ editar identidad sin que un interruptor pise el nombre, aviso al mover el
 pin >30 m y referencia guardada, solo referencia sin aviso, horario, otra
 persona sin acceso, 320 px sin desplazamiento horizontal); capturas a
 390 px del perfil del dueño, Ajustes y el mapa.
+
+### Correcciones tras la primera prueba de la Etapa 1 (2026-09-29)
+
+**Página principal del vendedor** (reemplaza el criterio de §38/§43).
+Causa, verificada leyendo el código y reproducida con una cuenta nueva: el
+único acceso al asistente ("Registrar negocio") vivía en `AppHeader`, que
+desapareció con la navegación flotante (§53), y solo se aterrizaba en
+negocios **activos**. Un vendedor recién registrado, sin negocio o con uno
+pendiente de aprobación, caía al mapa sin salida. Ahora
+(`lib/vendor/use-vendor-home-business.ts`, usado por `/` y `/perfil`):
+- sin negocio (o solo cerrados): `RegisterBusinessCard` destacada
+  ("Registra tu negocio" → `/negocios/nuevo`), en `/` y arriba de `/perfil`;
+- con negocio en cualquier estado salvo cerrado: su perfil de dueño (en la
+  Etapa 2, el tablero);
+- con varios: `pickCurrentBusiness` — el que su horario cubre ahora (turno
+  nocturno incluido, misma regla que el backend), si no el que abre más
+  pronto hoy, si no el primero activo. El selector "¿Cuál de tus negocios?"
+  (`VendorBusinessPicker`) se eliminó. En la Etapa 2 la decisión pasa al
+  servidor (spec §7.5).
+Prueba: `client/e2e/vendedor-inicio.spec.ts` (cuenta nueva por la pantalla
+de registro; el negocio abierto es el más viejo, para que no gane por orden).
+
+**Letreros de los flotantes**: NUNCA se muestran solos; solo al mantener
+presionado (táctil), al pasar el mouse o con foco de teclado (PC). La
+primera vez aparece un único aviso ("Mantén presionado un botón para ver
+qué hace. Entendido") que se cierra con un toque (`localStorage`
+`ruteando.flotantes.aviso-visto`). Por qué fallaba "primeras 3 visitas":
+contaba sesiones del navegador, y en el celular una pestaña o la PWA vive
+días con la misma sesión (además, `localhost` y la IP de la red local
+cuentan aparte), así que casi nunca pasaba de 3. El hover ya no es CSS
+(`group-hover`) sino `pointerType === "mouse"`: en táctil el `:hover` puede
+quedar pegado tras un toque (hipótesis sin verificar en un celular real).
+Prueba: `client/e2e/letreros-flotantes.spec.ts`, que falla con la regla
+vieja (comprobado reconstruyendo con el archivo anterior) y pasa con la
+nueva. e2e completas: 31/31.

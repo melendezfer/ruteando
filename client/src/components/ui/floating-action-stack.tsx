@@ -3,34 +3,41 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
- * 1a (fix/pulido-visual): los letreros cortos solo se ven solos durante
- * las primeras LETREROS_VISITAS visitas (una visita = una sesión del
- * navegador); después, solo al mantener presionado (celular) o al pasar
- * el mouse (PC). El aria-label no depende de esto: siempre está.
+ * Letreros de los flotantes (pedido del usuario, 2026-09-29): NUNCA se
+ * muestran solos. Solo aparecen al mantener presionado (táctil) o al pasar
+ * el mouse / enfocar con teclado (PC). La primera vez que alguien abre la
+ * app, un único aviso pequeño lo explica y se cierra con un toque. El
+ * aria-label está siempre.
+ *
+ * Antes (1a) se mostraban solos en las "primeras 3 visitas", contadas por
+ * sesión del navegador: en el celular una pestaña o la PWA vive días con la
+ * misma sesión (y el contador es distinto por dirección: localhost y la IP
+ * de la red local cuentan aparte), así que en la práctica casi nunca pasaba
+ * de 3 y los letreros tapaban media pantalla.
  */
-const LETREROS_VISITAS = 3;
-const CLAVE_VISITAS = "ruteando.flotantes.visitas";
-const CLAVE_SESION = "ruteando.flotantes.contada";
 const PRESION_LARGA_MS = 450;
+const CLAVE_AVISO = "ruteando.flotantes.aviso-visto";
 
-let visitasCache: number | null = null;
+let avisoVistoCache: boolean | null = null;
 
-/** Cuenta la visita una sola vez por sesión; sin almacenamiento, trata cada carga como primera. */
-function visitasActuales(): number {
-  if (visitasCache !== null) return visitasCache;
-  let visitas = 1;
+function avisoYaVisto(): boolean {
+  if (avisoVistoCache !== null) return avisoVistoCache;
   try {
-    visitas = Number(window.localStorage.getItem(CLAVE_VISITAS) ?? "0") || 0;
-    if (!window.sessionStorage.getItem(CLAVE_SESION)) {
-      visitas += 1;
-      window.localStorage.setItem(CLAVE_VISITAS, String(visitas));
-      window.sessionStorage.setItem(CLAVE_SESION, "1");
-    }
+    avisoVistoCache = window.localStorage.getItem(CLAVE_AVISO) === "1";
   } catch {
-    visitas = 1;
+    // Sin almacenamiento no hay cómo recordarlo: no se insiste.
+    avisoVistoCache = true;
   }
-  visitasCache = visitas;
-  return visitas;
+  return avisoVistoCache;
+}
+
+function marcarAvisoVisto() {
+  avisoVistoCache = true;
+  try {
+    window.localStorage.setItem(CLAVE_AVISO, "1");
+  } catch {
+    // nada que hacer
+  }
 }
 
 export interface FloatingAction {
@@ -81,13 +88,14 @@ export function FloatingActionStack({ actions, reserveSpace = true }: FloatingAc
   const visible = actions.filter((action): action is FloatingAction => action != null);
   const stackRef = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
-  const [letrerosSiempre, setLetrerosSiempre] = useState(false);
+  const [mostrarAviso, setMostrarAviso] = useState(false);
+  const tieneLetreros = visible.some((action) => action.shortLabel);
 
   useEffect(() => {
     // Se lee en el cliente (no en el render) para no desalinear la hidratación.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLetrerosSiempre(visitasActuales() <= LETREROS_VISITAS);
-  }, []);
+    if (tieneLetreros) setMostrarAviso(!avisoYaVisto());
+  }, [tieneLetreros]);
 
   useEffect(() => {
     const el = stackRef.current;
@@ -108,28 +116,32 @@ export function FloatingActionStack({ actions, reserveSpace = true }: FloatingAc
         className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-end gap-3"
       >
         {visible.map((action, index) => (
-          <FloatingActionButton
-            key={action.label}
-            action={action}
-            principal={index === 0}
-            letreroSiempre={letrerosSiempre}
-          />
+          <FloatingActionButton key={action.label} action={action} principal={index === 0} />
         ))}
+        {mostrarAviso && (
+          <button
+            type="button"
+            data-floating-tip
+            onClick={() => {
+              marcarAvisoVisto();
+              setMostrarAviso(false);
+            }}
+            className="max-w-56 rounded-card bg-text px-3 py-2 text-left font-sans text-body-sm text-white shadow-lg"
+          >
+            Mantén presionado un botón para ver qué hace.{" "}
+            <span className="font-semibold underline">Entendido</span>
+          </button>
+        )}
       </div>
     </>
   );
 }
 
-function FloatingActionButton({
-  action,
-  principal,
-  letreroSiempre,
-}: {
-  action: FloatingAction;
-  principal: boolean;
-  letreroSiempre: boolean;
-}) {
+function FloatingActionButton({ action, principal }: { action: FloatingAction; principal: boolean }) {
   const [presionado, setPresionado] = useState(false);
+  // Mouse encima o foco con teclado (PC). En táctil NO: ahí el :hover queda
+  // "pegado" después de un toque; por eso no se usa group-hover de CSS.
+  const [senalado, setSenalado] = useState(false);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fuePresionLarga = useRef(false);
 
@@ -164,7 +176,17 @@ function FloatingActionButton({
   const eventosPresion = {
     onPointerDown: empezarPresion,
     onPointerUp: terminarPresion,
-    onPointerLeave: terminarPresion,
+    onPointerEnter: (event: React.PointerEvent) => {
+      if (event.pointerType === "mouse") setSenalado(true);
+    },
+    onPointerLeave: (event: React.PointerEvent) => {
+      if (event.pointerType === "mouse") setSenalado(false);
+      terminarPresion();
+    },
+    onFocus: (event: React.FocusEvent<HTMLElement>) => {
+      if (event.currentTarget.matches(":focus-visible")) setSenalado(true);
+    },
+    onBlur: () => setSenalado(false),
     onPointerCancel: terminarPresion,
     onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
   };
@@ -177,7 +199,7 @@ function FloatingActionButton({
       {action.shortLabel && (
         <span
           data-floating-label
-          className={`${letreroSiempre || presionado ? "inline-block" : "hidden group-hover:inline-block"} rounded-full bg-surface/95 px-2.5 py-1 font-sans text-body-sm font-semibold text-text shadow-md select-none`}
+          className={`${presionado || senalado ? "inline-block" : "hidden"} rounded-full bg-surface/95 px-2.5 py-1 font-sans text-body-sm font-semibold text-text shadow-md select-none`}
         >
           {action.shortLabel}
         </span>
@@ -186,7 +208,7 @@ function FloatingActionButton({
     </>
   );
   // Los círculos chicos (48 px) se corren 8 px para quedar centrados sobre el grande (64 px).
-  const fila = `group flex items-center gap-2 select-none [-webkit-touch-callout:none] transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
+  const fila = `flex items-center gap-2 select-none [-webkit-touch-callout:none] transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
 
   if (action.href) {
     return (

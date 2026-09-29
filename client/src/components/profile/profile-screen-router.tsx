@@ -6,54 +6,40 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { ProfileScreen } from "@/components/profile/profile-screen";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
-import { VendorBusinessPicker } from "@/components/discovery/vendor-business-picker";
-import { useVendorActiveBusinesses } from "@/lib/vendor/use-vendor-active-businesses";
+import { RegisterBusinessCard } from "@/components/business/register-business-card";
+import { useVendorHomeBusiness } from "@/lib/vendor/use-vendor-home-business";
 
 /**
- * "/perfil" por rol (petición directa del usuario, sin RF asociado — ver
- * CLAUDE.md sección 43): cierra el hueco real que dejó la sección 38 —
- * un vendedor con negocio activo que sale de él (a Mapa/Favoritos) no
- * tenía ninguna forma de volver desde la barra inferior, porque "Perfil"
- * siempre llevaba a la cuenta genérica y ningún destino apunta a "/".
- * Mismo criterio EXACTO que `HomeScreenRouter` en "/", reusando el mismo
- * hook (`useVendorActiveBusinesses`) y el mismo selector
- * (`VendorBusinessPicker`) para no duplicar la pregunta "¿cuál negocio
- * activo tiene este vendedor?" en dos lugares con lógica separada:
- *
- * - Sin negocio activo (consumidor, administrador, o vendedor sin
- *   ninguno todavía) — la cuenta de siempre, sin cambios.
- * - Exactamente un negocio activo — aterriza ahí directo.
- * - 2+ activos — el mismo selector que ya usa "/".
- *
- * La cuenta (contraseña, consentimientos, eliminar cuenta) sigue
- * accesible para un vendedor redirigido, vía un ícono nuevo dentro de
- * `business-profile-screen.tsx` que enlaza a `/cuenta` — una ruta
- * dedicada, sin este redirect, para no crear un ciclo (enlazar a
- * "/perfil" desde ahí solo devolvería al mismo negocio).
+ * "Perfil" por rol, mismo criterio que `/` (home-screen-router.tsx): un
+ * vendedor con negocio va a su negocio (el de la hora actual si tiene
+ * varios); sin negocio, ve su cuenta con "Registra tu negocio" arriba.
+ * Consumidor/administrador: su cuenta. `/cuenta` sigue siendo la cuenta sin
+ * redirección (CLAUDE.md §43).
  */
 export function ProfileScreenRouter() {
   const { user } = useAuth();
   const router = useRouter();
-  const activeBusinesses = useVendorActiveBusinesses();
+  const homeBusiness = useVendorHomeBusiness();
+  const isVendor = user?.role === "vendor";
 
   useEffect(() => {
-    if (activeBusinesses?.length === 1 && activeBusinesses[0].id) {
-      router.replace(`/negocios/${activeBusinesses[0].id}`);
-    }
-  }, [activeBusinesses, router]);
+    if (homeBusiness?.id) router.replace(`/negocios/${homeBusiness.id}`);
+  }, [homeBusiness, router]);
 
-  if (activeBusinesses?.length === 0) {
-    if (!user) return null;
+  if (!user) return null;
+
+  if (!isVendor || homeBusiness === null) {
     return (
       <main className="flex flex-1 flex-col">
+        {isVendor && (
+          <div className="px-5 pt-6">
+            <RegisterBusinessCard />
+          </div>
+        )}
         <ProfileScreen user={user} />
         <MainFloatingNav />
       </main>
     );
-  }
-
-  if (activeBusinesses && activeBusinesses.length > 1) {
-    return <VendorBusinessPicker businesses={activeBusinesses} />;
   }
 
   return (

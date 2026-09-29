@@ -21,6 +21,8 @@ Rama `feature/perfil-2-ajustes` (sale de R5, `feature/r5-estoy-vendiendo`, con `
 | 7 | Horario | Se puede editar después del registro (antes no). "Guardar horario" → "Horario guardado." El resumen dice el horario de hoy. |
 | 8 | Confianza / Herramientas | Verificación de teléfono (abierta sola si falta) e higiene; código QR e ideas de tus clientes. |
 | 9 | Colores (en toda la app) | Una sola familia morada: botones secundarios con borde morado; íconos de categoría morados sobre tinte suave (antes naranja/turquesa/morado por familia); en el mapa, pines morados con el ícono blanco y los grupos de pines blancos con borde y número morados. Verde, ámbar y rojo solo como estados, en versión suave ("Abierto ahora" verde suave; "Agotado" ámbar suave; eliminar en rojo suave). |
+| 11 | Crea una cuenta nueva como vendedor (Crear cuenta → "Tengo un negocio") | Al entrar ves **Registra tu negocio** destacado; el botón abre el asistente. Al terminar el registro, cada vez que entras aterrizas en tu negocio (aunque esté pendiente de aprobación). Con dos negocios, aterrizas en el que tiene horario ahora. |
+| 12 | Botones flotantes (en cualquier pantalla) | Solo íconos, sin letreros. La primera vez aparece un aviso pequeño "Mantén presionado un botón para ver qué hace" que se cierra con un toque y no vuelve. Mantén presionado un botón: aparece su nombre y no se activa. En PC, al pasar el mouse. |
 | 10 | Entra como Perros El Parche y abre `/negocios/<id de Arepas>/ajustes` | "Solo el dueño del negocio puede cambiar sus ajustes." |
 
 Al terminar, `npm run seed:demo` deja los datos de demo como estaban.

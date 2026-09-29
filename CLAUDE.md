@@ -43,6 +43,13 @@ personales, (4) borrar historial. Los PR de solo documentos o de CI se
 pueden fusionar sin preguntar, siempre con el CI en verde. **Nunca
 fusionar con el CI en rojo.**
 
+**Base de datos local** (regla del usuario, 2026-09-29): antes de borrar
+o reconstruir una base de datos (incluida la de desarrollo), guardar un
+respaldo con `pg_dump -Fc` en `~/respaldos-ruteando/` (fuera del repo;
+tiene datos personales, nunca va a git) y avisar al usuario con la ruta
+del archivo y el comando para restaurarlo. Nunca dejar el único
+respaldo en un directorio temporal.
+
 ## 2. Stack técnico (versiones verificadas, no asumidas)
 
 - Backend: Node.js 24 (LTS activo).

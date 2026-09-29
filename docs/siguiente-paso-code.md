@@ -1,4 +1,4 @@
-# Siguiente paso para Claude Code (pendiente de enviar)
+# Siguiente paso para Claude Code (enviado el 2026-09-29; #94 ya fusionado, Perfil 2.0 en curso)
 
 Fecha: 2026-09-28. Estado al cerrar: PR #93 (R5) y PR #94 (pulido visual) abiertos y sin fusionar; spec del Perfil 2.0 y contexto rápido en la rama `docs/perfil-2`.
 

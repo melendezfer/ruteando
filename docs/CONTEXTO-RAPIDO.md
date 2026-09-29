@@ -48,7 +48,8 @@ Node.js 24 + Express 5 + PostgreSQL 18/PostGIS 3.6 (REST, contrato en `openapi.y
 2. Prerrequisitos del ancla R3, R4, R6–R14 (`docs/integracion-ancla.md` §2).
 3. Integración del botón-ancla (etapas I1–I6).
 4. Pendientes sin proveedor: correo, SMS y push (Firebase).
-5. Bug verificado: un negocio con más productos que el límite gratis (3) no puede editar ninguno (409). Bloquea R3 (CLAUDE.md §62).
+
+**Actualización 2026-09-29:** PR #94 fusionado en `develop` (incluye el arreglo del límite gratis al editar productos, letreros de flotantes solo en las 3 primeras visitas y reintentos de MinIO en CI). Base local reconstruida desde cero; respaldo previo en `~/respaldos-ruteando/`. Perfil 2.0 en curso en `feature/perfil-2-ajustes` (sale de R5).
 
 ## Dónde está cada cosa
 

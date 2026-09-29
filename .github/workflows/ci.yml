@@ -96,13 +96,27 @@ jobs:
         # encontrado en desarrollo): un bucket de MinIO nuevo queda
         # privado por defecto — sin esto, cualquier prueba que de verdad
         # descargue una fotos.url (no solo suba/borre) recibiría 403.
+        #
+        # Con reintentos (2026-09-29): la imagen de Bitnami arranca MinIO
+        # una vez para configurarse y lo reinicia; el chequeo de salud del
+        # paso anterior puede pasar antes de ese reinicio, y entonces `mc`
+        # recibe "connection reset by peer". Visto en el CI del PR #94.
         run: |
-          docker run --rm --network host \
-            -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
-            bitnamilegacy/minio-client:2025.7.21 mc mb --ignore-existing local/ruteando-media-ci
-          docker run --rm --network host \
-            -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
-            bitnamilegacy/minio-client:2025.7.21 mc anonymous set download local/ruteando-media-ci
+          mc() {
+            docker run --rm --network host \
+              -e MC_HOST_local=http://ci-placeholder:ci-placeholder@localhost:9000 \
+              bitnamilegacy/minio-client:2025.7.21 mc "$@"
+          }
+          for i in $(seq 1 20); do
+            if mc mb --ignore-existing local/ruteando-media-ci && mc anonymous set download local/ruteando-media-ci; then
+              echo "Bucket listo"
+              exit 0
+            fi
+            echo "MinIO todavía no responde (intento $i), reintento..."
+            sleep 3
+          done
+          docker logs minio
+          exit 1
 
       - run: npm test
 

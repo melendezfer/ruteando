@@ -257,6 +257,11 @@ function toApiBusiness(row) {
     // ahí. Decisión B (petición directa del usuario): esto es solo una
     // insignia informativa, nunca filtra ni oculta ningún resultado.
     availabilityConfirmedAt: row.disponibilidad_confirmada_en ?? null,
+    // Calificación pública (2026-10-03): en los listados viene del LATERAL
+    // de calificacionesPublicas.js; en el perfil, perfilNegocio la pisa con
+    // obtenerAgregado (misma regla). null/0 donde no se calcula.
+    averageRating: row.resenas_promedio != null ? Number(row.resenas_promedio) : null,
+    reviewCount: row.resenas_total ?? 0,
     // RF-020 (Épica 9): motivo que un administrador escribió al rechazar
     // el negocio (columna motivo_rechazo, ver migración
     // estado-negocio-rechazado) — es la única forma de que el vendedor

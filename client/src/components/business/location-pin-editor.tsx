@@ -150,7 +150,8 @@ export function LocationPinEditor({ businessId, location, onSaved }: LocationPin
         punto distinto al que quedó registrado.
       </p>
 
-      <div className="h-56 w-full overflow-hidden rounded-card">
+      {/* isolate (R14): los paneles de Leaflet (z hasta 1000) quedan contenidos y no compiten con modales ni avisos. */}
+      <div className="isolate h-56 w-full overflow-hidden rounded-card">
         <MapContainer center={[pin.lat, pin.lng]} zoom={16} scrollWheelZoom={false} className="h-full w-full">
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

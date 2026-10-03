@@ -34,6 +34,8 @@ interface ProductFormProps {
   fieldErrors: Record<string, string>;
   onSubmit: (values: ProductFormValues) => void;
   onCancel: () => void;
+  /** Abre con "Es una oferta con vigencia" encendida (atajo "Publicar oferta" del tablero). */
+  startAsOffer?: boolean;
 }
 
 const EMPTY_VALUES: ProductFormValues = {
@@ -78,6 +80,7 @@ export function ProductForm({
   fieldErrors,
   onSubmit,
   onCancel,
+  startAsOffer = false,
 }: ProductFormProps) {
   const [name, setName] = useState(initialValues?.name ?? EMPTY_VALUES.name);
   const [price, setPrice] = useState(initialValues?.price ?? EMPTY_VALUES.price);
@@ -90,7 +93,7 @@ export function ProductForm({
   // catálogo son normales, así que arranca colapsada salvo que
   // `initialValues` ya traiga una oferta real (editar una existente).
   const [isOffer, setIsOffer] = useState(
-    Boolean(initialValues?.offerTypeId || initialValues?.validFrom),
+    Boolean(startAsOffer || initialValues?.offerTypeId || initialValues?.validFrom),
   );
   const [offerTypes, setOfferTypes] = useState<OfferType[]>([]);
   const [offerTypeId, setOfferTypeId] = useState<number | null>(initialValues?.offerTypeId ?? null);
@@ -157,7 +160,7 @@ export function ProductForm({
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-(--capa-modales) flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
     >
       <form
         onSubmit={handleSubmit}

@@ -58,7 +58,7 @@ async function crearNegocio(t: string, nombre: string, horario: "todo-el-dia" | 
   return negocio.id;
 }
 
-test("vendedor nuevo: sin negocio ve 'Registra tu negocio'; con negocio aterriza en él; con varios, en el de ahora", async ({
+test("vendedor nuevo: sin negocio ve 'Registra tu negocio'; con negocio aterriza en su tablero; con varios, AHORA y DESPUÉS", async ({
   page,
 }) => {
   const email = await registrarVendedorPorPantalla(page);
@@ -73,20 +73,28 @@ test("vendedor nuevo: sin negocio ve 'Registra tu negocio'; con negocio aterriza
   await page.goto("/perfil", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Registra tu negocio" })).toBeVisible();
 
-  // 2. Un negocio recién creado (pendiente de aprobación): aterriza en él.
+  // 2. Un negocio recién creado (pendiente de aprobación): aterriza en su
+  // tablero del día (Perfil 2.0, Etapa 2).
   const t = await token(email);
   const abierto = await crearNegocio(t, "Tintos de prueba", "todo-el-dia");
   await page.goto("/", { waitUntil: "networkidle" });
-  await page.waitForURL(`**/negocios/${abierto}`, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Tintos de prueba" })).toBeVisible();
+  await page.waitForURL("**/tablero", { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Mi negocio hoy" })).toBeVisible();
+  await expect(page.getByText("Tintos de prueba").first()).toBeVisible();
 
-  // 3. Dos negocios: gana el que su horario cubre ahora, aunque el otro sea
-  // más nuevo (la lista viene del más nuevo al más viejo).
+  // 3. Dos negocios: AHORA es el que su horario cubre ahora, aunque el otro
+  // sea más nuevo; el cerrado va en DESPUÉS. "Perfil" también trae al tablero.
   const cerrado = await crearNegocio(t, "Chorizos de prueba", "cerrado");
   await page.goto("/", { waitUntil: "networkidle" });
-  await page.waitForURL(`**/negocios/${abierto}`, { timeout: 15_000 });
+  await page.waitForURL("**/tablero", { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Mis negocios de hoy" })).toBeVisible();
+  const ahora = page.locator("section", { has: page.locator("#tablero-ahora") });
+  await expect(ahora.getByText("Tintos de prueba")).toBeVisible();
+  const despues = page.locator("section", { has: page.locator("#tablero-despues") });
+  await expect(despues.getByText("Chorizos de prueba")).toBeVisible();
+  await expect(despues.getByText("Cerrado hoy")).toBeVisible();
   await page.goto("/perfil", { waitUntil: "networkidle" });
-  await page.waitForURL(`**/negocios/${abierto}`, { timeout: 15_000 });
+  await page.waitForURL("**/tablero", { timeout: 15_000 });
 
   // Limpieza: cerrar los dos negocios de prueba.
   for (const id of [cerrado, abierto]) {

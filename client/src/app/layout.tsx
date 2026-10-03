@@ -3,6 +3,7 @@ import { Inter, Plus_Jakarta_Sans, Syne } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { FavoritesProvider } from "@/lib/favorites/favorites-context";
+import { UndoToastProvider } from "@/lib/ui/undo-toast";
 import "./globals.css";
 
 const inter = Inter({
@@ -48,7 +49,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <FavoritesProvider>{children}</FavoritesProvider>
+          <FavoritesProvider>
+            <UndoToastProvider>{children}</UndoToastProvider>
+          </FavoritesProvider>
         </AuthProvider>
         <ServiceWorkerRegister />
       </body>

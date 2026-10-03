@@ -125,9 +125,15 @@ for (const pantalla of PANTALLAS) {
       geolocation: CENTRO,
     });
 
-    test("perfil del negocio visto por su dueño", async ({ page }) => {
+    test("tablero y perfil del negocio visto por su dueño", async ({ page }) => {
       await entrar(page, DUENO);
-      await page.waitForURL(/\/negocios\//, { timeout: 20_000 });
+      await page.waitForURL("**/tablero", { timeout: 20_000 });
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByRole("heading", { name: "¿Qué se acabó?" })).toBeVisible();
+      expect(await tapadosAlFinal(page)).toEqual([]);
+      // Vista del dueño de su negocio (sin "?vista=cliente").
+      const verComoCliente = await page.getByRole("link", { name: "Ver como cliente" }).getAttribute("href");
+      await page.goto(verComoCliente!.split("?")[0], { waitUntil: "networkidle" });
       await page.waitForLoadState("networkidle");
       // A2: el dueño no ve las acciones del cliente sobre su propio negocio.
       await expect(page.getByRole("link", { name: "Contactar por WhatsApp" })).toHaveCount(0);

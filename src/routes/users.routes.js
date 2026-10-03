@@ -33,6 +33,8 @@ router.get(
 // Pantalla de inicio por rol (sin RF asociado, ver CLAUDE.md) — un
 // vendedor necesita saber si ya tiene un negocio (y cuál/cuáles) para
 // decidir a dónde lo manda "/" en vez del mapa.
+// Tablero del día (Perfil 2.0 §4.2): AHORA / DESPUÉS ordenado en el servidor.
+router.get('/me/businesses/today', authenticate, usersController.listTodayBusinesses);
 router.get(
   '/me/businesses',
   authenticate,

@@ -156,6 +156,43 @@ async function listarPorUsuario(usuarioId, filtros) {
   }));
 }
 
+/**
+ * GET /users/me/businesses/today — tablero del día (Perfil 2.0 §4.2):
+ * AHORA (horario o franja cubren la hora actual; primero el que tiene
+ * aviso "vendiendo" vigente, después el que abrió primero), DESPUÉS (abre
+ * más tarde hoy, por hora) y al final los que ya cerraron o no abren hoy.
+ * Endpoint aparte de GET /users/me/businesses porque ese pagina por fecha
+ * de creación (cursor keyset) y este orden no es paginable; un vendedor
+ * tiene pocos negocios (tope 50).
+ */
+async function listarDeHoy(usuarioId) {
+  const filas = await negociosRepo.listarDeHoyPorUsuario(usuarioId);
+  const conTurno = filas.map((fila) => {
+    const status = fila.abierto_ahora ? 'now' : fila.abre_mas_tarde ? 'later' : 'closed';
+    return { fila, status };
+  });
+  const rango = { now: 0, later: 1, closed: 2 };
+  conTurno.sort((a, b) => {
+    if (a.status !== b.status) return rango[a.status] - rango[b.status];
+    if (a.status === 'now') {
+      const va = a.fila.disponibilidad_confirmada_en ? 0 : 1;
+      const vb = b.fila.disponibilidad_confirmada_en ? 0 : 1;
+      if (va !== vb) return va - vb;
+    }
+    return (a.fila.hoy_apertura ?? '99:99').localeCompare(b.fila.hoy_apertura ?? '99:99');
+  });
+  return {
+    data: conTurno.map(({ fila, status }) => ({
+      ...toApiBusiness(fila),
+      today: {
+        status,
+        openTime: fila.hoy_apertura ?? null,
+        closeTime: fila.hoy_cierre ?? null,
+      },
+    })),
+  };
+}
+
 async function listar(filtros) {
   const cursor = decodificarCursor(filtros.cursor, CURSOR_LISTAR_SCHEMA);
 
@@ -188,6 +225,7 @@ module.exports = {
   actualizar,
   cerrar,
   listarPorUsuario,
+  listarDeHoy,
   listar,
   cercanos,
   obtenerCrudoOFallar,

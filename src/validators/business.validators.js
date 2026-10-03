@@ -303,7 +303,13 @@ const myBusinessesListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+/** GET /businesses/{businessId}/stats — ventana en días (7 por defecto, hasta 30). */
+const businessStatsQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(30).default(7),
+});
+
 module.exports = {
+  businessStatsQuerySchema,
   businessInputSchema,
   locationInputSchema,
   locationVisibilityInputSchema,

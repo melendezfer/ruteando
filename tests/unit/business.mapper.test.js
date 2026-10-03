@@ -53,6 +53,8 @@ describe('toApiBusiness', () => {
       matchedOfferType: null,
       activeOffers: null,
       rejectionReason: null,
+      averageRating: null,
+      reviewCount: 0,
       availabilityConfirmedAt: null,
     });
   });

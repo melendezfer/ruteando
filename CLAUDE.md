@@ -7063,3 +7063,71 @@ Spec: `docs/specs/perfil-2.md` §8.1; lugar del ancla:
   franja), `pointer-events: none` y se cierra con cualquier toque
   (`pointerdown` en el documento). `flotantes-no-tapan` ya no lo cierra y
   falla si su caja se cruza con un texto o control.
+
+## 64. Perfil 2.0 — Etapa 2: tablero del día (C2), R3, R4 y R14
+
+Spec: `docs/specs/perfil-2.md` §4 (C2), §7.4–7.5 y §11.1 (desviaciones);
+R3/R4/R14: `docs/integracion-ancla.md`. Rama `feature/perfil-2-tablero`.
+Guía: `docs/pruebas/perfil-2-etapa-2-prueba-manual.md`.
+
+- **`/tablero`** (`components/vendor/tablero-screen.tsx`): la página
+  principal del vendedor con algún negocio (no cerrado); `/` y `/perfil`
+  redirigen ahí (antes, a `/negocios/{id}`). Arriba el negocio de AHORA con
+  "Estoy vendiendo ahora" (R5) como única acción principal, "Ver como
+  cliente" y "Ajustes"; DESPUÉS los demás de hoy (tocar uno lo pasa
+  arriba); "Tu semana"; Pendientes (preguntas, registro incompleto,
+  WhatsApp sin verificar, oferta que vence hoy); "¿Qué se acabó?" (R3) y
+  "Publicar oferta". El perfil del dueño enlaza "Volver a mi tablero".
+- **`GET /users/me/businesses/today`** (nuevo): ordena AHORA (horario o
+  franja cubren la hora actual; con aviso "vendiendo" primero) / DESPUÉS
+  (por hora de apertura) / cerrados, en el servidor con
+  `condicionRangoHorarioSQL`. Reemplaza a `pickCurrentBusiness` (cliente,
+  eliminado); `useVendorHomeBusiness` lo usa. Aparte de
+  `GET /users/me/businesses` porque ese pagina por fecha de creación.
+- **`GET /businesses/{id}/stats?days=7`** (solo el dueño): visitas
+  (`vista_negocio`), contactos (`clic_contacto` + `clic_como_llegar`),
+  calificación aprobada por ventana y `pendingReviews` (aparte). Índice
+  `idx_eventos_negocio_tipo_fecha` (migración `tablero-estadisticas`, que
+  también suma `clic_como_llegar` a `tipo_evento`), con prueba de plan.
+  API `directions_click`, registrado en los cuatro "Cómo llegar".
+- **R3**: interruptor Disponible/Agotado por producto (PATCH con nombre y
+  precio vigentes, porque el validador los exige) con "Deshacer".
+- **R4**: `useUndoToast` (un aviso a la vez, abajo a la izquierda, fuera
+  de la franja de la columna, 7 s) y `ConfirmSheet` (lo irreversible).
+  Los dos `window.confirm` se fueron. Atajos del tablero abren el
+  formulario del perfil con `?agregar=producto|oferta` (`startAsOffer`).
+- **R14**: escala `--capa-*` en `globals.css` (flotantes 40, hojas 1000,
+  ancla 1050, avisos 1080, modales 1100); todos los modales a 1100; mapas
+  chicos en `isolate`. Verificado con la app: la hoja de confirmación
+  queda encima del mapa del asistente.
+- **Pruebas**: backend `tests/integration/tablero.test.js` (7: cifras por
+  ventana, calificación, 401/403/404/422, plan con índice, orden
+  AHORA/DESPUÉS/cerrados, `directions_click`) y contraste de los pares
+  nuevos; e2e `client/e2e/tablero.spec.ts` (R3 + Deshacer, Tu semana,
+  atajos, R4 sin diálogo nativo, R14), `vendedor-inicio` (AHORA/DESPUÉS),
+  `acceso-al-mapa` (suma `/tablero`). Backend 730/730 y e2e 65/65.
+  `tablero.spec` cierra los negocios que crea: los que quedaban
+  "pendientes" llenaban la cola del admin y rompían `admin.test.js` en la
+  base de desarrollo. **Hallazgo**: el backend de pm2 no recarga solo; tras cambiar
+  rutas hay que `pm2 restart ruteando-backend`.
+
+### Ajustes tras la prueba del usuario (2026-10-03)
+
+- **Orden del tablero**: ahora → ¿Qué se acabó? → Pendientes → Tu semana
+  → Después → atajos ("Agregar producto" pasó a atajos).
+- **"Ver como cliente"** (`?vista=cliente`, leído en el servidor por
+  `negocios/[businessId]/page.tsx`): `isOwner` queda en `false` y
+  `realOwner` solo esconde lo que el dueño no puede hacer sobre su propio
+  negocio (preguntar si vende, calificar). Prueba e2e que lista todo
+  botón/enlace/interruptor visible y falla si aparece un control de dueño
+  (y comprueba que en la vista de dueño sí los detecta).
+- **Calificaciones públicas al instante** (spec §3.6): causa verificada con
+  la app (nacían `pendiente`, solo cuentan `aprobada`, sin panel que las
+  apruebe). Ahora nacen `aprobada`, una por persona (reemplazo, 201/200,
+  `resenasRepo.crearOReemplazar`), moderación solo para lo reportado;
+  `averageRating`/`reviewCount` en `Business` (listados) vía
+  `calificacionesPublicas.js`; `RatingSummary` en perfil, hoja del mapa,
+  /buscar y carrusel. Pruebas: `resenas.test.js` (publicada, reemplazo,
+  reportada y reemplazada, listados), `nearbyIndexPlan` siembra `resenas`,
+  e2e `calificaciones.spec.ts`. Se borraron las calificaciones de prueba
+  que quedaron en negocios de demo (cuentas `e2e-calif-…`).

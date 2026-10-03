@@ -17,6 +17,7 @@ const {
   businessListQuerySchema,
   businessNearbyQuerySchema,
   businessZonesQuerySchema,
+  businessStatsQuerySchema,
 } = require('../validators/business.validators');
 const { productInputSchema } = require('../validators/product.validators');
 const { reviewInputSchema, reviewListQuerySchema } = require('../validators/resenas.validators');
@@ -122,6 +123,15 @@ router.delete('/:businessId/live-location', validarBusinessId, authenticate, con
 // dueño; ver senalesVenta.service.js para el orden de las reglas.
 router.put('/:businessId/selling-now', validarBusinessId, authenticate, controller.putSellingNow);
 router.delete('/:businessId/selling-now', validarBusinessId, authenticate, controller.deleteSellingNow);
+
+// "Tu semana" del tablero (Perfil 2.0 §4.4): solo el dueño.
+router.get(
+  '/:businessId/stats',
+  validarBusinessId,
+  authenticate,
+  validateQuery(businessStatsQuerySchema),
+  controller.getStats,
+);
 
 router.post(
   '/:businessId/outdated-reports',

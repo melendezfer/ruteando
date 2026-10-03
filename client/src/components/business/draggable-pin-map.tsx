@@ -22,7 +22,7 @@ interface DraggablePinMapProps {
 export function DraggablePinMap({ pin, onPinChange, label, className = "h-56" }: DraggablePinMapProps) {
   const icon = useMemo(() => createPinIcon(), []);
   return (
-    <div role="region" aria-label={label} className={`w-full overflow-hidden rounded-card ${className}`}>
+    <div role="region" aria-label={label} className={`isolate w-full overflow-hidden rounded-card ${className}`}>
       <MapContainer center={[pin.lat, pin.lng]} zoom={16} scrollWheelZoom={false} className="h-full w-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

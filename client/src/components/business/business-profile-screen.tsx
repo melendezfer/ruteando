@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { RatingSummary } from "@/components/ui/rating-summary";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Chair,
@@ -12,7 +13,7 @@ import {
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { formatRelativeTimeShort } from "@/lib/format/relative-time";
 import { MOBILITY_ICONS, MOBILITY_LABELS, SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
-import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
+import { logBusinessViewEvent, logContactClickEvent, logDirectionsClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { SessionNav } from "@/components/layout/session-nav";
 import { BackButton } from "@/components/ui/back-button";
@@ -47,7 +48,7 @@ type BusinessProfile = components["schemas"]["BusinessProfile"];
 type Product = components["schemas"]["Product"];
 
 type ProductFormState =
-  | { mode: "create" }
+  | { mode: "create"; offer?: boolean }
   | { mode: "edit"; product: Product }
   // Segundo paso tras crear (ver ProductPhotoStep) — el producto en sí
   // ya existe de verdad en el backend en este punto, solo falta que el
@@ -65,6 +66,13 @@ interface BusinessProfileScreenProps {
    * práctica ya que categoryId es obligatorio al crear un negocio).
    */
   catalogType: CatalogType | null;
+  /**
+   * "Ver como cliente" (tablero, `?vista=cliente`; pedido del usuario
+   * 2026-10-03): el dueño ve EXACTAMENTE la vista del cliente, de solo
+   * lectura — ningún control de edición (fotos, editar, eliminar, agregar,
+   * ajustes, avisos del dueño). Solo una franja para volver al tablero.
+   */
+  clientPreview?: boolean;
 }
 
 const LiveIcon = SEMANTIC_ICONS.liveLocation;
@@ -81,7 +89,7 @@ const DirectionsIcon = SEMANTIC_ICONS.directions;
  * que también lo usa para generateMetadata) — no vuelve a pedirlo, para
  * no duplicar la llamada que ya hizo el render de servidor.
  */
-export function BusinessProfileScreen({ profile, categoryName, catalogType }: BusinessProfileScreenProps) {
+export function BusinessProfileScreen({ profile, categoryName, catalogType, clientPreview = false }: BusinessProfileScreenProps) {
   const { user } = useAuth();
   // Estado local aparte de `profile` (inmutable, viene del Server
   // Component) — así, al confirmar el código, el aviso desaparece de
@@ -154,6 +162,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
     };
   }, []);
   const [productForm, setProductForm] = useState<ProductFormState | null>(null);
+
   const [productFormSubmitting, setProductFormSubmitting] = useState(false);
   const [productFormError, setProductFormError] = useState<string | null>(null);
   const [productFormFieldErrors, setProductFormFieldErrors] = useState<Record<string, string>>({});
@@ -271,7 +280,35 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // ahí siempre daría false para el dueño real. `ownerId` no es un dato
   // sensible (ya viaja siempre en Business), así que comparar acá evita
   // depender de eso.
-  const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
+  const realOwner = Boolean(user?.id) && profile.ownerId === user?.id;
+  // En la vista de cliente el dueño no es "dueño" para la pantalla: se
+  // apagan todos los controles de edición, que cuelgan de `isOwner`.
+  const isOwner = realOwner && !clientPreview;
+  const previewing = realOwner && clientPreview;
+
+  // Calificación pública (2026-10-03): se publica al instante, así que al
+  // calificar se vuelve a leer el promedio sin recargar la página.
+  const [ratingSummary, setRatingSummary] = useState({
+    averageRating: profile.averageRating ?? null,
+    reviewCount: profile.reviewCount ?? 0,
+  });
+  const refreshRating = useCallback(async () => {
+    if (!profile.id) return;
+    const { data } = await api.GET("/businesses/{businessId}", { params: { path: { businessId: profile.id } } });
+    if (data) setRatingSummary({ averageRating: data.averageRating ?? null, reviewCount: data.reviewCount ?? 0 });
+  }, [profile.id]);
+
+  // Atajos del tablero (Perfil 2.0 §4.6–4.7): `?agregar=producto|oferta`
+  // abre el formulario al llegar. Se lee en el navegador (la página se
+  // genera en el servidor sin saber quién es el dueño).
+  useEffect(() => {
+    if (!isOwner) return;
+    const agregar = new URLSearchParams(window.location.search).get("agregar");
+    if (agregar !== "producto" && agregar !== "oferta") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- depende de la URL del navegador
+    setProductForm({ mode: "create", offer: agregar === "oferta" });
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [isOwner]);
 
   // Marca de modalidad — el MISMO ícono que la marca del pin del mapa
   // (lib/icons/semantic-icons.ts); antes el perfil y el mapa dibujaban el
@@ -298,7 +335,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
   return (
     <div className="flex flex-1 flex-col pb-8">
-      <BackButton className="fixed left-3 top-3 z-40" />
+      <BackButton className="fixed left-3 top-3 z-(--capa-flotantes)" />
 
       <div className="relative h-64 w-full bg-terracota-50">
         {heroPhoto ? (
@@ -331,6 +368,14 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       {/* Etapa 1b: el contenido reserva la franja derecha de la columna de
           navegación (docs/specs/perfil-2.md §8.1); la portada no, es una foto. */}
       <div className="reserva-columna flex flex-col">
+      {previewing && (
+        <p data-client-preview className="mx-5 mt-3 rounded-card border border-terracota-100 bg-terracota-50 px-3 py-2 font-sans text-body-sm text-text">
+          Vista de cliente: así ven tu negocio.{" "}
+          <Link href="/tablero" className="font-semibold text-terracota underline">
+            Volver a mi tablero
+          </Link>
+        </p>
+      )}
       <div className="flex flex-col gap-1 pl-5 py-4">
         <div className="flex items-start justify-between gap-2">
         <h1 className="font-heading text-title-1 font-bold text-text">{profile.name}</h1>
@@ -346,9 +391,8 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         <p className="flex flex-wrap items-center gap-1.5 font-sans text-body-sm text-text-muted">
           <CategoryIcon categoryId={profile.categoryId} size="sm" />
           {categoryName ?? "Comercio informal"}
-          {profile.averageRating != null &&
-            ` · ${profile.averageRating.toFixed(1)} ★ (${profile.reviewCount ?? 0} reseña${profile.reviewCount === 1 ? "" : "s"})`}
         </p>
+        <RatingSummary averageRating={ratingSummary.averageRating} reviewCount={ratingSummary.reviewCount} />
         {/* Dónde está AHORA, si no es su punto de siempre (en vivo, o en
             una de sus franjas del día). */}
         {live ? (
@@ -399,6 +443,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
                 href={directionsHref}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => {
+                  if (profile.id) logDirectionsClickEvent(profile.id);
+                }}
                 className="flex min-h-12 items-center justify-center gap-2 rounded-input bg-terracota px-3 font-sans text-body font-semibold text-white hover:bg-terracota-dark"
               >
                 <DirectionsIcon size={18} weight="fill" />
@@ -421,7 +468,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
             )}
           </div>
         )}
-        {profile.id && !isOwner && user && (
+        {profile.id && !realOwner && user && (
           <div className="mt-2">
             <AvailabilityRequestButton businessId={profile.id} onConfirmed={setAvailabilityConfirmedAt} />
           </div>
@@ -432,7 +479,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           tarjetas); viven en su propia pantalla, por familias. */}
       {isOwner && profile.id && (
         <div className="flex items-center justify-between gap-3 pl-5 pb-4">
-          <p className="font-sans text-body-sm text-text-muted">Así ven tu negocio tus clientes.</p>
+          <p className="font-sans text-body-sm text-text-muted">
+            Así ven tu negocio tus clientes.{" "}
+            <Link href="/tablero" className="font-semibold text-terracota underline">
+              Volver a mi tablero
+            </Link>
+          </p>
           <Link
             href={`/negocios/${profile.id}/ajustes`}
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-input border border-terracota px-3 font-sans text-body-sm font-semibold text-terracota hover:bg-terracota-50"
@@ -550,6 +602,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
       {productForm && (productForm.mode === "create" || productForm.mode === "edit") && (
         <ProductForm
+          startAsOffer={productForm.mode === "create" && Boolean(productForm.offer)}
           mode={productForm.mode}
           itemNoun={itemNoun}
           initialValues={
@@ -583,9 +636,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         />
       )}
 
-      {profile.id && !isOwner && user && (
+      {profile.id && previewing && (
+        <div className="ml-5 mb-4 rounded-card border border-border bg-surface px-4 py-3 text-center">
+          <p className="font-sans text-body-sm text-text-muted">Aquí tus clientes califican tu negocio.</p>
+        </div>
+      )}
+
+      {profile.id && !realOwner && user && (
         <div className="pl-5 pb-4">
-          <ReviewForm businessId={profile.id} catalogType={catalogType} />
+          <ReviewForm businessId={profile.id} catalogType={catalogType} onRated={refreshRating} />
         </div>
       )}
 

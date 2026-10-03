@@ -7,6 +7,7 @@ const eventInputSchema = z.object({
     'business_view',
     'product_view',
     'contact_click',
+    'directions_click',
     'favorite_added',
     'review_created',
     'business_registered',

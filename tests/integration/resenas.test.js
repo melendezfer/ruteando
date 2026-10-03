@@ -55,7 +55,7 @@ afterAll(async () => {
 });
 
 describe('POST /businesses/{businessId}/reviews', () => {
-  it('crea la reseña en estado pending (201)', async () => {
+  it('crea la calificación ya publicada (approved, 201) — regla 2026-10-03', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const consumer = await registrar('consumer');
@@ -73,8 +73,10 @@ describe('POST /businesses/{businessId}/reviews', () => {
       rating: 4,
       tags: ['good_price', 'long_wait'],
       privateComment: 'Muy bueno',
-      moderationStatus: 'pending',
+      moderationStatus: 'approved',
     });
+    const perfil = await request(app).get(`/businesses/${negocio.id}`);
+    expect(perfil.body).toMatchObject({ averageRating: 4, reviewCount: 1 });
   });
 
   it('rechaza una etiqueta que no existe en el catálogo (422)', async () => {
@@ -104,7 +106,7 @@ describe('POST /businesses/{businessId}/reviews', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rechaza una segunda reseña del mismo usuario para el mismo negocio (409, RF-015)', async () => {
+  it('una por persona: calificar de nuevo reemplaza la anterior (200), sin contar doble', async () => {
     const categoryId = await crearCategoria();
     const vendor = await registrar('vendor');
     const consumer = await registrar('consumer');
@@ -118,9 +120,60 @@ describe('POST /businesses/{businessId}/reviews', () => {
     const res = await request(app)
       .post(`/businesses/${negocio.id}/reviews`)
       .set('Authorization', `Bearer ${consumer.accessToken}`)
-      .send({ rating: 2 });
+      .send({ rating: 2, tags: ['high_price'] });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ rating: 2, tags: ['high_price'], moderationStatus: 'approved' });
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM resenas WHERE negocio_id = $1', [negocio.id]);
+    expect(rows[0].n).toBe(1);
+    const perfil = await request(app).get(`/businesses/${negocio.id}`);
+    expect(perfil.body).toMatchObject({ averageRating: 2, reviewCount: 1 });
+  });
+
+  it('el promedio y el número llegan a los listados (GET /businesses y /businesses/nearby)', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId, { name: `Calif listado ${Date.now()}` });
+    await request(app)
+      .put(`/businesses/${negocio.id}/location`)
+      .set('Authorization', `Bearer ${vendor.accessToken}`)
+      .send({ type: 'fixed', latitude: 4.6083, longitude: -74.2188 });
+    await pool.query("UPDATE negocios SET estado = 'activo', telefono_verificado = true WHERE id = $1", [negocio.id]);
+    for (const rating of [5, 4]) {
+      const c = await registrar('consumer');
+      await request(app)
+        .post(`/businesses/${negocio.id}/reviews`)
+        .set('Authorization', `Bearer ${c.accessToken}`)
+        .send({ rating });
+    }
+    const lista = await request(app).get(`/businesses?q=${encodeURIComponent(negocio.name)}`);
+    expect(lista.body.data.find((b) => b.id === negocio.id)).toMatchObject({ averageRating: 4.5, reviewCount: 2 });
+    const cerca = await request(app).get('/businesses/nearby?lat=4.6083&lng=-74.2188&radiusKm=1&limit=50');
+    expect(cerca.body.data.find((b) => b.id === negocio.id)).toMatchObject({ averageRating: 4.5, reviewCount: 2 });
+  });
+
+  it('reemplazar una calificación reportada la vuelve a publicar y borra los reportes viejos', async () => {
+    const categoryId = await crearCategoria();
+    const vendor = await registrar('vendor');
+    const consumer = await registrar('consumer');
+    const reporter = await registrar('consumer');
+    const negocio = await crearNegocio(vendor.accessToken, categoryId);
+    const r1 = await request(app)
+      .post(`/businesses/${negocio.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 1 });
+    await request(app)
+      .post(`/reviews/${r1.body.id}/report`)
+      .set('Authorization', `Bearer ${reporter.accessToken}`);
+    expect((await request(app).get(`/businesses/${negocio.id}`)).body.reviewCount).toBe(0);
+
+    await request(app)
+      .post(`/businesses/${negocio.id}/reviews`)
+      .set('Authorization', `Bearer ${consumer.accessToken}`)
+      .send({ rating: 4 });
+    expect((await request(app).get(`/businesses/${negocio.id}`)).body).toMatchObject({ averageRating: 4, reviewCount: 1 });
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM reportes_resena WHERE resena_id = $1', [r1.body.id]);
+    expect(rows[0].n).toBe(0);
   });
 
   it('rechaza sin access token (401)', async () => {
@@ -298,7 +351,8 @@ describe('GET /users/me/reviews (Épica F6)', () => {
       .post(`/businesses/${negocioB.id}/reviews`)
       .set('Authorization', `Bearer ${consumer.accessToken}`)
       .send({ rating: 2 });
-    await aprobar(reviewA.body.id); // reviewB queda pendiente a propósito
+    // Desde 2026-10-03 nacen publicadas; reviewB queda pendiente como si la hubieran reportado.
+    await pool.query("UPDATE resenas SET estado_moderacion = 'pendiente' WHERE id = $1", [reviewB.body.id]);
 
     const res = await request(app)
       .get('/users/me/reviews')

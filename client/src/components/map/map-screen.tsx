@@ -708,7 +708,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         )}
 
         {showMap && (
-          <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-surface/90 px-3 py-2 shadow-lg backdrop-blur">
+          <div className="fixed bottom-6 left-6 z-(--capa-flotantes) flex items-center gap-2 rounded-full bg-surface/90 px-3 py-2 shadow-lg backdrop-blur">
             <RuteandoLogo size={28} />
             {/* A3 (fix/pulido-visual): a 320 px los nombres de los flotantes chocaban
                 con la palabra (medido con la prueba e2e flotantes-no-tapan): desde

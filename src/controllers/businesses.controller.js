@@ -5,6 +5,7 @@ const horarioService = require('../services/horario.service');
 const franjasUbicacionService = require('../services/franjasUbicacion.service');
 const posicionesEnVivoService = require('../services/posicionesEnVivo.service');
 const senalesVentaService = require('../services/senalesVenta.service');
+const estadisticasNegocioService = require('../services/estadisticasNegocio.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
 const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
@@ -103,6 +104,15 @@ async function putSellingNow(req, res) {
   res.status(200).json(result);
 }
 
+async function getStats(req, res) {
+  const result = await estadisticasNegocioService.obtener(
+    req.user.id,
+    req.params.businessId,
+    req.validatedQuery.days,
+  );
+  res.status(200).json(result);
+}
+
 async function deleteSellingNow(req, res) {
   await senalesVentaService.dejar(req.user.id, req.params.businessId);
   res.status(204).end();
@@ -139,8 +149,8 @@ async function uploadPhoto(req, res) {
 }
 
 async function createReview(req, res) {
-  const review = await resenasService.crear(req.user.id, req.params.businessId, req.body);
-  res.status(201).json(review);
+  const { review, created } = await resenasService.crear(req.user.id, req.params.businessId, req.body);
+  res.status(created ? 201 : 200).json(review);
 }
 
 async function listFeedback(req, res) {
@@ -212,6 +222,7 @@ module.exports = {
   deleteLiveLocation,
   putSellingNow,
   deleteSellingNow,
+  getStats,
   reportOutdated,
   createProduct,
   listProducts,

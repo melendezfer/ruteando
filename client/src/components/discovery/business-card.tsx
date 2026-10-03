@@ -1,9 +1,11 @@
 "use client";
 
+import { RatingSummary } from "@/components/ui/rating-summary";
+import { logDirectionsClickEvent } from "@/lib/api/events";
 import { useCallback, useEffect, useState } from "react";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import Link from "next/link";
-import { CaretDown, CaretUp, Star } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretUp } from "@phosphor-icons/react/dist/ssr";
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -150,6 +152,8 @@ export function BusinessCard({
                 importar `mobility` (ambulante/local fijo) ni nada más —
                 nunca oculta ni reordena esta tarjeta ni ninguna otra. */}
             <AvailabilityConfirmedBadge confirmedAt={business.availabilityConfirmedAt} />
+            {/* Calificación pública (2026-10-03): visible sin desplegar la tarjeta (hoja del mapa y /buscar). */}
+            <RatingSummary averageRating={business.averageRating} reviewCount={business.reviewCount} />
             {/* Por qué coincidió con la búsqueda de texto (Fases 2 y 5
                 de la fusión de buscadores, sin RF asociado — ver
                 CLAUDE.md sección 47/50) — nada fuera de una búsqueda
@@ -202,12 +206,6 @@ export function BusinessCard({
                 <ScheduleIcon size={16} className="text-terracota" />
                 {isOpenToday ? `Hoy: ${todaySchedule!.openTime} – ${todaySchedule!.closeTime}` : "Cerrado hoy"}
               </p>
-              <p className="flex items-center gap-1.5 font-sans text-body-sm text-text">
-                <Star size={16} weight="fill" className="text-estrella" />
-                {profile.averageRating != null
-                  ? `${profile.averageRating.toFixed(1)} (${profile.reviewCount} reseña${profile.reviewCount === 1 ? "" : "s"})`
-                  : "Todavía sin reseñas"}
-              </p>
               <div className="flex items-center gap-4">
                 {business.id && (
                   <Link
@@ -241,6 +239,9 @@ export function BusinessCard({
                 {typeof business.latitude === "number" && typeof business.longitude === "number" && (
                   <a
                     href={buildDirectionsUrl(business.latitude, business.longitude)}
+                onClickCapture={() => {
+                  if (business.id) logDirectionsClickEvent(business.id);
+                }}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"

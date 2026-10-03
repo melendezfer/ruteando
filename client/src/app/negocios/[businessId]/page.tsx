@@ -14,6 +14,7 @@ interface PageParams {
 
 interface PageProps {
   params: Promise<PageParams>;
+  searchParams?: Promise<{ vista?: string }>;
 }
 
 /**
@@ -73,8 +74,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function BusinessProfilePage({ params }: PageProps) {
+export default async function BusinessProfilePage({ params, searchParams }: PageProps) {
   const { businessId } = await params;
+  // "Ver como cliente" desde el tablero: la vista exacta del cliente, de solo lectura.
+  const clientPreview = (await searchParams)?.vista === "cliente";
   const profile = await getBusinessProfile(businessId);
 
   if (!profile) notFound();
@@ -86,6 +89,7 @@ export default async function BusinessProfilePage({ params }: PageProps) {
       profile={profile}
       categoryName={category?.name ?? null}
       catalogType={(category?.type as CatalogType | undefined) ?? null}
+      clientPreview={clientPreview}
     />
   );
 }

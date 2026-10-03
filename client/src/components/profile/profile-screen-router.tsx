@@ -24,7 +24,7 @@ export function ProfileScreenRouter() {
   const isVendor = user?.role === "vendor";
 
   useEffect(() => {
-    if (homeBusiness?.id) router.replace(`/negocios/${homeBusiness.id}`);
+    if (homeBusiness?.id) router.replace("/tablero");
   }, [homeBusiness, router]);
 
   if (!user) return null;
@@ -47,7 +47,7 @@ export function ProfileScreenRouter() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-3 bg-background px-6 text-center">
       <RuteandoLogo size={48} />
-      <p className="font-sans text-body text-text-muted">Buscando tu negocio…</p>
+      <p className="font-sans text-body text-text-muted">Abriendo tu tablero…</p>
     </main>
   );
 }

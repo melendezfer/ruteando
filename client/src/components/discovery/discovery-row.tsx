@@ -1,5 +1,7 @@
 "use client";
 
+import { RatingSummary } from "@/components/ui/rating-summary";
+import { logDirectionsClickEvent } from "@/lib/api/events";
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { buildDirectionsUrl } from "@/lib/format/directions";
@@ -121,8 +123,11 @@ export function DiscoveryRow({
         }}
         className="block w-full py-0.5 pl-[2.75rem] pr-3 text-left"
       >
-        <span className="truncate font-sans text-caption text-text-muted">
+        <span className="flex min-w-0 items-center gap-1.5 truncate font-sans text-caption text-text-muted">
           {categoryName ?? "Comercio informal"}
+          {(business.reviewCount ?? 0) > 0 && (
+            <RatingSummary averageRating={business.averageRating} reviewCount={business.reviewCount} className="text-caption!" />
+          )}
         </span>
       </button>
 
@@ -141,6 +146,9 @@ export function DiscoveryRow({
         {hasCoords && (
           <a
             href={buildDirectionsUrl(business.latitude, business.longitude)}
+                onClickCapture={() => {
+                  if (business.id) logDirectionsClickEvent(business.id);
+                }}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => onBeforeAction?.()}

@@ -1,5 +1,6 @@
 "use client";
 
+import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api/client";
@@ -381,15 +382,28 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
     setStep("done");
   }
 
+  // R4: la hoja de confirmación de la app, no window.confirm.
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
   function handleClose() {
     if (businessId && step !== "done") {
-      const confirmLeave = window.confirm(
-        "Ya registramos tu negocio, pero el registro todavía no está completo. ¿Seguro que quieres salir?",
-      );
-      if (!confirmLeave) return;
+      setConfirmLeave(true);
+      return;
     }
     router.push("/");
   }
+
+  const leaveSheet = (
+    <ConfirmSheet
+      open={confirmLeave}
+      title="Tu registro no está completo"
+      message="Ya guardamos tu negocio, pero faltan pasos. Puedes terminarlo después desde tu inicio."
+      confirmLabel="Salir"
+      cancelLabel="Seguir aquí"
+      onConfirm={() => router.push("/")}
+      onCancel={() => setConfirmLeave(false)}
+    />
+  );
 
   if (!ready) {
     return <div className="flex flex-1 items-center justify-center font-sans text-body text-text-muted">Cargando…</div>;
@@ -427,6 +441,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
             setStep("details");
           }}
         />
+        {leaveSheet}
       </WizardShell>
     );
   }
@@ -452,6 +467,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
             setStep("location");
           }}
         />
+        {leaveSheet}
       </WizardShell>
     );
   }
@@ -475,6 +491,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
         fieldErrors={fieldErrors}
         onSubmit={handleDetailsSubmit}
       />
+      {leaveSheet}
     </WizardShell>
   );
 }

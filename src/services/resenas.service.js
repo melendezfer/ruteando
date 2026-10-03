@@ -73,23 +73,17 @@ async function crear(usuarioId, negocioId, input) {
 
   const etiquetas = (input.tags ?? []).map((tag) => REVIEW_TAG_API_TO_DB[tag]);
 
-  let resena;
-  try {
-    resena = await resenasRepo.crear({
-      negocioId,
-      usuarioId,
-      calificacion: input.rating,
-      etiquetas,
-      comentarioPrivado: input.privateComment,
-    });
-  } catch (err) {
-    if (err.code === PG_UNIQUE_VIOLATION) {
-      throw new ConflictError('Ya existe una reseña de este usuario para este negocio');
-    }
-    throw err;
-  }
+  // Una por persona y negocio: calificar de nuevo reemplaza la anterior
+  // (antes, 409). Se publica al instante (repositorio).
+  const resena = await resenasRepo.crearOReemplazar({
+    negocioId,
+    usuarioId,
+    calificacion: input.rating,
+    etiquetas,
+    comentarioPrivado: input.privateComment,
+  });
 
-  return toApiReview(resena);
+  return { review: toApiReview(resena), created: Boolean(resena.insertada) };
 }
 
 /**

@@ -10,14 +10,42 @@ const pool = require('../config/db');
 // asignando en orden, así que la segunda (el cast) es la que queda.
 const SELECT_RESENA = 'SELECT *, etiquetas::text[] AS etiquetas';
 
-async function crear({ negocioId, usuarioId, calificacion, etiquetas, comentarioPrivado }) {
-  const { rows } = await pool.query(
-    `INSERT INTO resenas (negocio_id, usuario_id, calificacion, etiquetas, comentario_privado)
-     VALUES ($1, $2, $3, $4::etiqueta_resena[], $5)
-     RETURNING *, etiquetas::text[] AS etiquetas`,
-    [negocioId, usuarioId, calificacion, etiquetas ?? [], comentarioPrivado ?? null],
-  );
-  return rows[0];
+/**
+ * Calificar (Perfil 2.0 §3.6, regla del usuario 2026-10-03): se publica al
+ * instante ('aprobada') y hay UNA por persona y negocio — calificar de nuevo
+ * reemplaza la anterior (estrellas, etiquetas y comentario) y la deja
+ * publicada otra vez. Los reportes de la versión anterior se borran: eran
+ * sobre otro contenido. La moderación queda solo para lo reportado
+ * (reportar la pasa a 'pendiente'). `insertada` dice si es nueva (201) o
+ * un reemplazo (200).
+ */
+async function crearOReemplazar({ negocioId, usuarioId, calificacion, etiquetas, comentarioPrivado }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO resenas (negocio_id, usuario_id, calificacion, etiquetas, comentario_privado, estado_moderacion)
+       VALUES ($1, $2, $3, $4::etiqueta_resena[], $5, 'aprobada')
+       ON CONFLICT (negocio_id, usuario_id) DO UPDATE
+         SET calificacion = EXCLUDED.calificacion,
+             etiquetas = EXCLUDED.etiquetas,
+             comentario_privado = EXCLUDED.comentario_privado,
+             estado_moderacion = 'aprobada',
+             fecha_creacion = now()
+       RETURNING *, etiquetas::text[] AS etiquetas, (xmax = 0) AS insertada`,
+      [negocioId, usuarioId, calificacion, etiquetas ?? [], comentarioPrivado ?? null],
+    );
+    if (!rows[0].insertada) {
+      await client.query('DELETE FROM reportes_resena WHERE resena_id = $1', [rows[0].id]);
+    }
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function buscarPorId(id) {
@@ -116,20 +144,15 @@ async function marcarPendiente(id) {
 /**
  * Calificación promedio y conteo de reseñas APROBADAS de un negocio, para
  * el perfil público (RF-012) — la ÚNICA señal pública sobre reseñas desde
- * el rediseño (ver CLAUDE.md). Filtra por estado_moderacion='aprobada'
- * para que una reseña recién creada (estado 'pendiente' por defecto) o
- * rechazada no infle el promedio antes de que un administrador la revise
- * (Épica 9) — a diferencia de listarFeedbackPrivado(), que sí las incluye
- * porque esa retroalimentación es privada, no pública.
+ * el rediseño (ver CLAUDE.md). Desde 2026-10-03 una calificación nace
+ * 'aprobada' (se publica al instante); solo una REPORTADA ('pendiente') o
+ * rechazada por el administrador queda fuera del promedio.
  */
 /**
- * GET /admin/reviews/reported (RF-021): la cola real es "toda reseña con
- * estado_moderacion='pendiente'", no solo las que pasaron por
- * reportes_resena — toda reseña nueva nace pendiente (ver
- * resenas.repository.js#crear, sin estado explícito -> default de la
- * columna) y solo un administrador puede moverla a aprobada; el nombre de
- * la ruta viene de la especificación original, no de un filtro por tabla
- * de reportes. FIFO (más antigua primero), igual que
+ * GET /admin/reviews/reported (RF-021): reseñas con
+ * estado_moderacion='pendiente' — desde 2026-10-03 una calificación nace
+ * 'aprobada' y solo pasa a 'pendiente' al ser reportada, así que esta cola
+ * es exactamente "lo reportado". FIFO (más antigua primero), igual que
  * negocios.repository.js#listarPendientes.
  */
 async function listarPendientes({ cursor, limit }) {
@@ -179,7 +202,7 @@ async function obtenerAgregado(negocioId) {
 }
 
 module.exports = {
-  crear,
+  crearOReemplazar,
   buscarPorId,
   listarFeedbackPrivado,
   listarPorUsuario,

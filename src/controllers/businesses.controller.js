@@ -149,8 +149,8 @@ async function uploadPhoto(req, res) {
 }
 
 async function createReview(req, res) {
-  const review = await resenasService.crear(req.user.id, req.params.businessId, req.body);
-  res.status(201).json(review);
+  const { review, created } = await resenasService.crear(req.user.id, req.params.businessId, req.body);
+  res.status(created ? 201 : 200).json(review);
 }
 
 async function listFeedback(req, res) {

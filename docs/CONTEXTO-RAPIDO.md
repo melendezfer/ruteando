@@ -1,6 +1,6 @@
 # RUTEANDO — contexto rápido
 
-Última actualización: 2026-09-28. Este documento basta para retomar el proyecto en una conversación nueva. El detalle de cada decisión está en `CLAUDE.md` (secciones numeradas) y en `docs/`.
+Última actualización: 2026-10-03. Este documento basta para retomar el proyecto en una conversación nueva. El detalle de cada decisión está en `CLAUDE.md` (secciones numeradas) y en `docs/`.
 
 ## Qué es y para qué
 
@@ -31,33 +31,39 @@ Node.js 24 + Express 5 + PostgreSQL 18/PostGIS 3.6 (REST, contrato en `openapi.y
 
 - Ramas `feature/`, `fix/`, `docs/`, `chore/` **desde `develop`**. `main` va muy atrás.
 - **Autonomía** (CLAUDE.md §1): Claude decide lo técnico y registra cada decisión; se detiene solo para la prueba manual del usuario, para fusionar algo que cambie el comportamiento de la app, ante riesgos legales/seguridad/datos personales, o para borrar historial. PR de solo documentos o CI se fusionan sin preguntar, siempre con CI en verde. **Nunca con CI en rojo.**
-- Cada cambio de comportamiento se prueba en PC y en celular (Nubia) antes de fusionar. Para el celular: `bash scripts/dev-lan.sh --prod-frontend` (con `next dev` la app se cuelga por la red local).
+- Cada cambio de comportamiento se prueba en PC y en celular (Nubia) antes de fusionar. Para el celular: `bash scripts/dev-lan.sh` y abrir `https://<IP>:3443` (HTTPS local con mkcert; el certificado raíz se instala una vez en el celular). Ya no hace falta `--prod-frontend` (la causa del cuelgue era `allowedDevOrigins`, CLAUDE.md §63).
+- Tras cambiar rutas del backend: `pm2 restart ruteando-backend` (no recarga solo).
 - Levantar todo en local: `docker compose up -d`, `npm run migrate:up`, `npx pm2 startOrReload ecosystem.config.cjs`. Datos de demo: `npm run seed:demo` (contraseña `password123`).
 
-## Estado actual (2026-09-28)
+## Estado actual (2026-10-03)
 
-**Hecho (en `develop`):** registro y login con consentimientos (Ley 1581), negocios con ubicación/horario/fotos/carta, mapa y búsqueda unificada con filtros, zonas de aglomeración, favoritos, reseñas con retroalimentación privada, verificación de teléfono (sin proveedor de SMS: el código va al log), "vendiendo ahora" por preguntas del cliente, modalidades (ambulante / en la calle / local) con franjas por hora y ubicación en vivo, íconos y colores por categoría, panel de administrador fase 1 (solo login), plan de integración del botón-ancla v0.3, CI con MinIO fijo en `bitnamilegacy`.
+**Hecho, probado por el usuario y fusionado en `develop`:**
+- R5 "Estoy vendiendo ahora" (PR #93) y pulido visual A1–A9 (PR #94).
+- Perfil 2.0 Etapa 1 y 1b (PR #96): Ajustes del negocio por familias, paleta morada, ubicación con mapa y "Guardar y terminar después", HTTPS en la red local, navegación en **columna derecha** (Buscar, Favoritos, Perfil y el mapa siempre a un toque en el mismo lugar), arriba solo "Volver" + título.
+- Perfil 2.0 Etapa 2 (PR #97): **tablero del día** del vendedor (`/tablero`), R3 (agotado con un toque), R4 (aviso con "Deshacer" y hoja de confirmación), R14 (escala de capas), "Ver como cliente" de solo lectura y **calificaciones públicas al instante** (una por persona; moderación solo de lo reportado).
+- **Botón-ancla, etapa I1** (PR #98, probada en PC y celular): copia versionada de `boton-ancla` v0.3.1, bandera `NEXT_PUBLIC_ANCLA=1` y modos por dispositivo (Completo / Solo menú / Apagado, por defecto Apagado) en Cuenta → Configuración. Encendida, el ancla reemplaza la columna en el mismo lugar con las mismas opciones; apagada, todo igual. Detalle: `docs/integracion-ancla.md` §7.1 y CLAUDE.md §65.
 
-**En PR, esperando prueba manual del usuario:**
-- PR #93 — R5 "Estoy vendiendo ahora" (aviso propio del vendedor). Guía: `docs/pruebas/r5-prueba-manual.md`.
-- PR #94 `fix/pulido-visual` — arreglos visuales A1–A9 (A9: contraste de "No disponible" y bordes de campos). Guía: `docs/pruebas/pulido-visual-prueba-manual.md`.
-- `fix/credito-osm-visible` — crédito de OpenStreetMap visible (incluido también en `fix/pulido-visual`).
+**Siguiente paso exacto:**
+1. **Prerrequisitos de I2** (`docs/integracion-ancla.md` §2), cada uno con la interfaz normal primero (principio 1):
+   - R8: "Limpiar búsqueda" en `/buscar`.
+   - R10: WhatsApp y acceso a la Carta en la hoja resumen del negocio (mapa).
+   - R11: lista del grupo de pines al tocar un grupo.
+   - R12: frescura en los pines ("confirmado hace X").
+   - R13: zoom de un dedo en el mapa (HM-18), siempre.
+   - Con R13: ocultar los `+/−` de Leaflet cuando el ancla está encendida (DI-03).
+   - (Verificar R2 en el celular: crédito de OpenStreetMap arriba a la derecha.)
+2. **Prueba manual del usuario** de esos prerrequisitos (PC y celular).
+3. **Etapa I2:** mapa del consumidor con el ancla — capas (HM-08), desplazar y joystick (HM-09 a HM-11), apuntar y elegir pines y grupos (HM-12), imán fuerte (HM-16), soltar ejecuta y zoom de un dedo (HM-17/18). Criterio de salida: "buscar y llegar a un negocio" solo deslizando.
 
-**Sigue:**
-1. Perfil 2.0 (spec `docs/specs/perfil-2.md`): perfil del negocio con divulgación progresiva, tablero del día del vendedor, ajustes del negocio y paleta morada. Se implementa después de probar R5.
-2. Prerrequisitos del ancla R3, R4, R6–R14 (`docs/integracion-ancla.md` §2).
-3. Integración del botón-ancla (etapas I1–I6).
-4. Pendientes sin proveedor: correo, SMS y push (Firebase).
-
-**Actualización 2026-09-29:** PR #94 fusionado en `develop` (incluye el arreglo del límite gratis al editar productos, letreros de flotantes solo en las 3 primeras visitas y reintentos de MinIO en CI). Base local reconstruida desde cero; respaldo previo en `~/respaldos-ruteando/`. Perfil 2.0 en curso en `feature/perfil-2-ajustes` (sale de R5).
+**Pendientes sin proveedor:** correo (recuperar contraseña), SMS (verificación de teléfono; hoy el código va al log) y push (Firebase).
 
 ## Dónde está cada cosa
 
 | Documento | Qué tiene |
 |---|---|
-| `CLAUDE.md` | Reglas del proyecto y registro de cada épica y decisión (§0–§61) |
+| `CLAUDE.md` | Reglas del proyecto y registro de cada épica y decisión (§0–§65) |
 | `docs/CONTEXTO-RAPIDO.md` | Este resumen |
-| `docs/integracion-ancla.md` | Plan del botón-ancla, prerrequisitos R1–R14, decisiones DI-01 a DI-07 |
+| `docs/integracion-ancla.md` | Plan del botón-ancla, prerrequisitos R1–R14, decisiones DI-01 a DI-08, etapa I1 (§7.1) |
 | `docs/inventario-ancla.md`, `docs/backlog-integracion-ancla.md` | Inventario de pantallas/acciones y backlog del ancla |
 | `docs/specs/r5-estoy-vendiendo.md` | Especificación de "Estoy vendiendo ahora" |
 | `docs/specs/perfil-2.md` | Especificación del Perfil 2.0 y la paleta |
@@ -65,4 +71,4 @@ Node.js 24 + Express 5 + PostgreSQL 18/PostGIS 3.6 (REST, contrato en `openapi.y
 | `openapi.yaml` | Contrato completo de la API |
 | `schema.sql` + `migrations/` | Esquema inicial y migraciones versionadas |
 | `scripts/` | Datos de demo, prueba de carga, acceso por LAN, crear administrador |
-| Repo `boton-ancla` (aparte) | El botón-ancla (paquetes `core` y `react`, demo); etiqueta `v0.3.0` |
+| Repo `boton-ancla` (aparte) | El botón-ancla (paquetes `core` y `react`, demo). RUTEANDO usa una copia de la etiqueta `v0.3.1` en `client/src/vendor/boton-ancla/` (`scripts/vendor-boton-ancla.sh`) |

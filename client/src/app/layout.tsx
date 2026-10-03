@@ -4,6 +4,7 @@ import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { FavoritesProvider } from "@/lib/favorites/favorites-context";
 import { UndoToastProvider } from "@/lib/ui/undo-toast";
+import { ProveedorAncla } from "@/components/ancla/proveedor-ancla";
 import "./globals.css";
 
 const inter = Inter({
@@ -50,7 +51,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <FavoritesProvider>
-            <UndoToastProvider>{children}</UndoToastProvider>
+            <UndoToastProvider>
+              <ProveedorAncla>{children}</ProveedorAncla>
+            </UndoToastProvider>
           </FavoritesProvider>
         </AuthProvider>
         <ServiceWorkerRegister />

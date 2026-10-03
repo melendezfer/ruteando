@@ -1,0 +1,629 @@
+/*
+ * Estilos del botón-ancla. Sin Tailwind y sin colores fijos (D-19): todo sale de
+ * las variables --ba-* que pone el componente a partir del `theme` y de `params`.
+ * Animaciones solo con transform y opacity (RNF-03); backdrop-filter solo en el
+ * ancla, nunca en las opciones que se mueven.
+ */
+
+.ba-raiz {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ba-z, 1100); /* por encima de las hojas inferiores (RF-14) */
+  pointer-events: none; /* solo el ancla y el menú reciben toques */
+}
+
+/* RF-13: con el teclado virtual abierto, el ancla se oculta (y no recibe toques). */
+.ba-raiz--oculta {
+  visibility: hidden;
+}
+
+/*
+ * El toque siempre empieza en el botón o en la opción, nunca en el ícono de adentro.
+ * El ícono del centro se reemplaza al preseleccionar (D-09): si el toque hubiera
+ * empezado sobre ese <svg>, el navegador seguiría mandando eventos a un elemento que
+ * ya no existe (problema conocido de iOS con los toques).
+ */
+.ba-ancla *,
+.ba-opcion * {
+  pointer-events: none;
+}
+
+/* RNF-02: nada de selección, lupa, menú contextual ni gestos del navegador sobre el ancla. */
+.ba-ancla,
+.ba-opcion {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ba-ancla {
+  position: absolute;
+  width: var(--ba-d-reposo);
+  height: var(--ba-d-reposo);
+  margin: 0;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--ba-border);
+  pointer-events: auto;
+  cursor: pointer;
+  /* Reposo translúcido (D-04): fondo al 60 % + desenfoque; ícono oscuro a contraste pleno (C-02). */
+  background: color-mix(in srgb, var(--ba-surface) var(--ba-opacidad-reposo, 60%), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--ba-text);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+}
+
+.ba-ancla:focus-visible {
+  outline: 3px solid var(--ba-accent);
+  outline-offset: 3px;
+}
+
+/* --- Ancla activa (armado, descanso, menú abierto): sólida, un poco más grande, ícono de acento (C-02). --- */
+.ba-ancla--activa {
+  transform: translate(-50%, -50%) scale(var(--ba-escala-activo));
+  background: var(--ba-surface);
+  color: var(--ba-accent);
+  border-color: var(--ba-accent);
+}
+
+/* --- Descanso (D-11, HU-04): sin opciones; solo un anillo sutil alrededor del ancla. --- */
+.ba-ancla--descanso {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ba-accent) 22%, transparent),
+    0 2px 10px rgb(0 0 0 / 0.18);
+}
+
+/* --- Velo (RF-11, L-06): capa transparente que recibe los toques fuera del menú. --- */
+.ba-velo {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+  background: transparent;
+}
+
+/* --- Abanico --------------------------------------------------------------------------- */
+.ba-abanico {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* El div de afuera ubica y anima la aparición; el cuerpo de adentro se agranda al preseleccionar. */
+.ba-opcion {
+  position: absolute;
+  width: var(--ba-d-opcion);
+  height: var(--ba-d-opcion);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ba-opcion-cuerpo {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--ba-surface);
+  border: 1px solid var(--ba-border);
+  color: var(--ba-text);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.16);
+}
+
+.ba-opcion--activa .ba-opcion-cuerpo {
+  transform: scale(var(--ba-escala-presel));
+  background: var(--ba-accent);
+  border-color: var(--ba-accent);
+  color: var(--ba-surface);
+}
+
+.ba-opcion--irreversible .ba-opcion-cuerpo {
+  border-width: 2px;
+}
+
+.ba-opcion--deshabilitada .ba-opcion-cuerpo {
+  opacity: 0.45;
+}
+
+.ba-opcion--activa {
+  z-index: 1; /* la preseleccionada, agrandada, queda encima de sus vecinas */
+}
+
+/* Anillo exterior de las irreversibles (RF-07): hay que cruzarlo para confirmar. */
+.ba-anillo {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 2px dashed var(--ba-accent);
+  pointer-events: none;
+}
+
+.ba-anillo--armado {
+  border-style: solid;
+  background: color-mix(in srgb, var(--ba-accent) 12%, transparent);
+}
+
+/* Banda de etiqueta (HM-02, RF-06b): fondo sólido, texto a contraste pleno (RNF-06). */
+.ba-banda {
+  position: absolute;
+  height: var(--ba-banda-alto);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: var(--ba-surface);
+  border: 1px solid var(--ba-border);
+  color: var(--ba-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.14);
+  pointer-events: none;
+}
+
+.ba-banda--seccion,
+.ba-banda--pista {
+  color: var(--ba-text-muted);
+  font-weight: 500;
+}
+
+/* --- Animaciones: solo transform y opacity (RNF-03). Con movimiento reducido, solo opacidad (RNF-04). --- */
+@media (prefers-reduced-motion: no-preference) {
+  .ba-ancla {
+    transition:
+      transform var(--ba-t-anim) ease-out,
+      background-color var(--ba-t-anim) ease-out;
+  }
+  .ba-opcion {
+    animation: ba-salir var(--ba-t-anim) ease-out both;
+  }
+  .ba-opcion-cuerpo {
+    transition: transform 90ms ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ba-opcion {
+    animation: ba-aparecer var(--ba-t-anim) linear both;
+  }
+}
+
+@keyframes ba-salir {
+  from {
+    transform: translate(-50%, -50%) translate(var(--ba-dx), var(--ba-dy)) scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+@keyframes ba-aparecer {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Avisos (T-19): deshacer (RF-08), confirmar irreversible, bloqueado (HU-08) y error (C-19). --- */
+.ba-zona-aviso {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.ba-aviso {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px; /* mínimo táctil */
+  padding: 0 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--ba-border);
+  background: var(--ba-text);
+  color: var(--ba-surface);
+  font: inherit;
+  font-size: 15px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.22);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ba-aviso strong {
+  font-weight: 700;
+}
+
+.ba-aviso--confirmar {
+  background: var(--ba-accent);
+  border-color: var(--ba-accent);
+  font-weight: 700;
+}
+
+.ba-aviso--bloqueado,
+.ba-aviso--error {
+  cursor: default;
+}
+
+/* Foco con teclado (RNF-05): contorno visible en la opción con foco. */
+.ba-opcion:focus {
+  outline: none;
+}
+
+.ba-opcion:focus-visible .ba-opcion-cuerpo {
+  outline: 3px solid var(--ba-accent);
+  outline-offset: 3px;
+}
+
+/* --- Bienvenida (HU-12): la opción de prioridad 1 sale del ancla y vuelve, una sola vez. --- */
+.ba-demostracion {
+  position: absolute;
+  width: var(--ba-d-opcion);
+  height: var(--ba-d-opcion);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ba-demostracion {
+    animation: ba-demostracion 1400ms ease-in-out 600ms both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ba-demostracion {
+    animation: ba-demostracion-suave 1400ms linear 600ms both;
+  }
+}
+
+@keyframes ba-demostracion {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate(var(--ba-dx), var(--ba-dy)) scale(0.3);
+    opacity: 0;
+  }
+  35%,
+  65% {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+@keyframes ba-demostracion-suave {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  35%,
+  65% {
+    opacity: 1;
+  }
+}
+
+/* --- Guía de desplazamiento (HM-09, RF-18): translúcida, del lado del contenido. --- */
+.ba-guia-desplazar {
+  position: absolute;
+  width: 28px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--ba-surface) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ba-border) 80%, transparent);
+  pointer-events: none;
+}
+
+.ba-guia-flecha {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--ba-text-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ba-guia-flecha--arriba {
+  top: 4px;
+}
+
+.ba-guia-flecha--abajo {
+  bottom: 4px;
+}
+
+/* Línea del punto de inicio (velocidad cero). */
+.ba-guia-centro {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 2px;
+  background: color-mix(in srgb, var(--ba-text-muted) 50%, transparent);
+}
+
+/* El punto sigue al dedo (lo mueve el bucle de desplazamiento). */
+.ba-guia-punto {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--ba-accent);
+  transform: translate(-50%, -50%);
+}
+
+/* --- HM-10, variante "ancla": el propio ancla muestra el desplazamiento. --- */
+
+/* Flechas ↑/↓ en lugar del ícono. Quieto (zona muerta): las dos, tenues y juntas. */
+.ba-flecha-desplazar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  transform: translate(-50%, -50%);
+  transition: opacity 80ms linear;
+}
+
+.ba-raiz:not([data-direccion]) .ba-flecha-desplazar,
+.ba-raiz[data-direccion="quieto"] .ba-flecha-desplazar {
+  opacity: 0.45;
+  scale: 0.75;
+}
+
+.ba-raiz:not([data-direccion]) .ba-flecha-desplazar--arriba,
+.ba-raiz[data-direccion="quieto"] .ba-flecha-desplazar--arriba {
+  translate: 0 -7px;
+}
+
+.ba-raiz:not([data-direccion]) .ba-flecha-desplazar--abajo,
+.ba-raiz[data-direccion="quieto"] .ba-flecha-desplazar--abajo {
+  translate: 0 7px;
+}
+
+.ba-raiz[data-direccion="arriba"] .ba-flecha-desplazar--abajo,
+.ba-raiz[data-direccion="abajo"] .ba-flecha-desplazar--arriba {
+  opacity: 0;
+}
+
+/* Anillo alrededor del ancla: se llena con la velocidad (--ba-llenado lo escribe el bucle). */
+.ba-anillo-desplazar {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.ba-anillo-desplazar circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.ba-anillo-desplazar-fondo {
+  stroke: color-mix(in srgb, var(--ba-border) 70%, transparent);
+}
+
+.ba-anillo-desplazar-lleno {
+  stroke: var(--ba-accent);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - var(--ba-llenado, 0));
+}
+
+/* --- HM-11: joystick libre (mapa). --- */
+
+/* Una sola flecha, girada hacia donde apunta el pulgar (--ba-giro lo escribe el bucle). */
+.ba-flecha-libre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  transform: translate(-50%, -50%) rotate(var(--ba-giro, 0deg));
+  transition: opacity 80ms linear;
+}
+
+/* Quieto (zona muerta): la flecha casi no se ve; no hay dirección que mostrar. */
+.ba-raiz:not([data-direccion]) .ba-flecha-libre,
+.ba-raiz[data-direccion="quieto"] .ba-flecha-libre,
+.ba-guia-circulo:not([data-direccion]) .ba-flecha-libre,
+.ba-guia-circulo[data-direccion="quieto"] .ba-flecha-libre {
+  opacity: 0.3;
+}
+
+/* Variante "arriba": círculo translúcido arriba del ancla, fuera del alcance del pulgar. */
+.ba-guia-circulo {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--ba-surface) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ba-border) 80%, transparent);
+  color: var(--ba-text-muted);
+  pointer-events: none;
+}
+
+/* Punto de inicio (velocidad cero). */
+.ba-guia-cruz {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--ba-text-muted) 60%, transparent);
+}
+
+/* --- HM-12a (RF-21): apuntar y elegir en el mapa. --- */
+
+/* La mira: fija en el centro de la vista; tenue pero visible mientras se usa el joystick. */
+.ba-mira {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--ba-text) 45%, transparent);
+  pointer-events: none;
+  transition:
+    border-color 120ms linear,
+    width 120ms ease-out,
+    height 120ms ease-out;
+}
+
+/* La cruz del centro. */
+.ba-mira::before,
+.ba-mira::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: color-mix(in srgb, var(--ba-text) 45%, transparent);
+  transform: translate(-50%, -50%);
+}
+.ba-mira::before {
+  width: 12px;
+  height: 2px;
+}
+.ba-mira::after {
+  width: 2px;
+  height: 12px;
+}
+
+/* Con algo en la mira: se enciende con el acento y se agranda un poco. */
+.ba-mira[data-apuntado] {
+  width: 44px;
+  height: 44px;
+  border-color: var(--ba-accent);
+}
+.ba-mira[data-apuntado]::before,
+.ba-mira[data-apuntado]::after {
+  background: var(--ba-accent);
+}
+
+/* Nombre de lo apuntado, debajo de la mira (no tapa el pin, que queda en el centro). */
+.ba-mira-etiqueta {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--ba-surface);
+  border: 1px solid var(--ba-border);
+  color: var(--ba-text);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.14);
+}
+
+/* El ancla encendida: fondo de acento e ícono claro. */
+.ba-ancla.ba-ancla--apuntando {
+  background: var(--ba-accent);
+  color: var(--ba-surface);
+  border-color: var(--ba-accent);
+}
+
+/* Grupo: cuántos negocios hay en la mira. */
+.ba-conteo-grupo {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Con el ancla encendida (acento), el anillo de velocidad se dibuja en claro para que se vea. */
+.ba-raiz:has(.ba-ancla--apuntando) .ba-anillo-desplazar-lleno {
+  stroke: var(--ba-surface);
+}
+
+/* --- HM-12b (RF-23): apuntar en listas. --- */
+
+/* Franja de foco: fija en el centro de la parte visible de la lista; no tapa el texto (solo un borde). */
+.ba-franja {
+  position: absolute;
+  border-radius: 12px;
+  border: 2px solid var(--ba-accent);
+  background: color-mix(in srgb, var(--ba-accent) 8%, transparent);
+  pointer-events: none;
+  /* Sin transición: la ubica el bucle cada cuadro (una transición la haría llegar tarde, HM-15). */
+}
+
+/* --- Fase 3 (T3-08): modo edición. --- */
+
+/* Dónde puede quedar el ancla: una línea en cada tramo válido de cada costado. */
+.ba-tramo-valido {
+  position: absolute;
+  width: 6px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--ba-accent) 45%, transparent);
+  pointer-events: none;
+}
+
+/* La altura de inicio de esta orientación (al cruzarla hay un "clic", RF3-16). */
+.ba-linea-inicio {
+  position: absolute;
+  width: 28px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  background: var(--ba-accent);
+  pointer-events: none;
+}
+
+/* Silueta del abanico: un cuarto de círculo punteado hacia el centro de la pantalla. */
+.ba-silueta {
+  position: absolute;
+  width: calc(2 * var(--ba-radio-silueta));
+  height: calc(2 * var(--ba-radio-silueta));
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 2px dashed color-mix(in srgb, var(--ba-text-muted) 60%, transparent);
+  clip-path: polygon(0 0, 50% 0, 50% 50%, 0 50%); /* arriba a la izquierda (mano derecha) */
+  pointer-events: none;
+}
+.ba-silueta[data-lado="left"] {
+  clip-path: polygon(50% 0, 100% 0, 100% 50%, 50% 50%);
+}
+
+/* Sin dedo: el ancla "late" para invitar a arrastrarla (sin animación con movimiento reducido). */
+@media (prefers-reduced-motion: no-preference) {
+  .ba-ancla--editando {
+    animation: ba-latir 900ms ease-in-out infinite;
+  }
+}
+.ba-ancla--editando {
+  outline: 2px dashed var(--ba-accent);
+  outline-offset: 4px;
+}
+@keyframes ba-latir {
+  50% {
+    transform: translate(-50%, -50%) scale(calc(var(--ba-escala-activo) * 1.08));
+  }
+}
+
+/* --- Fase 3 (H13, DF3-08): la bienvenida pregunta la mano. --- */
+.ba-asa-mano {
+  font-size: 22px;
+  color: var(--ba-accent);
+  touch-action: none;
+}
+.ba-botones-mano {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  pointer-events: auto;
+}

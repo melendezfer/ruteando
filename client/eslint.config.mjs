@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Copia versionada del botón-ancla (scripts/vendor-boton-ancla.sh): no se edita a mano.
+    "src/vendor/**",
   ]),
 ]);
 

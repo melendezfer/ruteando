@@ -1,5 +1,6 @@
 "use client";
 
+import { AjusteModoAncla } from "@/components/ancla/ajuste-modo-ancla";
 import { useEffect, useState, type FormEvent } from "react";
 import { Bell, CheckCircle, LockKey, UserCircle, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
@@ -288,6 +289,8 @@ export function SettingsTab({ user }: SettingsTabProps) {
           </Button>
         </form>
       </section>
+
+      <AjusteModoAncla />
 
       <section className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-4">
         <h2 className="font-heading text-title-2 font-semibold text-text">Consentimientos otorgados</h2>

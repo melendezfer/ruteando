@@ -7034,7 +7034,7 @@ Spec: `docs/specs/perfil-2.md` §8.1; lugar del ancla:
   toques). Con hoja o teclado abiertos (`lib/ui/use-keyboard-open.ts`:
   campo de texto con foco en táctil o `visualViewport` encogido >150 px),
   un solo botón "Volver al mapa". Sin sesión, la columna no aparece.
-- **Franja reservada**: utilidad `.reserva-columna` (64 px, `globals.css`)
+- **Franja reservada**: utilidad `.reserva-columna` (64 px; 72 px desde la etapa I1 del ancla, §65; `globals.css`)
   en el contenido de Buscar, Cuenta, Perfil, inicio del vendedor sin
   negocio y perfil del negocio (no en su portada), en las tres hojas del
   mapa y en la tarjeta de zonas. Las X de cerrar de las hojas pasaron a
@@ -7131,3 +7131,22 @@ Guía: `docs/pruebas/perfil-2-etapa-2-prueba-manual.md`.
   reportada y reemplazada, listados), `nearbyIndexPlan` siembra `resenas`,
   e2e `calificaciones.spec.ts`. Se borraron las calificaciones de prueba
   que quedaron en negocios de demo (cuentas `e2e-calif-…`).
+
+## 65. Botón-ancla — etapa I1: infraestructura
+
+Detalle y decisiones: `docs/integracion-ancla.md` §7.1. Rama
+`feature/ancla-i1`. Guía: `docs/pruebas/ancla-i1-prueba-manual.md`.
+
+- Copia versionada del repo `boton-ancla` (v0.3.1) en
+  `client/src/vendor/boton-ancla/` con `scripts/vendor-boton-ancla.sh`;
+  `@boton-ancla/*` por `paths` de tsconfig. No editar a mano.
+- Bandera `NEXT_PUBLIC_ANCLA=1` + modo por dispositivo en Cuenta →
+  Configuración (Completo / Solo menú / Apagado, por defecto Apagado).
+- `ProveedorAncla` siempre montado con la bandera (montar/desmontar al
+  cambiar de modo remontaba toda la app); con el ancla encendida,
+  `MainFloatingNav` → `NavegacionAncla` (mismas opciones que la columna).
+- Mismo lugar que la columna: `ANCLA_ALTURA 0.3`, `MARGEN_LATERAL 8`;
+  la franja reservada pasó a 72 px.
+- Pruebas: `client/e2e/ancla-i1.spec.ts`; suite completa 71/71 con la
+  bandera y el modo Apagado; `next build` en verde.
+- Antes de I2 faltan R2 (verificar), R8, R10–R13 (ver §7.1).

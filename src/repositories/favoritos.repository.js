@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { lateralUltimaSenalVenta } = require('./ultimaSenalVenta');
+const { lateralCalificaciones } = require('./calificacionesPublicas');
 const { AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES } = require('../config/constants');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 
@@ -91,7 +92,8 @@ async function listar({ usuarioId, cursor, limit, openNow }) {
     // como pin en el mapa ni ofrecer "Cómo llegar".
     `SELECT n.*, f.fecha_creacion::text AS favorito_fecha_creacion_cursor,
             ub.latitud, ub.longitud, ub.mostrar_ubicacion_exacta,
-            disp.respondida_en AS disponibilidad_confirmada_en
+            disp.respondida_en AS disponibilidad_confirmada_en,
+            cal.resenas_promedio, cal.resenas_total
      FROM favoritos f
      JOIN negocios n ON n.id = f.negocio_id
      LEFT JOIN LATERAL (
@@ -100,6 +102,7 @@ async function listar({ usuarioId, cursor, limit, openNow }) {
        LIMIT 1
      ) ub ON true
      ${lateralUltimaSenalVenta(idxFrescura)}
+     ${lateralCalificaciones()}
      WHERE ${clausulas.join(' AND ')}
      ORDER BY f.fecha_creacion DESC, f.negocio_id DESC
      LIMIT $${params.length}`,

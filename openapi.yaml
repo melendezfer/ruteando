@@ -314,6 +314,17 @@ components:
     Business:
       type: object
       properties:
+        averageRating:
+          type: [number, 'null']
+          description: >-
+            Promedio público de calificaciones (1-5, un decimal). Desde
+            2026-10-03 una calificación se publica al instante y solo deja de
+            contar si la reportan (y mientras espera revisión) o el
+            administrador la rechaza. Viene en GET /businesses, /nearby,
+            /users/me/favorites y en el perfil; null sin calificaciones.
+        reviewCount:
+          type: integer
+          description: Número de calificaciones públicas (misma regla que averageRating).
         id: { type: string, format: uuid }
         ownerId: { type: string, format: uuid }
         categoryId: { type: integer }

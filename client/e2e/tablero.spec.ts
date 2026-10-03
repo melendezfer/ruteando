@@ -141,7 +141,7 @@ test("Atajos: Publicar oferta abre el formulario con la oferta encendida; Ver co
   await expect(page.getByRole("switch", { name: /oferta con vigencia/i })).toBeChecked();
   await page.goto("/tablero", { waitUntil: "networkidle" });
   await page.getByRole("link", { name: "Ver como cliente" }).click();
-  await page.waitForURL(`**/negocios/${id}`);
+  await page.waitForURL(`**/negocios/${id}?vista=cliente`);
   await expect(page.getByRole("link", { name: "Volver a mi tablero" })).toBeVisible();
 });
 
@@ -187,4 +187,50 @@ test("R14: la hoja de confirmación queda por encima del mapa chico (paneles de 
   expect(encima).toBe(true);
   await page.getByRole("button", { name: "Seguir aquí" }).click();
   await expect(page.getByRole("alertdialog")).toBeHidden();
+});
+
+/** Controles que solo tiene el dueño: ninguno puede aparecer en "Ver como cliente". */
+const CONTROL_DE_DUENO =
+  /cambiar foto|subir foto|eliminar foto|editar|eliminar|agregar|ajustes|estoy vendiendo|ya no vendo|sigo vendiendo|responder|confirmar|declinar|verificar|publicar oferta|terminar registro|ideas de tus clientes|código qr/i;
+
+async function controlesDeDueno(page: Page): Promise<string[]> {
+  return page.evaluate((patron) => {
+    const re = new RegExp(patron, "i");
+    const out: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("a, button, input, select, textarea, [role=switch], [role=checkbox]")) {
+      if (el.closest("[data-floating-action], [data-client-preview]")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      const nombre = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+      if (el instanceof HTMLInputElement && el.type === "file") out.push("input de archivo");
+      else if (el.getAttribute("role") === "switch" || (el instanceof HTMLInputElement && el.type === "checkbox"))
+        out.push(`interruptor "${nombre}"`);
+      else if (re.test(nombre)) out.push(nombre);
+    }
+    return out;
+  }, CONTROL_DE_DUENO.source);
+}
+
+test("Ver como cliente: exactamente la vista del cliente, sin ningún control del dueño", async ({ page }) => {
+  const v = await crearVendedor();
+  const id = await crearNegocio(v);
+  await llamar(v.token, "POST", `/businesses/${id}/products`, { name: "Empanada", price: 1500, available: true });
+  await entrar(page, v.email);
+  await page.waitForURL("**/tablero", { timeout: 20_000 });
+
+  // Control: en su vista de dueño SÍ hay controles de edición (la prueba los detecta).
+  await page.goto(`/negocios/${id}`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /^Empanada/ }).click();
+  expect((await controlesDeDueno(page)).length).toBeGreaterThan(0);
+
+  await page.goto("/tablero", { waitUntil: "networkidle" });
+  await page.getByRole("link", { name: "Ver como cliente" }).click();
+  await page.waitForURL(`**/negocios/${id}?vista=cliente`);
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator("[data-client-preview]")).toContainText("Vista de cliente");
+  await page.getByRole("button", { name: /^Empanada/ }).click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await controlesDeDueno(page)).toEqual([]);
+  // Lo que ve el cliente sí está: "Cómo llegar" y la calificación.
+  await expect(page.getByRole("link", { name: "Cómo llegar" })).toBeVisible();
 });

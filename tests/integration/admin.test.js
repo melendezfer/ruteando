@@ -234,10 +234,14 @@ describe('GET /admin/reviews/reported + moderate (RF-021)', () => {
       .post(`/businesses/${negocio.id}/reviews`)
       .set('Authorization', `Bearer ${consumer.accessToken}`)
       .send({ rating: 3 });
+    // Desde 2026-10-03 una calificación nace publicada; solo un reporte la
+    // pasa a pendiente (la cola de moderación es "lo reportado").
+    const reporter = await registrar('consumer');
+    await request(app).post(`/reviews/${review.body.id}/report`).set('Authorization', `Bearer ${reporter.accessToken}`);
     return { negocio, review: review.body };
   }
 
-  it('lista toda reseña pendiente, no solo las reportadas (toda reseña nueva nace pending)', async () => {
+  it('lista las reseñas reportadas (pendientes de revisión)', async () => {
     const { review } = await crearResenaPendiente();
 
     const res = await request(app)

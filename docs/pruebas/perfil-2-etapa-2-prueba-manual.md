@@ -23,6 +23,16 @@ Rama `feature/perfil-2-tablero`.
 | 8 | Registro de negocio sin terminar → la X de arriba | Hoja "Tu registro no está completo" con Seguir aquí / Salir, por encima del mapa. |
 | 9 | Columna derecha en el tablero | Igual que en el resto: Buscar, Favoritos, Perfil y Mapa abajo. Perfil vuelve al tablero. |
 
+### Ajustes tras tu prueba
+
+| # | Dónde | Qué debe pasar |
+|---|---|---|
+| 10 | Tablero | Orden: tu negocio de ahora, ¿Qué se acabó?, Pendientes, Tu semana, Después y atajos (Publicar oferta, Agregar producto). |
+| 11 | Tablero → Ver como cliente | Franja "Vista de cliente · Volver a mi tablero". Al abrir un plato no aparece cambiar ni eliminar foto, ni editar, ni ningún otro control tuyo. |
+| 12 | Como consumidor, califica un negocio | Al enviar, el perfil muestra "★ 5,0 · 1 calificación" sin recargar. En el mapa, la tarjeta del carrusel y la hoja del negocio muestran lo mismo. |
+| 13 | Califica el mismo negocio otra vez | "Actualizamos tu calificación": el número de calificaciones no sube y el promedio usa la nueva. |
+| 14 | Como dueño, en tu negocio | No hay formulario para calificarte. Comentarios y etiquetas siguen viéndose solo en "Ideas de tus clientes" (Ajustes → Herramientas). |
+
 ## Qué reportar
 
 Una cifra que no cambie, un orden de negocios que no corresponda a la hora, algo que quede tapado o un aviso que no se pueda deshacer.

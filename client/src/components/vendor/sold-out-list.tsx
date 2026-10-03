@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { updateProduct } from "@/lib/api/products";
 import { useUndoToast } from "@/lib/ui/undo-toast";
 import type { components } from "@/lib/api/schema";
@@ -14,12 +12,10 @@ type Product = components["schemas"]["Product"];
  * Agotado por producto, un toque, reversible con "Deshacer" (R4).
  */
 export function SoldOutList({
-  businessId,
   products,
   onChange,
   unavailableLabel = "Agotado",
 }: {
-  businessId: string;
   products: Product[];
   onChange: (product: Product) => void;
   unavailableLabel?: string;
@@ -80,13 +76,6 @@ export function SoldOutList({
         ))}
       </ul>
       {error && <p className="font-sans text-body-sm text-rojo-texto">{error}</p>}
-      <Link
-        href={`/negocios/${businessId}?agregar=producto`}
-        className="inline-flex min-h-11 items-center gap-1.5 self-start font-sans text-body-sm font-semibold text-terracota"
-      >
-        <Plus size={16} weight="bold" />
-        Agregar producto
-      </Link>
     </div>
   );
 }

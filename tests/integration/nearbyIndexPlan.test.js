@@ -120,6 +120,15 @@ beforeAll(async () => {
     [usuarioId],
   );
 
+  // Calificaciones públicas en los listados (2026-10-03,
+  // calificacionesPublicas.js): un LATERAL por fila candidata sobre
+  // resenas — sin volumen, el planificador la recorrería entera.
+  await pool.query(
+    `INSERT INTO resenas (negocio_id, usuario_id, calificacion, estado_moderacion)
+     SELECT n.id, $1, 4, 'aprobada' FROM negocios n WHERE n.usuario_id = $1`,
+    [usuarioId],
+  );
+
   // Franjas del día de ambulantes (migración franjas-ubicacion-ambulante):
   // cercanos() acota candidatos también por idx_franjas_ubicacion_punto —
   // con la tabla vacía cualquier plan sirve y la prueba no mediría nada.
@@ -154,7 +163,7 @@ beforeAll(async () => {
   // la selectividad de categoria_id/estado, eligiendo un plan que no
   // pasa por el índice espacial en absoluto — verificado a mano: sin
   // ANALYZE, la segunda prueba de abajo elegía otro camino de acceso.
-  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, senales_venta, franjas_ubicacion, posiciones_en_vivo');
+  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, senales_venta, resenas, franjas_ubicacion, posiciones_en_vivo');
 });
 
 // Con senales_venta sembrada (R5), el borrado en cascada de los negocios
@@ -162,6 +171,7 @@ beforeAll(async () => {
 // avisos (una sola sentencia por índice) y el hook tiene más margen.
 afterAll(async () => {
   await pool.query('DELETE FROM senales_venta WHERE usuario_id = $1', [usuarioId]);
+  await pool.query('DELETE FROM resenas WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM negocios WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
   await pool.query('DELETE FROM categorias WHERE id = $1', [categoriaId]);

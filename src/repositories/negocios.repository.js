@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { lateralUltimaSenalVenta } = require('./ultimaSenalVenta');
+const { lateralCalificaciones } = require('./calificacionesPublicas');
 const { diaAnterior, momentoActualBogota } = require('../services/disponibilidad.service');
 const {
   ZONE_RADIUS_METERS,
@@ -694,6 +695,7 @@ async function listarDeHoyPorUsuario(usuarioId) {
   const { rows } = await pool.query(
     `SELECT n.*,
             disp.respondida_en AS disponibilidad_confirmada_en,
+            cal.resenas_promedio, cal.resenas_total,
             (${condicionHorarioSQL(idxHorario)}
               OR EXISTS (
                 SELECT 1 FROM franjas_ubicacion f
@@ -706,6 +708,7 @@ async function listarDeHoyPorUsuario(usuarioId) {
             (hoy.hora_apertura > $${idxHorario.pAhora}::time) AS abre_mas_tarde
        FROM negocios n
        ${lateralDisponibilidadFresca(2)}
+       ${lateralCalificaciones()}
        LEFT JOIN horarios hoy
          ON hoy.negocio_id = n.id AND hoy.dia = $${idxHorario.pHoy}::dia_semana AND hoy.cerrado = false
       WHERE n.usuario_id = $1 AND n.estado <> 'cerrado'
@@ -776,6 +779,7 @@ async function listar({
             ${COLUMNAS_FRANJA_ACTIVA},
             ${COLUMNAS_EN_VIVO},
             disp.respondida_en AS disponibilidad_confirmada_en,
+            cal.resenas_promedio, cal.resenas_total,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
             ${columnaOfertaCoincide(idxOfertaTipo, idxHorario)} AS oferta_coincide,
@@ -791,6 +795,7 @@ async function listar({
      ${lateralFranjaActiva(idxHorario)}
      ${lateralPosicionEnVivo(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
+     ${lateralCalificaciones()}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
      WHERE ${clausulas.join(' AND ')}
@@ -876,6 +881,7 @@ function construirConsultaCercanos({
             ${COLUMNAS_FRANJA_ACTIVA},
             ${COLUMNAS_EN_VIVO},
             disp.respondida_en AS disponibilidad_confirmada_en,
+            cal.resenas_promedio, cal.resenas_total,
             ${columnaNombreCoincide(idxQ)} AS nombre_coincide,
             ${columnaCategoriaCoincide(idxQ, idxCategoriasAlias)} AS categoria_coincide,
             ${columnaOfertaCoincide(idxOfertaTipo, idxHorario)} AS oferta_coincide,
@@ -888,6 +894,7 @@ function construirConsultaCercanos({
      ${lateralFranjaActiva(idxHorario)}
      ${lateralPosicionEnVivo(idxHorario)}
      ${lateralDisponibilidadFresca(idxFrescura)}
+     ${lateralCalificaciones()}
      ${productosCoincidentes.join}
      ${ofertasVigentes.join}
      WHERE ${clausulas.join(' AND ')}

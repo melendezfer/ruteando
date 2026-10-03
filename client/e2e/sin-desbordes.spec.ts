@@ -149,8 +149,9 @@ for (const ancho of ANCHOS) {
       await page.waitForURL("**/tablero");
       await page.waitForLoadState("networkidle");
       expect(await desbordes(page)).toEqual([]);
-      await page.getByRole("link", { name: "Ver como cliente" }).click();
-      await page.waitForURL(/\/negocios\/[0-9a-f-]+$/);
+      // Vista del dueño de su negocio (sin "?vista=cliente").
+      const verComoCliente = await page.getByRole("link", { name: "Ver como cliente" }).getAttribute("href");
+      await page.goto(verComoCliente!.split("?")[0], { waitUntil: "networkidle" });
       await page.waitForLoadState("networkidle");
       expect(await desbordes(page)).toEqual([]);
       await page.goto(`${page.url()}/ajustes`, { waitUntil: "networkidle" });

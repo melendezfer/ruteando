@@ -7110,3 +7110,24 @@ Guía: `docs/pruebas/perfil-2-etapa-2-prueba-manual.md`.
   "pendientes" llenaban la cola del admin y rompían `admin.test.js` en la
   base de desarrollo. **Hallazgo**: el backend de pm2 no recarga solo; tras cambiar
   rutas hay que `pm2 restart ruteando-backend`.
+
+### Ajustes tras la prueba del usuario (2026-10-03)
+
+- **Orden del tablero**: ahora → ¿Qué se acabó? → Pendientes → Tu semana
+  → Después → atajos ("Agregar producto" pasó a atajos).
+- **"Ver como cliente"** (`?vista=cliente`, leído en el servidor por
+  `negocios/[businessId]/page.tsx`): `isOwner` queda en `false` y
+  `realOwner` solo esconde lo que el dueño no puede hacer sobre su propio
+  negocio (preguntar si vende, calificar). Prueba e2e que lista todo
+  botón/enlace/interruptor visible y falla si aparece un control de dueño
+  (y comprueba que en la vista de dueño sí los detecta).
+- **Calificaciones públicas al instante** (spec §3.6): causa verificada con
+  la app (nacían `pendiente`, solo cuentan `aprobada`, sin panel que las
+  apruebe). Ahora nacen `aprobada`, una por persona (reemplazo, 201/200,
+  `resenasRepo.crearOReemplazar`), moderación solo para lo reportado;
+  `averageRating`/`reviewCount` en `Business` (listados) vía
+  `calificacionesPublicas.js`; `RatingSummary` en perfil, hoja del mapa,
+  /buscar y carrusel. Pruebas: `resenas.test.js` (publicada, reemplazo,
+  reportada y reemplazada, listados), `nearbyIndexPlan` siembra `resenas`,
+  e2e `calificaciones.spec.ts`. Se borraron las calificaciones de prueba
+  que quedaron en negocios de demo (cuentas `e2e-calif-…`).

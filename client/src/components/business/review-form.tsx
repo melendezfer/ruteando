@@ -17,9 +17,11 @@ interface ReviewFormProps {
    * de comida, sin importar el tipo de negocio.
    */
   catalogType: CatalogType | null;
+  /** Tras calificar (nueva o reemplazo): el perfil vuelve a leer su promedio. */
+  onRated?: () => void;
 }
 
-type Stage = "form" | "submitted" | "already_reviewed";
+type Stage = "form" | "submitted" | "replaced";
 
 const RATING_LABELS: Record<number, string> = {
   1: "Muy malo",
@@ -40,7 +42,7 @@ const RATING_LABELS: Record<number, string> = {
  * transaccional ("calificación enviada") a propósito: quiere sentirse
  * como un aporte a la comunidad, no como completar un formulario.
  */
-export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
+export function ReviewForm({ businessId, catalogType, onRated }: ReviewFormProps) {
   const reviewTags = resolveReviewTags(catalogType);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -72,17 +74,15 @@ export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
 
     setSubmitting(false);
 
-    if (response.status === 409) {
-      setStage("already_reviewed");
-      return;
-    }
     if (!response.ok) {
       setError(getReviewSubmitErrorMessage(response.status));
       return;
     }
 
-    logReviewCreatedEvent(businessId);
-    setStage("submitted");
+    // Una calificación por persona (2026-10-03): 201 = nueva, 200 = reemplazó la anterior.
+    if (response.status === 201) logReviewCreatedEvent(businessId);
+    setStage(response.status === 201 ? "submitted" : "replaced");
+    onRated?.();
   }
 
   if (stage === "submitted") {
@@ -96,11 +96,12 @@ export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
     );
   }
 
-  if (stage === "already_reviewed") {
+  if (stage === "replaced") {
     return (
-      <div className="rounded-card border border-border bg-surface px-4 py-4 text-center">
-        <p className="font-sans text-body-sm text-text-muted">
-          Ya calificaste este negocio antes. ¡Gracias por tu aporte!
+      <div className="flex flex-col items-center gap-2 rounded-card border border-verde/30 bg-verde-suave px-4 py-6 text-center">
+        <HandHeart size={28} weight="fill" className="text-verde" />
+        <p className="font-sans text-body font-medium text-text">
+          Actualizamos tu calificación. Solo cuenta la más reciente.
         </p>
       </div>
     );

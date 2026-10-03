@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Eye, Gear, Tag, Warning } from "@phosphor-icons/react/dist/ssr";
+import { Eye, Gear, Plus, Tag, Warning } from "@phosphor-icons/react/dist/ssr";
 import { api } from "@/lib/api/client";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { SellingNowCard } from "@/components/business/selling-now-card";
@@ -33,10 +33,11 @@ function esHoyEnBogota(iso: string): boolean {
 
 /**
  * Tablero del día (Perfil 2.0 C2, docs/specs/perfil-2.md §4): la página
- * principal del vendedor. Arriba el negocio de AHORA (o el elegido) con su
- * única acción principal, "Estoy vendiendo ahora" (R5); después los demás
- * negocios de hoy (DESPUÉS), "Tu semana", pendientes, "¿Qué se acabó?" (R3)
- * y atajos. El orden AHORA/DESPUÉS lo decide el servidor
+ * principal del vendedor. Orden por prioridad para quien está vendiendo
+ * (pedido del usuario, 2026-10-03): el negocio de AHORA (o el elegido) con
+ * su única acción principal, "Estoy vendiendo ahora" (R5); "¿Qué se
+ * acabó?" (R3); Pendientes; "Tu semana"; los demás negocios de hoy
+ * (DESPUÉS) y atajos. El orden AHORA/DESPUÉS lo decide el servidor
  * (GET /users/me/businesses/today).
  */
 export function TableroScreen({ businesses }: { businesses: TodayBusiness[] }) {
@@ -113,7 +114,7 @@ export function TableroScreen({ businesses }: { businesses: TodayBusiness[] }) {
           )}
           <div className="grid grid-cols-2 gap-2">
             <Link
-              href={`/negocios/${selected.id}`}
+              href={`/negocios/${selected.id}?vista=cliente`}
               className="flex min-h-11 items-center justify-center gap-1.5 rounded-input border border-terracota px-2 font-sans text-body-sm font-semibold text-terracota hover:bg-terracota-50"
             >
               <Eye size={16} weight="bold" />
@@ -130,43 +131,19 @@ export function TableroScreen({ businesses }: { businesses: TodayBusiness[] }) {
         </div>
       </section>
 
-      {/* DESPUÉS: los demás negocios de hoy, en orden de hora (los cerrados al final, atenuados). */}
-      {others.length > 0 && (
-        <section aria-labelledby="tablero-despues" className="flex flex-col gap-2">
-          <h2 id="tablero-despues" className="font-sans text-caption font-semibold uppercase tracking-wide text-text-muted">
-            Después
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {others.map((b) => (
-              <li key={b.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(b.id ?? null)}
-                  className={`flex min-h-12 w-full items-center gap-3 rounded-card border border-border bg-surface px-3 py-2 text-left ${
-                    b.today.status === "closed" ? "opacity-60" : ""
-                  }`}
-                >
-                  <CategoryIcon categoryId={b.categoryId} size="sm" />
-                  <span className="min-w-0 flex-1 font-sans text-body font-medium text-text">{b.name}</span>
-                  <span className="shrink-0 font-sans text-body-sm text-text-muted">
-                    {b.today.status === "later" && b.today.openTime
-                      ? formatHour(b.today.openTime)
-                      : b.today.status === "now"
-                        ? "Abierto"
-                        : "Cerrado hoy"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section aria-labelledby="tablero-semana" className="flex flex-col gap-2">
-        <h2 id="tablero-semana" className="font-heading text-title-2 font-bold text-text">
-          Tu semana
+      <section aria-labelledby="tablero-agotado" className="flex flex-col gap-2">
+        <h2 id="tablero-agotado" className="font-heading text-title-2 font-bold text-text">
+          ¿Qué se acabó?
         </h2>
-        <WeekStats businessId={selected.id} />
+        {profile ? (
+          <SoldOutList
+            products={products}
+            onChange={replaceProduct}
+            unavailableLabel={unavailableLabel}
+          />
+        ) : (
+          <p className="font-sans text-body-sm text-text-muted">Cargando tu carta…</p>
+        )}
       </section>
 
       <section aria-labelledby="tablero-pendientes" className="flex flex-col gap-2">
@@ -220,21 +197,44 @@ export function TableroScreen({ businesses }: { businesses: TodayBusiness[] }) {
         )}
       </section>
 
-      <section aria-labelledby="tablero-agotado" className="flex flex-col gap-2">
-        <h2 id="tablero-agotado" className="font-heading text-title-2 font-bold text-text">
-          ¿Qué se acabó?
+      <section aria-labelledby="tablero-semana" className="flex flex-col gap-2">
+        <h2 id="tablero-semana" className="font-heading text-title-2 font-bold text-text">
+          Tu semana
         </h2>
-        {profile ? (
-          <SoldOutList
-            businessId={selected.id}
-            products={products}
-            onChange={replaceProduct}
-            unavailableLabel={unavailableLabel}
-          />
-        ) : (
-          <p className="font-sans text-body-sm text-text-muted">Cargando tu carta…</p>
-        )}
+        <WeekStats businessId={selected.id} />
       </section>
+
+      {/* DESPUÉS: los demás negocios de hoy, en orden de hora (los cerrados al final, atenuados). */}
+      {others.length > 0 && (
+        <section aria-labelledby="tablero-despues" className="flex flex-col gap-2">
+          <h2 id="tablero-despues" className="font-sans text-caption font-semibold uppercase tracking-wide text-text-muted">
+            Después
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {others.map((b) => (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(b.id ?? null)}
+                  className={`flex min-h-12 w-full items-center gap-3 rounded-card border border-border bg-surface px-3 py-2 text-left ${
+                    b.today.status === "closed" ? "opacity-60" : ""
+                  }`}
+                >
+                  <CategoryIcon categoryId={b.categoryId} size="sm" />
+                  <span className="min-w-0 flex-1 font-sans text-body font-medium text-text">{b.name}</span>
+                  <span className="shrink-0 font-sans text-body-sm text-text-muted">
+                    {b.today.status === "later" && b.today.openTime
+                      ? formatHour(b.today.openTime)
+                      : b.today.status === "now"
+                        ? "Abierto"
+                        : "Cerrado hoy"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-labelledby="tablero-atajos" className="flex flex-col gap-2">
         <h2 id="tablero-atajos" className="font-heading text-title-2 font-bold text-text">
@@ -246,6 +246,13 @@ export function TableroScreen({ businesses }: { businesses: TodayBusiness[] }) {
         >
           <Tag size={18} weight="bold" />
           Publicar oferta
+        </Link>
+        <Link
+          href={`/negocios/${selected.id}?agregar=producto`}
+          className="flex min-h-12 items-center justify-center gap-2 rounded-input border border-terracota bg-surface px-3 font-sans text-body font-semibold text-terracota hover:bg-terracota-50"
+        >
+          <Plus size={18} weight="bold" />
+          Agregar producto
         </Link>
       </section>
     </div>

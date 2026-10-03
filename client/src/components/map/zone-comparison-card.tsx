@@ -52,7 +52,7 @@ export function ZoneComparisonCard({ zones, onJumpToZone }: ZoneComparisonCardPr
   const minutes = estimateWalkingMinutes(betterZone.distanceMeters ?? 0);
 
   return (
-    <div className="absolute left-3 right-3 top-7 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+    <div className="absolute left-3 right-[var(--columna-franja)] top-7 z-30 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
       <div className="flex items-start gap-2">
         <ViewOnMapIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-estrella" />
         <p className="font-sans text-body-sm text-text">

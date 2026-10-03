@@ -1207,6 +1207,14 @@ ruta — ver la nota bajo esa tabla.
 
 ## 20. Componente FloatingActionStack
 
+> **Vigente desde la Etapa 1b (§63, 2026-10-03):** el componente es ahora
+> la **columna de navegación** del costado derecho, zona media-baja:
+> botones uniformes de 44 px de arriba hacia abajo (sin círculo grande),
+> `actions` + `showTip`, sin `reserveSpace` (el contenido reserva la
+> franja con `.reserva-columna`). Ya no lo usa el perfil de negocio
+> (WhatsApp/Cómo llegar pasaron al contenido); solo `MainFloatingNav`. Lo
+> de abajo queda como registro de la versión anterior.
+
 `client/src/components/ui/floating-action-stack.tsx` — reemplaza, para
 cualquier pantalla que lo necesite, el patrón de "dos botones horizontales
 fijos" que describía originalmente el Documento 08 (ej. WhatsApp/Cómo
@@ -7006,3 +7014,37 @@ Guía: filas 13–17 de `docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
   px de desfase).
 
 e2e completas: 43/43.
+
+### Etapa 1b — navegación: "Volver" + título arriba y columna derecha (2026-10-03)
+
+Pedido del usuario (cambia el punto 4: nada de barra de íconos arriba).
+Spec: `docs/specs/perfil-2.md` §8.1; lugar del ancla:
+`docs/integracion-ancla.md` §5.1 (DI-08). Guía: filas 18–22 de
+`docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+- **Arriba**: `ScreenHeader` (`components/layout/screen-header.tsx`) con
+  solo "Volver" y el título en Buscar, Mi cuenta y Mi perfil (Ajustes ya lo
+  tenía). Sin íconos de acción arriba: en el perfil del negocio se fueron el
+  corazón (ahora junto al nombre) y el engranaje (ya estaba "Ajustes del
+  negocio" con texto); "Cerrar sesión" pasó al final de la cuenta.
+- **Columna** (`FloatingActionStack` reescrito, `MainFloatingNav`): 44 px,
+  a 12 px del borde derecho, borde inferior en `--columna-abajo` (`18vh` +
+  área segura), orden Buscar · Favoritos · Perfil · Ubicarme (solo con el
+  mapa visible). Contenedor `pointer-events-none` (sus huecos no bloquean
+  toques). Con hoja o teclado abiertos (`lib/ui/use-keyboard-open.ts`:
+  campo de texto con foco en táctil o `visualViewport` encogido >150 px),
+  un solo botón "Volver al mapa". Sin sesión, la columna no aparece.
+- **Franja reservada**: utilidad `.reserva-columna` (64 px, `globals.css`)
+  en el contenido de Buscar, Cuenta, Perfil, inicio del vendedor sin
+  negocio y perfil del negocio (no en su portada), en las tres hojas del
+  mapa y en la tarjeta de zonas. Las X de cerrar de las hojas pasaron a
+  44 px dentro de la hoja.
+- **Perfil del negocio**: WhatsApp y Cómo llegar dejan de ser flotantes;
+  van como dos botones en el contenido (adelanto de "Cómo comprar").
+- **Pruebas**: `client/e2e/columna-navegacion.spec.ts` (nueva, 360/390/412
+  px: posición, tamaño, orden, sin letreros, un botón con hoja y con
+  teclado, la hoja no pasa por la franja, arriba solo "Volver" y título);
+  `flotantes-no-tapan.spec.ts` ahora mira arriba, a la mitad y al final del
+  desplazamiento (falla si se quita la franja: comprobado). El aviso de la
+  primera vez tapa contenido hasta que se toca "Entendido" — las pruebas lo
+  cierran antes de medir.

@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/auth/auth-context";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { MainFloatingNav } from "@/components/layout/main-floating-nav";
+import { ScreenHeader } from "@/components/layout/screen-header";
 import { ProfileScreen } from "@/components/profile/profile-screen";
 
 /**
@@ -31,6 +32,7 @@ export default function CuentaPage() {
     <RequireAuth>
       {user && (
         <main className="flex flex-1 flex-col">
+          <ScreenHeader title="Mi cuenta" />
           <ProfileScreen user={user} />
           <MainFloatingNav />
         </main>

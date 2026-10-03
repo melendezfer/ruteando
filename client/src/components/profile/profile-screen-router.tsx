@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
 import { MainFloatingNav } from "@/components/layout/main-floating-nav";
+import { ScreenHeader } from "@/components/layout/screen-header";
 import { ProfileScreen } from "@/components/profile/profile-screen";
 import { RuteandoLogo } from "@/components/ui/ruteando-logo";
 import { RegisterBusinessCard } from "@/components/business/register-business-card";
@@ -31,8 +32,9 @@ export function ProfileScreenRouter() {
   if (!isVendor || homeBusiness === null) {
     return (
       <main className="flex flex-1 flex-col">
+        <ScreenHeader title="Mi perfil" />
         {isVendor && (
-          <div className="px-5 pt-6">
+          <div className="reserva-columna pt-6 pl-5">
             <RegisterBusinessCard />
           </div>
         )}

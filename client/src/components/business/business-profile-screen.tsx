@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Chair,
   Gear,
@@ -15,7 +14,7 @@ import { formatRelativeTimeShort } from "@/lib/format/relative-time";
 import { MOBILITY_ICONS, MOBILITY_LABELS, SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
-import { FloatingActionStack } from "@/components/ui/floating-action-stack";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { BackButton } from "@/components/ui/back-button";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
@@ -73,7 +72,6 @@ const LiveIcon = SEMANTIC_ICONS.liveLocation;
 // A8 (fix/pulido-visual): insignias compactas y con texto corto para que
 // fluyan varias por línea en el celular (a 320 px ocupaban una línea cada una).
 const BADGE_CLASS = "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 font-sans text-caption font-semibold";
-const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
 const DirectionsIcon = SEMANTIC_ICONS.directions;
 
 
@@ -85,7 +83,6 @@ const DirectionsIcon = SEMANTIC_ICONS.directions;
  */
 export function BusinessProfileScreen({ profile, categoryName, catalogType }: BusinessProfileScreenProps) {
   const { user } = useAuth();
-  const router = useRouter();
   // Estado local aparte de `profile` (inmutable, viene del Server
   // Component) — así, al confirmar el código, el aviso desaparece de
   // inmediato sin depender de recargar la página o volver a pedir el
@@ -300,23 +297,8 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   const directionsHref = effective ? buildDirectionsUrl(effective.latitude, effective.longitude) : null;
 
   return (
-    <div className="flex flex-1 flex-col pb-24">
+    <div className="flex flex-1 flex-col pb-8">
       <BackButton className="fixed left-3 top-3 z-40" />
-      <FavoriteButton
-        businessId={profile.id}
-        ownerId={profile.ownerId}
-        size={22}
-        className="fixed right-3 top-3 z-40 h-10 w-10 border border-border bg-surface/90 shadow-lg backdrop-blur transition-colors hover:bg-background"
-      />
-      {isOwner && (
-        <Link
-          href={`/negocios/${profile.id}/ajustes`}
-          aria-label="Ajustes del negocio"
-          className="fixed right-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface/90 text-text shadow-lg backdrop-blur transition-colors hover:bg-background"
-        >
-          <Gear size={20} weight="bold" />
-        </Link>
-      )}
 
       <div className="relative h-64 w-full bg-terracota-50">
         {heroPhoto ? (
@@ -346,8 +328,21 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </span>
       </div>
 
-      <div className="flex flex-col gap-1 px-5 py-4">
+      {/* Etapa 1b: el contenido reserva la franja derecha de la columna de
+          navegación (docs/specs/perfil-2.md §8.1); la portada no, es una foto. */}
+      <div className="reserva-columna flex flex-col">
+      <div className="flex flex-col gap-1 pl-5 py-4">
+        <div className="flex items-start justify-between gap-2">
         <h1 className="font-heading text-title-1 font-bold text-text">{profile.name}</h1>
+          {/* Favorito junto al nombre, no arriba: arriba solo va "Volver"
+              (Etapa 1b). Sin sesión o en su propio negocio no aparece. */}
+          <FavoriteButton
+            businessId={profile.id}
+            ownerId={profile.ownerId}
+            size={22}
+            className="h-11 w-11 border border-border bg-surface hover:bg-background"
+          />
+        </div>
         <p className="flex flex-wrap items-center gap-1.5 font-sans text-body-sm text-text-muted">
           <CategoryIcon categoryId={profile.categoryId} size="sm" />
           {categoryName ?? "Comercio informal"}
@@ -394,6 +389,38 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           {profile.hygieneSelfDeclared && <HygieneBadge />}
           <AvailabilityConfirmedBadge confirmedAt={availabilityConfirmedAt} />
         </div>
+        {/* Cómo comprar (Etapa 1b, adelanto de C1 §3.1): antes eran botones
+            flotantes abajo a la derecha. Acciones del cliente: el dueño no
+            se escribe ni se busca a sí mismo. */}
+        {!isOwner && (whatsappHref || directionsHref) && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {directionsHref && (
+              <a
+                href={directionsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-12 items-center justify-center gap-2 rounded-input bg-terracota px-3 font-sans text-body font-semibold text-white hover:bg-terracota-dark"
+              >
+                <DirectionsIcon size={18} weight="fill" />
+                Cómo llegar
+              </a>
+            )}
+            {whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (profile.id) logContactClickEvent(profile.id);
+                }}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-input border border-terracota bg-surface px-3 font-sans text-body font-semibold text-terracota hover:bg-terracota-50"
+              >
+                <WhatsappLogo size={18} weight="fill" />
+                WhatsApp
+              </a>
+            )}
+          </div>
+        )}
         {profile.id && !isOwner && user && (
           <div className="mt-2">
             <AvailabilityRequestButton businessId={profile.id} onConfirmed={setAvailabilityConfirmedAt} />
@@ -404,7 +431,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       {/* Perfil 2.0, C3: los ajustes ya no se apilan acá (antes ~12
           tarjetas); viven en su propia pantalla, por familias. */}
       {isOwner && profile.id && (
-        <div className="flex items-center justify-between gap-3 px-5 pb-4">
+        <div className="flex items-center justify-between gap-3 pl-5 pb-4">
           <p className="font-sans text-body-sm text-text-muted">Así ven tu negocio tus clientes.</p>
           <Link
             href={`/negocios/${profile.id}/ajustes`}
@@ -417,7 +444,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       {isOwner && profile.id && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <BusinessStatusBanner businessId={profile.id} status={profile.status} />
         </div>
       )}
@@ -426,7 +453,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           solo con el negocio activo; el banner de estado de arriba ya
           explica por qué no, si no lo está. */}
       {isOwner && profile.id && profile.status === "active" && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <SellingNowCard
             businessId={profile.id}
             confirmedAt={availabilityConfirmedAt}
@@ -436,7 +463,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       {isOwner && profile.id && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <VendorAvailabilityRequestsPanel
             businessId={profile.id}
             onConfirmed={setAvailabilityConfirmedAt}
@@ -448,7 +475,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       {/* Registro sin terminar ("Guardar y terminar después", o se cerró el
           asistente a mitad): falta la ubicación o el horario. */}
       {isOwner && profile.id && (!location || !(profile.schedule?.length ?? 0)) && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <Link
             href={`/negocios/nuevo?negocio=${profile.id}`}
             className="flex items-center justify-between gap-3 rounded-card border border-terracota-100 bg-terracota-50 px-4 py-3 font-sans text-body-sm text-text"
@@ -463,7 +490,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       {isOwner && !phoneVerified && profile.id && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <Link
             href={`/negocios/${profile.id}/ajustes`}
             className="flex items-center justify-between gap-3 rounded-card border border-ambar/40 bg-ambar-suave px-4 py-3 font-sans text-body-sm text-ambar-texto"
@@ -477,7 +504,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
-      <section className="flex flex-col gap-3 px-5 py-4">
+      <section className="flex flex-col gap-3 pl-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-heading text-title-2 font-semibold text-text">{catalogSectionLabel}</h2>
           {isOwner && (
@@ -557,13 +584,13 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
       )}
 
       {profile.id && !isOwner && user && (
-        <div className="px-5 pb-4">
+        <div className="pl-5 pb-4">
           <ReviewForm businessId={profile.id} catalogType={catalogType} />
         </div>
       )}
 
       {profile.id && !isOwner && !user && (
-        <div className="mx-5 mb-4 rounded-card border border-border bg-surface px-4 py-3 text-center">
+        <div className="ml-5 mb-4 rounded-card border border-border bg-surface px-4 py-3 text-center">
           <p className="font-sans text-body-sm text-text-muted">
             <Link href="/login" className="font-medium text-terracota underline">
               Inicia sesión
@@ -573,47 +600,11 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
-      {/* A2 (fix/pulido-visual): WhatsApp y Cómo llegar son acciones del
-          cliente — el dueño no se escribe ni se busca a sí mismo, así que en
-          su propio negocio solo queda "Volver al mapa". */}
-      <FloatingActionStack
-        actions={[
-          whatsappHref && !isOwner
-            ? {
-                icon: <WhatsappLogo size={32} weight="fill" />,
-                label: "Contactar por WhatsApp",
-                shortLabel: "WhatsApp",
-                href: whatsappHref,
-                onClick: () => {
-                  if (profile.id) logContactClickEvent(profile.id);
-                },
-              }
-            : null,
-          directionsHref && !isOwner
-            ? {
-                icon: <DirectionsIcon size={22} weight="fill" />,
-                label: "Cómo llegar",
-                shortLabel: "Llegar",
-                href: directionsHref,
-              }
-            : null,
-          // Hallazgo real (sin RF asociado, petición directa del
-          // usuario): esta pantalla seguía montando la vieja
-          // `BottomNavBar` (fija, horizontal) mientras el resto de la
-          // app ya migró a `MainFloatingNav` — quedaba huérfana del
-          // redediseño de navegación global. Se retira esa barra y, en
-          // su lugar, se agrega "Volver al mapa" como tercera acción de
-          // este mismo stack — siempre presente, sin depender de sesión
-          // (a diferencia de WhatsApp/Cómo llegar, que dependen de que
-          // el negocio tenga esos datos).
-          {
-            icon: <ViewOnMapIcon size={22} weight="fill" />,
-            label: "Volver al mapa",
-            shortLabel: "Mapa",
-            onClick: () => router.push("/mapa"),
-          },
-        ]}
-      />
+      </div>
+
+      {/* Etapa 1b: la misma columna de navegación que el resto de la app
+          (con sesión). Sin sesión (enlace compartido) queda solo "Volver". */}
+      {user && <MainFloatingNav />}
     </div>
   );
 }

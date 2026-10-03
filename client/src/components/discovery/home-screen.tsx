@@ -178,7 +178,7 @@ export function HomeScreen({ userFirstName }: HomeScreenProps) {
   const showLocationHint = geolocation.status !== "granted" && businesses === null && !listLoading;
 
   return (
-    <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
+    <div className="reserva-columna flex flex-1 flex-col gap-5 bg-background py-6 pl-5">
       <SearchBar onSearch={handleTextSearch} userFirstName={userFirstName} />
 
       <SearchModeToggle advanced={advanced} onChange={handleModeChange} />

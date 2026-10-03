@@ -231,7 +231,7 @@ export function FilteredListSheet({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-24">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end reserva-columna pb-3 pl-3">
       {/*
         Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
         arriba sigue usable): así la hoja nunca sube hasta la franja de
@@ -244,7 +244,7 @@ export function FilteredListSheet({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute -top-3 -right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
+          className="absolute -top-3 right-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
         >
           <X size={16} weight="bold" />
         </button>

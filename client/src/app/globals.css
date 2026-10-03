@@ -280,3 +280,24 @@ body {
     opacity: 0.6;
   }
 }
+
+/*
+ * Columna de navegación (Etapa 1b, docs/specs/perfil-2.md §8.1): fija al
+ * costado derecho, zona media-baja (alcance del pulgar, el mismo lugar que
+ * ocupará el botón-ancla). Botones de 44 px a 12 px del borde; la franja
+ * reservada son esos 56 px más 8 px de aire. El contenido, las hojas y los
+ * avisos de las pantallas con columna usan `.reserva-columna` para que nada
+ * quede debajo (como HM-07 del botón-ancla).
+ */
+:root {
+  --columna-boton: 44px;
+  --columna-borde: 12px;
+  --columna-franja: calc(var(--columna-boton) + var(--columna-borde) + 8px);
+  /* Borde inferior de la columna: deja la parte baja para el pulgar sin
+     taparse con la barra del sistema. */
+  --columna-abajo: calc(18vh + env(safe-area-inset-bottom, 0px));
+}
+
+@utility reserva-columna {
+  padding-right: var(--columna-franja);
+}

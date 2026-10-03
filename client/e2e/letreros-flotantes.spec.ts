@@ -77,17 +77,19 @@ test.describe("celular", () => {
   });
 
   test("mantener presionado muestra el letrero y no activa la acción", async ({ page }) => {
+    // Etapa 1b: la columna solo aparece con sesión (un enlace compartido abierto sin sesión tiene solo "Volver").
+    await entrar(page, await crearConsumidor());
     await page.goto(`/negocios/${await idDeNegocio("Arepas Doña Rosa")}`, { waitUntil: "networkidle" });
-    const boton = page.getByRole("button", { name: "Volver al mapa" });
+    const boton = page.getByRole("button", { name: "Buscar" });
     const url = page.url();
     await boton.dispatchEvent("pointerdown", { pointerType: "touch" });
     await page.waitForTimeout(700);
-    await expect(page.locator("[data-floating-label]", { hasText: "Mapa" })).toBeVisible();
+    await expect(page.locator("[data-floating-label]", { hasText: "Buscar" })).toBeVisible();
     await boton.dispatchEvent("pointerup", { pointerType: "touch" });
     await boton.dispatchEvent("click");
     await page.waitForTimeout(500);
     expect(page.url()).toBe(url);
-    await expect(page.locator("[data-floating-label]", { hasText: "Mapa" })).toBeHidden({ timeout: 4000 });
+    await expect(page.locator("[data-floating-label]", { hasText: "Buscar" })).toBeHidden({ timeout: 4000 });
   });
 });
 
@@ -95,11 +97,12 @@ test.describe("PC", () => {
   test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false });
 
   test("pasar el mouse muestra el letrero; al salir se esconde", async ({ page }) => {
-    await page.goto(`/negocios/${await idDeNegocio("Arepas Doña Rosa")}`, { waitUntil: "networkidle" });
+    await entrar(page, await crearConsumidor());
+    await page.goto("/buscar", { waitUntil: "networkidle" });
     await ningunLetreroVisible(page);
-    await page.getByRole("button", { name: "Volver al mapa" }).hover();
-    await expect(page.locator("[data-floating-label]", { hasText: "Mapa" })).toBeVisible();
+    await page.getByRole("button", { name: "Perfil" }).hover();
+    await expect(page.locator("[data-floating-label]", { hasText: "Perfil" })).toBeVisible();
     await page.mouse.move(10, 10);
-    await expect(page.locator("[data-floating-label]", { hasText: "Mapa" })).toBeHidden();
+    await expect(page.locator("[data-floating-label]", { hasText: "Perfil" })).toBeHidden();
   });
 });

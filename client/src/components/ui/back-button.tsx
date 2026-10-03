@@ -50,7 +50,7 @@ export function BackButton({ fallbackHref = "/", className = "" }: BackButtonPro
       type="button"
       onClick={handleClick}
       aria-label="Volver"
-      className={`flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface/90 text-text shadow-lg backdrop-blur transition-colors hover:bg-background ${className}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface/90 text-text shadow-lg backdrop-blur transition-colors hover:bg-background ${className}`}
     >
       <ArrowLeft size={20} weight="bold" />
     </button>

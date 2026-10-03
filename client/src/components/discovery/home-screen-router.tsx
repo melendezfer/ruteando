@@ -38,7 +38,7 @@ export function HomeScreenRouter() {
 
   if (homeBusiness === null) {
     return (
-      <main className="flex flex-1 flex-col gap-4 bg-background px-5 py-6">
+      <main className="reserva-columna flex flex-1 flex-col gap-4 bg-background py-6 pl-5">
         <div className="flex items-center gap-2">
           <RuteandoLogo size={32} />
           <p className="font-sans text-body text-text-muted">Hola, {user?.fullName?.split(" ")[0] ?? "vendedor"}.</p>

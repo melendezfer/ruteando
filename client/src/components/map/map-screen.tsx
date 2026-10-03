@@ -722,7 +722,6 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
           onBackToMap={!showMap ? handleBackToMap : undefined}
           compact={!showMap}
           onSearch={handleToggleSearchSheet}
-          reserveSpace={false}
         />
       </div>
     </div>

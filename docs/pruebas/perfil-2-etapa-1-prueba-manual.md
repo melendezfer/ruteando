@@ -36,6 +36,16 @@ Rama `feature/perfil-2-ajustes` (sale de R5, `feature/r5-estoy-vendiendo`, con `
 | 16 | Pantallas angostas (360–412 px): mapa, hoja de Buscar, Buscar, Cuenta, perfil del dueño y Ajustes | Nada se sale de su caja (el botón de buscar, la X de cerrar). Con una hoja abierta sobre el mapa, abajo queda un solo botón (volver al mapa) y no tapa nada de la hoja. Horario del registro: apertura y cierre caben lado a lado. |
 | 17 | Carrusel "Disponibles ahora" del mapa | Al deslizar, cada tarjeta queda alineada en el mismo lugar que la primera (antes la primera empezaba a la izquierda y las demás se centraban). |
 
+### Etapa 1b — navegación nueva
+
+| # | Dónde | Qué debe pasar |
+|---|---|---|
+| 18 | Cualquier pantalla con sesión | Arriba solo "Volver" y el título (Buscar, Mi cuenta, Mi perfil). En el costado derecho, a media altura hacia abajo, una columna de botones pequeños: Buscar, Favoritos, Perfil y, en el mapa, Ubicarme. Sin nombres a la vista; mantén presionado uno y aparece su nombre sin activarse. |
+| 19 | Desplázate en Buscar, Mi cuenta y el perfil de un negocio | Ningún texto ni botón queda debajo de la columna: el contenido deja libre esa franja. |
+| 20 | Mapa → Buscar (o toca una tarjeta) | Con la hoja abierta queda un solo botón (mapa) que la cierra. La hoja no pasa por debajo del botón. |
+| 21 | Buscar → toca el campo de texto | Con el teclado abierto queda un solo botón. Al cerrar el teclado vuelven los demás. |
+| 22 | Perfil de un negocio como cliente | Arriba solo "Volver". El corazón está junto al nombre; "Cómo llegar" y "WhatsApp" son botones dentro de la página. En Mi cuenta, "Cerrar sesión" está al final. |
+
 Al terminar, `npm run seed:demo` deja los datos de demo como estaban.
 
 ## Qué queda para las etapas siguientes

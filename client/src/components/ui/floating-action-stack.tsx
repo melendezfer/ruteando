@@ -45,51 +45,39 @@ export interface FloatingAction {
   /** aria-label del botón/enlace — también su nombre accesible para pruebas. */
   label: string;
   /**
-   * Nombre corto que se ve junto al círculo (A3, fix/pulido-visual): un
-   * ícono solo (brújula, flecha) no se entendía. Una o dos palabras
-   * ("Mapa", "Llegar"). Sin él, el círculo va solo.
+   * Nombre corto que aparece al mantener presionado (táctil) o al pasar el
+   * mouse (PC). Una o dos palabras ("Buscar", "Ubicarme").
    */
   shortLabel?: string;
-  /** Si viene, la acción es un enlace externo (se abre en una pestaña nueva) — ej. wa.me, Google Maps. */
+  /** Si viene, la acción es un enlace externo (se abre en una pestaña nueva). */
   href?: string;
-  /** Si viene, la acción es un botón local (recentrar el mapa, navegar dentro de la app con el router, abrir un panel, etc). */
+  /** Si viene, la acción es un botón local (recentrar el mapa, navegar con el router, abrir un panel). */
   onClick?: () => void;
 }
 
 interface FloatingActionStackProps {
   /**
-   * De la más prominente a la menos prominente — el índice 0 (después de
-   * quitar los `null`) es el círculo grande (h-16 w-16, terracota,
-   * pegado a la esquina); el resto son círculos chicos (h-12 w-12, con
-   * borde), apilados encima en el orden dado. Un `null` en cualquier
-   * posición se omite sin dejar un hueco ni afectar el tamaño de los
-   * demás.
+   * De arriba hacia abajo. Un `null` en cualquier posición se omite sin
+   * dejar hueco.
    */
   actions: (FloatingAction | null)[];
-  /**
-   * A1 (fix/pulido-visual): por defecto el componente deja, donde está
-   * montado (al final del contenido de la pantalla), un espacio vacío de
-   * la altura real de los flotantes — así, con la página desplazada hasta
-   * el final, nada queda debajo de ellos. `false` solo para pantallas que
-   * no se desplazan (el mapa), donde ese espacio agregaría un scroll que
-   * no existe.
-   */
-  reserveSpace?: boolean;
   /** `false` para no mostrar el aviso de la primera vez (ej. con una hoja abierta encima). */
   showTip?: boolean;
 }
 
-/** Distancia del stack al borde inferior (`bottom-6`) más un respiro. */
-const MARGEN_INFERIOR_PX = 24 + 16;
-
 /**
- * Ver CLAUDE.md, sección "FloatingActionStack" — esta es la única fuente
- * de verdad de su especificación (props, tamaños, colores).
+ * Columna de navegación (Etapa 1b, pedido del usuario 2026-10-03; ver
+ * docs/specs/perfil-2.md §8.1 y docs/integracion-ancla.md §5): una sola
+ * columna de botones compactos de 44 px, fija al costado derecho en la
+ * zona media-baja — alcance del pulgar y el mismo lugar que ocupará el
+ * botón-ancla, que la reemplazará ahí. Sin letreros a la vista: el nombre
+ * aparece solo al mantener presionado. El contenido de cada pantalla
+ * reserva la franja derecha (`.reserva-columna`, globals.css) para que
+ * nada quede debajo. Quien la monta decide cuándo reducirla a un solo
+ * botón (hoja o teclado abiertos, MainFloatingNav).
  */
-export function FloatingActionStack({ actions, reserveSpace = true, showTip = true }: FloatingActionStackProps) {
+export function FloatingActionStack({ actions, showTip = true }: FloatingActionStackProps) {
   const visible = actions.filter((action): action is FloatingAction => action != null);
-  const stackRef = useRef<HTMLDivElement>(null);
-  const [alto, setAlto] = useState(0);
   const [mostrarAviso, setMostrarAviso] = useState(false);
   const tieneLetreros = showTip && visible.some((action) => action.shortLabel);
 
@@ -99,47 +87,36 @@ export function FloatingActionStack({ actions, reserveSpace = true, showTip = tr
     if (tieneLetreros) setMostrarAviso(!avisoYaVisto());
   }, [tieneLetreros]);
 
-  useEffect(() => {
-    const el = stackRef.current;
-    if (!el || !reserveSpace) return;
-    const observer = new ResizeObserver(() => setAlto(el.getBoundingClientRect().height));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [reserveSpace, visible.length]);
-
   if (visible.length === 0) return null;
 
   return (
-    <>
-      {reserveSpace && <div aria-hidden="true" style={{ height: alto ? alto + MARGEN_INFERIOR_PX : 0 }} />}
-      <div
-        ref={stackRef}
-        data-floating-action
-        className="fixed right-6 bottom-6 z-40 flex flex-col-reverse items-end gap-3"
-      >
-        {visible.map((action, index) => (
-          <FloatingActionButton key={action.label} action={action} principal={index === 0} />
-        ))}
-        {mostrarAviso && tieneLetreros && (
-          <button
-            type="button"
-            data-floating-tip
-            onClick={() => {
-              marcarAvisoVisto();
-              setMostrarAviso(false);
-            }}
-            className="max-w-56 rounded-card bg-text px-3 py-2 text-left font-sans text-body-sm text-white shadow-lg"
-          >
-            Mantén presionado un botón para ver qué hace.{" "}
-            <span className="font-semibold underline">Entendido</span>
-          </button>
-        )}
-      </div>
-    </>
+    <div
+      data-floating-action
+      className="pointer-events-none fixed z-40 flex flex-col items-end gap-2 *:pointer-events-auto"
+      style={{ right: "var(--columna-borde)", bottom: "var(--columna-abajo)" }}
+    >
+      {mostrarAviso && tieneLetreros && (
+        <button
+          type="button"
+          data-floating-tip
+          onClick={() => {
+            marcarAvisoVisto();
+            setMostrarAviso(false);
+          }}
+          className="max-w-56 rounded-card bg-text px-3 py-2 text-left font-sans text-body-sm text-white shadow-lg"
+        >
+          Mantén presionado un botón para ver qué hace.{" "}
+          <span className="font-semibold underline">Entendido</span>
+        </button>
+      )}
+      {visible.map((action) => (
+        <FloatingActionButton key={action.label} action={action} />
+      ))}
+    </div>
   );
 }
 
-function FloatingActionButton({ action, principal }: { action: FloatingAction; principal: boolean }) {
+function FloatingActionButton({ action }: { action: FloatingAction }) {
   const [presionado, setPresionado] = useState(false);
   // Mouse encima o foco con teclado (PC). En táctil NO: ahí el :hover queda
   // "pegado" después de un toque; por eso no se usa group-hover de CSS.
@@ -193,9 +170,8 @@ function FloatingActionButton({ action, principal }: { action: FloatingAction; p
     onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
   };
 
-  const circulo = principal
-    ? "flex h-16 w-16 items-center justify-center rounded-full bg-terracota text-white shadow-xl"
-    : "flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg";
+  const circulo =
+    "flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-terracota shadow-lg";
   const contenido = (
     <>
       {action.shortLabel && (
@@ -209,8 +185,8 @@ function FloatingActionButton({ action, principal }: { action: FloatingAction; p
       <span className={circulo}>{action.icon}</span>
     </>
   );
-  // Los círculos chicos (48 px) se corren 8 px para quedar centrados sobre el grande (64 px).
-  const fila = `flex items-center gap-2 select-none [-webkit-touch-callout:none] transition-transform hover:scale-105 ${principal ? "" : "mr-2"}`;
+  const fila =
+    "flex items-center gap-2 select-none [-webkit-touch-callout:none] transition-transform hover:scale-105";
 
   if (action.href) {
     return (

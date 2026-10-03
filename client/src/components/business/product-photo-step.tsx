@@ -46,7 +46,7 @@ export function ProductPhotoStep({
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-photo-step-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-(--capa-modales) flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
     >
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-t-card bg-surface p-6 shadow-xl sm:rounded-card">
         <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 "use client";
 
+import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { useState } from "react";
 import Link from "next/link";
 import { CaretDown, CaretUp, PencilSimple, Trash } from "@phosphor-icons/react/dist/ssr";
@@ -86,18 +87,16 @@ export function ProductRow({
     if (next) onExpand(product);
   }
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   async function handleDelete() {
     if (!product.id) return;
-    const confirmado = window.confirm(
-      `¿Eliminar "${product.name}"? Esta acción no se puede deshacer.`,
-    );
-    if (!confirmado) return;
-
     setDeleting(true);
     setDeleteError(null);
     const result = await deleteProduct(product.id);
     setDeleting(false);
 
+    setConfirmDelete(false);
     if (!result.ok) {
       setDeleteError(getProductDeleteErrorMessage(result.status));
       return;
@@ -182,7 +181,7 @@ export function ProductRow({
               </button>
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setConfirmDelete(true)}
                 disabled={deleting}
                 aria-label={`Eliminar ${product.name ?? "ítem"}`}
                 className="flex h-11 w-11 items-center justify-center rounded-input border border-rojo-texto/30 bg-rojo-suave text-rojo-texto transition-colors hover:bg-rojo-suave disabled:cursor-not-allowed disabled:opacity-60"
@@ -225,6 +224,17 @@ export function ProductRow({
           </p>
         </div>
       )}
+      {/* R4: borrar no se puede deshacer (también borra la foto), así que se confirma con la hoja de la app. */}
+      <ConfirmSheet
+        open={confirmDelete}
+        title={`¿Eliminar "${product.name}"?`}
+        message="Esta acción no se puede deshacer: se borran también sus fotos."
+        confirmLabel="Eliminar"
+        destructive
+        busy={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

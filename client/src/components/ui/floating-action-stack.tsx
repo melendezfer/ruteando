@@ -103,7 +103,7 @@ export function FloatingActionStack({ actions, showTip = true }: FloatingActionS
   return (
     <div
       data-floating-action
-      className="pointer-events-none fixed z-40 flex flex-col items-end gap-2 *:pointer-events-auto"
+      className="pointer-events-none fixed z-(--capa-flotantes) flex flex-col items-end gap-2 *:pointer-events-auto"
       style={{ right: "var(--columna-borde)", bottom: "var(--columna-abajo)" }}
     >
       {/* Aviso de la primera vez (pedido del usuario, 2026-10-03): pequeño,

@@ -38,7 +38,7 @@ export function HygieneBadge({ className = "" }: HygieneBadgeProps) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="hygiene-badge-modal-title"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
+          className="fixed inset-0 z-(--capa-modales) flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
           onClick={() => setOpen(false)}
         >
           <div

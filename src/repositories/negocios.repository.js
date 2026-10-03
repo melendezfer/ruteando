@@ -682,6 +682,41 @@ async function listarPorUsuario({ usuarioId, cursor, limit }) {
 }
 
 /**
+ * GET /users/me/businesses/today (Perfil 2.0 §4.2, §7.5): los negocios del
+ * vendedor (salvo cerrados) con lo que el tablero necesita para ordenarlos
+ * AHORA / DESPUÉS en el servidor, con la MISMA regla de horario que el
+ * resto (condicionRangoHorarioSQL): si el horario o una franja (ambulante)
+ * cubre la hora actual, el turno de hoy y el aviso "vendiendo" vigente.
+ */
+async function listarDeHoyPorUsuario(usuarioId) {
+  const params = [usuarioId, AVAILABILITY_CONFIRMED_FRESHNESS_MINUTES];
+  const idxHorario = ligarMomentoActual(params);
+  const { rows } = await pool.query(
+    `SELECT n.*,
+            disp.respondida_en AS disponibilidad_confirmada_en,
+            (${condicionHorarioSQL(idxHorario)}
+              OR EXISTS (
+                SELECT 1 FROM franjas_ubicacion f
+                WHERE f.negocio_id = n.id AND n.movilidad = 'ambulante' AND (
+                  ${condicionRangoHorarioSQL(idxHorario, { dia: 'f.dia', inicio: 'f.hora_inicio', fin: 'f.hora_fin' })}
+                )
+              )) AS abierto_ahora,
+            to_char(hoy.hora_apertura, 'HH24:MI') AS hoy_apertura,
+            to_char(hoy.hora_cierre, 'HH24:MI') AS hoy_cierre,
+            (hoy.hora_apertura > $${idxHorario.pAhora}::time) AS abre_mas_tarde
+       FROM negocios n
+       ${lateralDisponibilidadFresca(2)}
+       LEFT JOIN horarios hoy
+         ON hoy.negocio_id = n.id AND hoy.dia = $${idxHorario.pHoy}::dia_semana AND hoy.cerrado = false
+      WHERE n.usuario_id = $1 AND n.estado <> 'cerrado'
+      ORDER BY n.fecha_creacion, n.id
+      LIMIT 50`,
+    params,
+  );
+  return rows;
+}
+
+/**
  * GET /businesses (RF-010/011): listado con filtros, sin coordenada de
  * referencia. Orden por fecha de creación descendente (más recientes
  * primero) con `id` como desempate — paginación keyset, no OFFSET (ver
@@ -957,6 +992,7 @@ module.exports = {
   marcarTelefonoVerificado,
   cerrar,
   listarPorUsuario,
+  listarDeHoyPorUsuario,
   listar,
   cercanos,
   explicarCercanos,

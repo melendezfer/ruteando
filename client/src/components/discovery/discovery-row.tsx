@@ -1,5 +1,6 @@
 "use client";
 
+import { logDirectionsClickEvent } from "@/lib/api/events";
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { buildDirectionsUrl } from "@/lib/format/directions";
@@ -141,6 +142,9 @@ export function DiscoveryRow({
         {hasCoords && (
           <a
             href={buildDirectionsUrl(business.latitude, business.longitude)}
+                onClickCapture={() => {
+                  if (business.id) logDirectionsClickEvent(business.id);
+                }}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => onBeforeAction?.()}

@@ -49,6 +49,11 @@ export function logContactClickEvent(businessId: string): void {
   logEvent("contact_click", businessId);
 }
 
+/** Al tocar "Cómo llegar" (perfil, tarjetas, filas y resultados): cuenta como contacto en "Tu semana" (Perfil 2.0 §4.4). */
+export function logDirectionsClickEvent(businessId: string): void {
+  logEvent("directions_click", businessId);
+}
+
 /** Al completar el registro de un negocio (Épica F5) — flujo propio o asistido. */
 export function logBusinessRegisteredEvent(businessId: string): void {
   logEvent("business_registered", businessId);

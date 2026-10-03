@@ -72,10 +72,13 @@ test("paso de ubicación: mapa con pin, mensaje claro, y guardar para terminar d
   await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByRole("button", { name: "Finalizar registro" })).toBeVisible();
 
-  // Paso 3: guardar y terminar después → al inicio, en su negocio, con "Terminar registro".
+  // Paso 3: guardar y terminar después → a su tablero, con "Terminar registro" en Pendientes.
   await guardarDespues.click();
-  await page.waitForURL(/\/negocios\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-  const negocioId = page.url().split("/").pop()!;
+  await page.waitForURL("**/tablero", { timeout: 20_000 });
+  const hoy = await fetch(`${API}/users/me/businesses/today`, { headers: { authorization: `Bearer ${token}` } }).then(
+    (r) => r.json(),
+  );
+  const negocioId: string = hoy.data[0].id;
   const p = await fetch(`${API}/businesses/${negocioId}`, { headers: { authorization: `Bearer ${token}` } }).then((r) =>
     r.json(),
   );

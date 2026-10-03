@@ -1,5 +1,6 @@
 "use client";
 
+import { logDirectionsClickEvent } from "@/lib/api/events";
 import { CaretRight } from "@phosphor-icons/react/dist/ssr";
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 
@@ -109,6 +110,9 @@ export function MapSearchResults({
                   búsqueda en curso. */}
               <a
                 href={buildDirectionsUrl(business.latitude, business.longitude)}
+                onClickCapture={() => {
+                  if (business.id) logDirectionsClickEvent(business.id);
+                }}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`Cómo llegar a ${business.name}`}

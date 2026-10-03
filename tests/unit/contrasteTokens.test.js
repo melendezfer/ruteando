@@ -46,6 +46,10 @@ const GRAFICO = 3;
 // [descripción, primer plano, fondo, mínimo]
 const PARES = [
   ['texto sobre surface', () => T('text'), () => T('surface'), TEXTO],
+  ['blanco sobre text (aviso con Deshacer, R4)', () => BLANCO, () => T('text'), TEXTO],
+  ['terracota-100 sobre text ("Deshacer" del aviso, R4)', () => T('terracota-100'), () => T('text'), TEXTO],
+  ['verde-texto sobre verde-suave ("Disponible" del tablero, R3)', () => T('verde-texto'), () => T('verde-suave'), TEXTO],
+  ['ambar-texto sobre ambar-suave ("Agotado" del tablero, R3)', () => T('ambar-texto'), () => T('ambar-suave'), TEXTO],
   ['text-muted sobre surface', () => T('text-muted'), () => T('surface'), TEXTO],
   ['text-muted sobre background', () => T('text-muted'), () => T('background'), TEXTO],
   ['blanco sobre terracota (botón principal)', () => BLANCO, () => T('terracota'), TEXTO],

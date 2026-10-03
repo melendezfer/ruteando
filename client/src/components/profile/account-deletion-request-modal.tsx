@@ -66,7 +66,7 @@ export function AccountDeletionRequestModal({ onCancel, onSubmitted }: AccountDe
       role="dialog"
       aria-modal="true"
       aria-labelledby="account-deletion-modal-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-(--capa-modales) flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
     >
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-t-card bg-surface p-6 shadow-xl sm:rounded-card">
         <h2 id="account-deletion-modal-title" className="font-heading text-title-1 font-bold text-text">

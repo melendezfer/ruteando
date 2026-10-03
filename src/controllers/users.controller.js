@@ -29,6 +29,11 @@ async function listBusinesses(req, res) {
   res.status(200).json(resultado);
 }
 
+async function listTodayBusinesses(req, res) {
+  const resultado = await negociosService.listarDeHoy(req.user.id);
+  res.status(200).json(resultado);
+}
+
 async function changePassword(req, res) {
   const resultado = await authService.changePassword(req.user.id, req.body);
   res.status(200).json(resultado);
@@ -75,6 +80,7 @@ module.exports = {
   me,
   listFavorites,
   listBusinesses,
+  listTodayBusinesses,
   changePassword,
   updateMe,
   listConsents,

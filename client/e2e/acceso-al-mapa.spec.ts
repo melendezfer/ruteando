@@ -44,6 +44,7 @@ const RUTAS: Record<string, { cuenta: Cuenta; url: (ids: Ids) => string }[]> = {
     { cuenta: "dueno", url: (ids) => `/negocios/${ids.negocioDelDueno}` },
   ],
   "/negocios/[businessId]/ajustes": [{ cuenta: "dueno", url: (ids) => `/negocios/${ids.negocioDelDueno}/ajustes` }],
+  "/tablero": [{ cuenta: "dueno", url: () => "/tablero" }],
   "/negocios/nuevo": [{ cuenta: "vendedorNuevo", url: () => "/negocios/nuevo" }],
   "/legal/terminos-condiciones": [{ cuenta: "consumidor", url: () => "/legal/terminos-condiciones" }],
   "/legal/tratamiento-datos": [{ cuenta: "consumidor", url: () => "/legal/tratamiento-datos" }],
@@ -150,8 +151,15 @@ test("con sesión, el mapa está a un toque y siempre en el mismo lugar", async 
     await entrar(page, cuentas[cuenta]);
     let negocioDelDueno = "";
     if (cuenta === "dueno") {
-      await page.waitForURL(/\/negocios\//, { timeout: 20_000 });
-      negocioDelDueno = page.url().split("/negocios/")[1].split(/[/?#]/)[0];
+      const t = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: DUENO, password: PASSWORD }),
+      }).then((r) => r.json());
+      const propios = await fetch(`${API}/users/me/businesses/today`, {
+        headers: { authorization: `Bearer ${t.accessToken}` },
+      }).then((r) => r.json());
+      negocioDelDueno = propios.data[0].id;
     }
     const ids: Ids = { negocioDemo: demo.data[0].id, negocioDelDueno };
 

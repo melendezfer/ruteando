@@ -1182,6 +1182,46 @@ components:
         startDate: { type: string, format: date-time }
         endDate: { type: string, format: date-time }
 
+    BusinessStatsWindow:
+      type: object
+      required: [profileViews, contacts, averageRating, ratingCount]
+      properties:
+        profileViews: { type: integer, description: 'Eventos business_view del negocio en la ventana.' }
+        contacts: { type: integer, description: 'Eventos contact_click (WhatsApp) + directions_click (Cómo llegar).' }
+        averageRating: { type: [number, 'null'], description: 'Promedio de calificaciones APROBADAS recibidas en la ventana; null sin calificaciones.' }
+        ratingCount: { type: integer }
+    BusinessStats:
+      type: object
+      description: >-
+        "Tu semana" del tablero (Perfil 2.0 §4.4): solo cifras agregadas,
+        nunca quién visitó. `current` = últimos `days` días; `previous` = los
+        `days` anteriores. `pendingReviews` = reseñas del negocio que hoy
+        esperan revisión (no es por ventana).
+      required: [days, current, previous, pendingReviews]
+      properties:
+        days: { type: integer }
+        current: { $ref: '#/components/schemas/BusinessStatsWindow' }
+        previous: { $ref: '#/components/schemas/BusinessStatsWindow' }
+        pendingReviews: { type: integer }
+    TodayBusiness:
+      allOf:
+        - $ref: '#/components/schemas/Business'
+        - type: object
+          required: [today]
+          properties:
+            today:
+              type: object
+              required: [status, openTime, closeTime]
+              properties:
+                status:
+                  type: string
+                  enum: [now, later, closed]
+                  description: >-
+                    now = su horario o una franja (ambulante) cubren la hora
+                    actual; later = abre más tarde hoy; closed = ya cerró o
+                    no abre hoy.
+                openTime: { type: [string, 'null'], example: '17:00' }
+                closeTime: { type: [string, 'null'], example: '22:00' }
     EventInput:
       type: object
       required: [type]
@@ -1194,6 +1234,7 @@ components:
               business_view,
               product_view,
               contact_click,
+              directions_click,
               favorite_added,
               review_created,
               business_registered,
@@ -1601,6 +1642,31 @@ paths:
   # GET /businesses acepta un filtro ownerId, y esa ruta de todas formas
   # solo devuelve negocios "active" — acá, a diferencia de esa, cualquier
   # estado cuenta (es el propio dueño mirando lo suyo).
+  /users/me/businesses/today:
+    get:
+      tags: [Usuarios]
+      summary: Mis negocios de hoy, en orden AHORA / DESPUÉS (tablero del vendedor)
+      description: >-
+        Todos los negocios del usuario salvo los cerrados, ordenados en el
+        servidor: primero los que están dentro de su horario o franja ahora
+        (el que tiene aviso "vendiendo" vigente primero, después el que abrió
+        antes), luego los que abren más tarde hoy (por hora) y al final los
+        demás. Sin paginación (tope 50): por eso es aparte de
+        GET /users/me/businesses, que pagina por fecha de creación.
+      responses:
+        '200':
+          description: Negocios de hoy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TodayBusiness' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /users/me/businesses:
     get:
       tags: [Usuarios]
@@ -2097,6 +2163,25 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /businesses/{businessId}/stats:
+    get:
+      tags: [Negocios]
+      summary: '"Tu semana" del tablero: visitas, contactos y calificación (solo el dueño)'
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 30, default: 7 }
+      responses:
+        '200':
+          description: Estadísticas agregadas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /businesses/{businessId}/selling-now:
     # R5 — "Estoy vendiendo ahora" (docs/specs/r5-estoy-vendiendo.md). El
     # vendedor avisa por su cuenta, sin esperar una pregunta. Alimenta el

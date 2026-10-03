@@ -12,7 +12,7 @@ import {
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { formatRelativeTimeShort } from "@/lib/format/relative-time";
 import { MOBILITY_ICONS, MOBILITY_LABELS, SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
-import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
+import { logBusinessViewEvent, logContactClickEvent, logDirectionsClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
 import { SessionNav } from "@/components/layout/session-nav";
 import { BackButton } from "@/components/ui/back-button";
@@ -47,7 +47,7 @@ type BusinessProfile = components["schemas"]["BusinessProfile"];
 type Product = components["schemas"]["Product"];
 
 type ProductFormState =
-  | { mode: "create" }
+  | { mode: "create"; offer?: boolean }
   | { mode: "edit"; product: Product }
   // Segundo paso tras crear (ver ProductPhotoStep) — el producto en sí
   // ya existe de verdad en el backend en este punto, solo falta que el
@@ -154,6 +154,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
     };
   }, []);
   const [productForm, setProductForm] = useState<ProductFormState | null>(null);
+
   const [productFormSubmitting, setProductFormSubmitting] = useState(false);
   const [productFormError, setProductFormError] = useState<string | null>(null);
   const [productFormFieldErrors, setProductFormFieldErrors] = useState<Record<string, string>>({});
@@ -273,6 +274,18 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // depender de eso.
   const isOwner = Boolean(user?.id) && profile.ownerId === user?.id;
 
+  // Atajos del tablero (Perfil 2.0 §4.6–4.7): `?agregar=producto|oferta`
+  // abre el formulario al llegar. Se lee en el navegador (la página se
+  // genera en el servidor sin saber quién es el dueño).
+  useEffect(() => {
+    if (!isOwner) return;
+    const agregar = new URLSearchParams(window.location.search).get("agregar");
+    if (agregar !== "producto" && agregar !== "oferta") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- depende de la URL del navegador
+    setProductForm({ mode: "create", offer: agregar === "oferta" });
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [isOwner]);
+
   // Marca de modalidad — el MISMO ícono que la marca del pin del mapa
   // (lib/icons/semantic-icons.ts); antes el perfil y el mapa dibujaban el
   // carrito de dos formas distintas.
@@ -298,7 +311,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
   return (
     <div className="flex flex-1 flex-col pb-8">
-      <BackButton className="fixed left-3 top-3 z-40" />
+      <BackButton className="fixed left-3 top-3 z-(--capa-flotantes)" />
 
       <div className="relative h-64 w-full bg-terracota-50">
         {heroPhoto ? (
@@ -399,6 +412,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
                 href={directionsHref}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => {
+                  if (profile.id) logDirectionsClickEvent(profile.id);
+                }}
                 className="flex min-h-12 items-center justify-center gap-2 rounded-input bg-terracota px-3 font-sans text-body font-semibold text-white hover:bg-terracota-dark"
               >
                 <DirectionsIcon size={18} weight="fill" />
@@ -432,7 +448,12 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           tarjetas); viven en su propia pantalla, por familias. */}
       {isOwner && profile.id && (
         <div className="flex items-center justify-between gap-3 pl-5 pb-4">
-          <p className="font-sans text-body-sm text-text-muted">Así ven tu negocio tus clientes.</p>
+          <p className="font-sans text-body-sm text-text-muted">
+            Así ven tu negocio tus clientes.{" "}
+            <Link href="/tablero" className="font-semibold text-terracota underline">
+              Volver a mi tablero
+            </Link>
+          </p>
           <Link
             href={`/negocios/${profile.id}/ajustes`}
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-input border border-terracota px-3 font-sans text-body-sm font-semibold text-terracota hover:bg-terracota-50"
@@ -550,6 +571,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
       {productForm && (productForm.mode === "create" || productForm.mode === "edit") && (
         <ProductForm
+          startAsOffer={productForm.mode === "create" && Boolean(productForm.offer)}
           mode={productForm.mode}
           itemNoun={itemNoun}
           initialValues={

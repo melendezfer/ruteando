@@ -10,6 +10,7 @@ const TIPO_EVENTO_API_TO_DB = {
   business_view: 'vista_negocio',
   product_view: 'vista_producto',
   contact_click: 'clic_contacto',
+  directions_click: 'clic_como_llegar',
   favorite_added: 'favorito_agregado',
   review_created: 'resena_creada',
   business_registered: 'registro_negocio',

@@ -26,7 +26,7 @@ interface LiveLocationConsentModalProps {
 export function LiveLocationConsentModal({ accepting, error, onAccept, onClose }: LiveLocationConsentModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/40 sm:items-center"
+      className="fixed inset-0 z-(--capa-modales) flex items-end justify-center bg-black/40 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="live-location-consent-title"

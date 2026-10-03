@@ -1,5 +1,6 @@
 "use client";
 
+import { logDirectionsClickEvent } from "@/lib/api/events";
 import { useCallback, useEffect, useState } from "react";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import Link from "next/link";
@@ -241,6 +242,9 @@ export function BusinessCard({
                 {typeof business.latitude === "number" && typeof business.longitude === "number" && (
                   <a
                     href={buildDirectionsUrl(business.latitude, business.longitude)}
+                onClickCapture={() => {
+                  if (business.id) logDirectionsClickEvent(business.id);
+                }}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-sans text-body-sm font-medium text-terracota hover:underline"

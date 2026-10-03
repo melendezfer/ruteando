@@ -171,7 +171,7 @@ Ruta: la de hoy para el vendedor con negocio activo (CLAUDE.md §38/§43), `/neg
 
 ### 4.1 Encabezado
 
-"Domingo 28 · 6:30 p. m." — "Mis negocios de hoy". **Ajustes del negocio** va como botón con texto dentro del contenido (no un engranaje arriba: §8.1).
+"Domingo 28 · 6:30 p. m." — "Mis negocios de hoy" ("Mi negocio hoy" con uno solo). **Ajustes del negocio** va como botón con texto dentro del contenido (no un engranaje arriba: §8.1).
 
 ### 4.2 Varios negocios: AHORA y DESPUÉS
 
@@ -354,6 +354,7 @@ Cada entrega: su rama desde `develop`, pruebas, guía de prueba manual y **prueb
 
 - **Etapa 1 (2026-09-29, `feature/perfil-2-ajustes`)**: paleta (entrega 1) y C3 Ajustes con R7 (identidad y horario), WhatsApp editable y referencia junto al mapa. Medios de pago y zona/costo de domicilio pasan a la Etapa 3 (con C1). Detalle: CLAUDE.md §63.
 - **Etapa 1b (2026-10-03, misma rama)**: navegación §8.1 (encabezado "Volver" + título, columna derecha, franja reservada, un solo botón con hoja o teclado). Pruebas a 360, 390 y 412 px: `client/e2e/columna-navegacion.spec.ts` y `flotantes-no-tapan.spec.ts`.
+- **Etapa 2 (2026-10-03, `feature/perfil-2-tablero`)**: C2 tablero del día en `/tablero` (página principal del vendedor con negocio: `/` y `/perfil` llevan ahí), con AHORA/DESPUÉS, "Tu semana" (§4.4), pendientes, "¿Qué se acabó?" (R3) y atajos; `clic_como_llegar` registrado en todos los "Cómo llegar". Desviaciones, a propósito: (1) "AHORA/DESPUÉS" sale de un endpoint nuevo, `GET /users/me/businesses/today`, no de sumar campos a `GET /users/me/businesses` — ese pagina por fecha de creación (cursor keyset) y este orden no se puede paginar; (2) `pendingReviews` va aparte de `current`/`previous` (es lo que espera revisión hoy, no una cifra por semana); (3) tocar un negocio de DESPUÉS lo pasa a la tarjeta principal del tablero (para gestionarlo sin salir). Pendiente de §4.5: "oferta por vencer hoy" sí; el resto de avisos importantes (rechazado, suspendido) se ven con el mismo `BusinessStatusBanner` de la tarjeta. Detalle: CLAUDE.md §64.
 
 ## 12. Decisiones pendientes
 

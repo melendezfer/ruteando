@@ -5,6 +5,7 @@ const horarioService = require('../services/horario.service');
 const franjasUbicacionService = require('../services/franjasUbicacion.service');
 const posicionesEnVivoService = require('../services/posicionesEnVivo.service');
 const senalesVentaService = require('../services/senalesVenta.service');
+const estadisticasNegocioService = require('../services/estadisticasNegocio.service');
 const reporteNegocioService = require('../services/reporteNegocio.service');
 const productosService = require('../services/productos.service');
 const fotosService = require('../services/fotos.service');
@@ -100,6 +101,15 @@ async function deleteLiveLocation(req, res) {
 
 async function putSellingNow(req, res) {
   const result = await senalesVentaService.confirmar(req.user.id, req.params.businessId);
+  res.status(200).json(result);
+}
+
+async function getStats(req, res) {
+  const result = await estadisticasNegocioService.obtener(
+    req.user.id,
+    req.params.businessId,
+    req.validatedQuery.days,
+  );
   res.status(200).json(result);
 }
 
@@ -212,6 +222,7 @@ module.exports = {
   deleteLiveLocation,
   putSellingNow,
   deleteSellingNow,
+  getStats,
   reportOutdated,
   createProduct,
   listProducts,

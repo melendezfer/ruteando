@@ -144,9 +144,13 @@ for (const ancho of ANCHOS) {
       }
     });
 
-    test("perfil del dueño y Ajustes con todas las familias abiertas", async ({ page }) => {
+    test("tablero, perfil del dueño y Ajustes con todas las familias abiertas", async ({ page }) => {
       await entrar(page, DUENO);
-      await page.waitForURL(/\/negocios\//);
+      await page.waitForURL("**/tablero");
+      await page.waitForLoadState("networkidle");
+      expect(await desbordes(page)).toEqual([]);
+      await page.getByRole("link", { name: "Ver como cliente" }).click();
+      await page.waitForURL(/\/negocios\/[0-9a-f-]+$/);
       await page.waitForLoadState("networkidle");
       expect(await desbordes(page)).toEqual([]);
       await page.goto(`${page.url()}/ajustes`, { waitUntil: "networkidle" });

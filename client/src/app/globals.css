@@ -301,3 +301,22 @@ body {
 @utility reserva-columna {
   padding-right: var(--columna-franja);
 }
+
+/*
+ * R14 — escala de capas con nombre (docs/integracion-ancla.md DI-02). Toda
+ * capa fija o flotante usa una de estas, nunca un número suelto:
+ *   flotantes 40  — columna de navegación, "Volver", logo del mapa
+ *   hojas     1000 — hojas del mapa (búsqueda, resumen, lista). Por encima de
+ *                    los paneles de Leaflet (máx. 1000 de sus controles; el
+ *                    mapa va en `isolate`)
+ *   ancla     1050 — el botón-ancla (I1): sobre las hojas, bajo los modales
+ *   avisos    1080 — aviso con "Deshacer" (R4): visible también sobre una hoja
+ *   modales   1100 — modales y hojas de confirmación, siempre encima de todo
+ */
+:root {
+  --capa-flotantes: 40;
+  --capa-hojas: 1000;
+  --capa-ancla: 1050;
+  --capa-avisos: 1080;
+  --capa-modales: 1100;
+}

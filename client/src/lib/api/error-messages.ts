@@ -204,6 +204,21 @@ export function getRespondAvailabilityRequestErrorMessage(status: number | undef
   return GENERIC_ERROR;
 }
 
+/** PUT/DELETE /businesses/{businessId}/selling-now — R5, "Estoy vendiendo ahora". */
+export function getSellingNowErrorMessage(status: number | undefined, problemType: string | null = null): string {
+  if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";
+  if (status === 403) return "No eres el dueño de este negocio.";
+  if (status === 404) return "Este negocio ya no existe.";
+  if (status === 409 && problemType && /selling-now-off-schedule$/.test(problemType)) {
+    return "Según tu horario ahora estás cerrado. Si estás vendiendo, actualiza tu horario o tus puntos por hora.";
+  }
+  if (status === 409) return "Tu negocio todavía no está activo, así que aún no puedes avisar que estás vendiendo.";
+  if (status === 429) {
+    return "Ya avisaste muchas veces hoy. Tu aviso actual sigue vigente hasta que se venza.";
+  }
+  return GENERIC_ERROR;
+}
+
 /** POST /consents (Fase 4 de "vendiendo ahora" — activar notificaciones desde Configuración). */
 export function getGrantNotificationsConsentErrorMessage(status: number | undefined): string {
   if (status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.";

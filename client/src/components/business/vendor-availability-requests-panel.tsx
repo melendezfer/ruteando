@@ -19,6 +19,8 @@ interface VendorAvailabilityRequestsPanelProps {
   businessId: string;
   /** Se llama al confirmar — para que el resto del perfil (el badge del consumidor) se actualice sin recargar. */
   onConfirmed?: (confirmedAt: string) => void;
+  /** R5, "el aviso más reciente manda": responder "no" apaga el "vendiendo ahora" vigente. */
+  onDeclined?: () => void;
 }
 
 // Más espaciado que el polling del consumidor (5s, availability-request-button.tsx)
@@ -41,6 +43,7 @@ const POLL_INTERVAL_MS = 8000;
 export function VendorAvailabilityRequestsPanel({
   businessId,
   onConfirmed,
+  onDeclined,
 }: VendorAvailabilityRequestsPanelProps) {
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
@@ -72,6 +75,8 @@ export function VendorAvailabilityRequestsPanel({
       setError(getRespondAvailabilityRequestErrorMessage(result.status));
     } else if (decision === "confirmed" && result.request?.respondedAt) {
       onConfirmed?.(result.request.respondedAt);
+    } else if (decision === "declined") {
+      onDeclined?.();
     }
 
     // Se responda bien o falle con 409 (ya no está pendiente — alguien

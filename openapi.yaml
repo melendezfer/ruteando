@@ -471,9 +471,12 @@ components:
           nullable: true
           description: >-
             Confirmación de disponibilidad en tiempo real (sección 11 de
-            CLAUDE.md). Null salvo que el vendedor haya confirmado
-            "vendiendo ahora" (POST .../availability-requests, PATCH
-            .../respond) dentro de la ventana de frescura configurada —
+            CLAUDE.md). Fecha del aviso más reciente del vendedor si ese
+            aviso es "vendiendo" y está dentro de la ventana de frescura
+            (60 min): responder "sí" a una pregunta (PATCH
+            .../availability-requests/{id}/respond) o avisar por su cuenta
+            (PUT .../selling-now, R5). Un aviso posterior "no" o "ya no
+            estoy vendiendo" lo deja en null de inmediato —
             no es un estado permanente, deja de mostrarse solo con el
             tiempo, sin que nada lo borre explícitamente. Se llena en
             GET /businesses, GET /businesses/nearby y
@@ -2090,6 +2093,57 @@ paths:
       parameters: [{ $ref: '#/components/parameters/BusinessId' }]
       responses:
         '204': { description: Apagada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /businesses/{businessId}/selling-now:
+    # R5 — "Estoy vendiendo ahora" (docs/specs/r5-estoy-vendiendo.md). El
+    # vendedor avisa por su cuenta, sin esperar una pregunta. Alimenta el
+    # mismo Business.availabilityConfirmedAt que responder "sí" a una
+    # pregunta: el aviso más reciente manda (propio o respuesta).
+    put:
+      tags: [Negocios]
+      summary: Avisar "Estoy vendiendo ahora" (solo el dueño)
+      description: >-
+        Guarda un aviso que vence solo a los 60 minutos. Volver a avisar
+        renueva el plazo; un aviso a menos de 5 minutos de la confirmación
+        vigente no crea uno nuevo (`saved: false`, devuelve la vigente).
+        Solo para un negocio `active` y dentro de su horario o de una
+        franja: fuera de horario responde 409 con `type`
+        `.../errors/selling-now-off-schedule`. Máximo 30 avisos en 24 h
+        (429). No cambia qué negocios aparecen en listados ni el filtro
+        `openNow`.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '200':
+          description: Aviso vigente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [availabilityConfirmedAt, expiresAt, saved]
+                properties:
+                  availabilityConfirmedAt: { type: string, format: date-time }
+                  expiresAt: { type: string, format: date-time }
+                  saved:
+                    type: boolean
+                    description: false si ya había una confirmación de hace menos de 5 minutos
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      tags: [Negocios]
+      summary: Avisar "Ya no estoy vendiendo" (solo el dueño)
+      description: >-
+        Apaga la confirmación vigente de inmediato, venga de un aviso
+        propio o de una respuesta "sí". Sin confirmación vigente no hace
+        nada (204 igual). No cuenta para el tope de 24 h.
+      parameters: [{ $ref: '#/components/parameters/BusinessId' }]
+      responses:
+        '204': { description: Aviso apagado (o no había ninguno) }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }

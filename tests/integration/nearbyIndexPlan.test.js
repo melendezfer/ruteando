@@ -26,7 +26,7 @@ function recorrerPlan(nodo, visitar) {
 // "Index Only Scan" cuando ni siquiera necesita tocar el heap (todas las
 // columnas que pide ya están en el índice — el caso real del LEFT JOIN
 // LATERAL de disponibilidad, que solo pide negocio_id/respondida_en,
-// exactamente las columnas de idx_solicitudes_disponibilidad_confirmadas)
+// exactamente las columnas de idx_solicitudes_disponibilidad_respondidas (antes _confirmadas))
 // — las tres son caminos de acceso por índice, ninguna es un seq scan.
 // Lo único que importa para esta prueba es que NINGUNO sea "Seq Scan" y
 // que el índice esperado aparezca en alguna de estas variantes.
@@ -98,7 +98,7 @@ beforeAll(async () => {
   // ahora hace un LEFT JOIN LATERAL contra solicitudes_disponibilidad por
   // cada fila candidata — sin volumen sembrado ahí también, el
   // planificador prefiere un Seq Scan sobre esa tabla (barato cuando está
-  // casi vacía) en vez de idx_solicitudes_disponibilidad_confirmadas,
+  // casi vacía) en vez de el índice parcial de respuestas,
   // exactamente el mismo problema que ya se documentó arriba para
   // ubicaciones/horarios con pocas filas. usuario_id reusa el mismo
   // vendedor sembrado como "quien preguntó" — no importa para esta
@@ -107,6 +107,16 @@ beforeAll(async () => {
     `INSERT INTO solicitudes_disponibilidad (negocio_id, usuario_id, expira_en, decision, respondida_en)
      SELECT n.id, $1, now() + interval '10 minutes', 'confirmada', now() - interval '5 minutes'
      FROM negocios n WHERE n.usuario_id = $1`,
+    [usuarioId],
+  );
+
+  // Avisos propios del vendedor (R5, migración senales-venta): la regla
+  // "el aviso más reciente manda" también consulta senales_venta por cada
+  // fila candidata — sin volumen, el planificador elegiría un Seq Scan.
+  await pool.query(
+    `INSERT INTO senales_venta (negocio_id, usuario_id, senal, fecha_creacion)
+     SELECT n.id, $1, 'vendiendo', now() - (g * interval '20 minutes')
+     FROM negocios n, generate_series(0, 2) g WHERE n.usuario_id = $1`,
     [usuarioId],
   );
 
@@ -144,15 +154,19 @@ beforeAll(async () => {
   // la selectividad de categoria_id/estado, eligiendo un plan que no
   // pasa por el índice espacial en absoluto — verificado a mano: sin
   // ANALYZE, la segunda prueba de abajo elegía otro camino de acceso.
-  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, franjas_ubicacion, posiciones_en_vivo');
+  await pool.query('ANALYZE negocios, ubicaciones, horarios, solicitudes_disponibilidad, senales_venta, franjas_ubicacion, posiciones_en_vivo');
 });
 
+// Con senales_venta sembrada (R5), el borrado en cascada de los negocios
+// sembrados pasaba del timeout por defecto de 5 s: se borran primero los
+// avisos (una sola sentencia por índice) y el hook tiene más margen.
 afterAll(async () => {
+  await pool.query('DELETE FROM senales_venta WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM negocios WHERE usuario_id = $1', [usuarioId]);
   await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
   await pool.query('DELETE FROM categorias WHERE id = $1', [categoriaId]);
   await pool.end();
-});
+}, 30000);
 
 describe('plan de ejecución de GET /businesses/nearby', () => {
   it('usa el índice GIST idx_ubicaciones_punto y no un seq scan sobre ubicaciones', async () => {
@@ -174,15 +188,16 @@ describe('plan de ejecución de GET /businesses/nearby', () => {
     );
     expect(indexScanUbicaciones).toBeDefined();
 
-    // Business.availabilityConfirmedAt (sección 11 de CLAUDE.md): el
-    // LEFT JOIN LATERAL contra solicitudes_disponibilidad también debe
-    // resolver por índice, no con un Seq Scan por cada fila candidata.
-    const indexScanDisponibilidad = nodos.find(
-      (n) =>
-        NODOS_INDEX_SCAN.has(n['Node Type']) &&
-        n['Index Name'] === 'idx_solicitudes_disponibilidad_confirmadas',
-    );
-    expect(indexScanDisponibilidad).toBeDefined();
+    // Business.availabilityConfirmedAt (sección 11 de CLAUDE.md, regla
+    // "el aviso más reciente manda" de R5): las dos mitades del LEFT JOIN
+    // LATERAL — respuestas a preguntas y avisos propios — deben resolver
+    // por índice, no con un Seq Scan por cada fila candidata.
+    for (const indice of ['idx_solicitudes_disponibilidad_respondidas', 'idx_senales_venta_negocio']) {
+      const indexScan = nodos.find(
+        (n) => NODOS_INDEX_SCAN.has(n['Node Type']) && n['Index Name'] === indice,
+      );
+      expect({ indice, usado: indexScan !== undefined }).toEqual({ indice, usado: true });
+    }
 
     // Ubicación efectiva por franja: el acotado de candidatos por la
     // ubicación de las franjas también debe ir por su índice GIST.

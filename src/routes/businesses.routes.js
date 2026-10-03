@@ -118,6 +118,11 @@ router.post(
 );
 router.delete('/:businessId/live-location', validarBusinessId, authenticate, controller.deleteLiveLocation);
 
+// R5 — "Estoy vendiendo ahora" (docs/specs/r5-estoy-vendiendo.md): solo el
+// dueño; ver senalesVenta.service.js para el orden de las reglas.
+router.put('/:businessId/selling-now', validarBusinessId, authenticate, controller.putSellingNow);
+router.delete('/:businessId/selling-now', validarBusinessId, authenticate, controller.deleteSellingNow);
+
 router.post(
   '/:businessId/outdated-reports',
   validarBusinessId,

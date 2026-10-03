@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { subconsultaUltimaSenalVenta } = require('./ultimaSenalVenta');
 
 async function crear({ negocioId, usuarioId, expiraEn }) {
   const { rows } = await pool.query(
@@ -68,15 +69,11 @@ async function contarRecientesPorUsuario({ usuarioId, windowMinutes }) {
  * null si no hay ninguna confirmación vigente.
  */
 async function obtenerConfirmacionFresca(negocioId, freshnessMinutes) {
-  const { rows } = await pool.query(
-    `SELECT respondida_en
-     FROM solicitudes_disponibilidad
-     WHERE negocio_id = $1 AND decision = 'confirmada'
-       AND respondida_en > now() - ($2 || ' minutes')::interval
-     ORDER BY respondida_en DESC
-     LIMIT 1`,
-    [negocioId, freshnessMinutes],
-  );
+  // Regla "el aviso más reciente manda" (R5): ver ultimaSenalVenta.js.
+  const { rows } = await pool.query(subconsultaUltimaSenalVenta('$1', 2), [
+    negocioId,
+    freshnessMinutes,
+  ]);
   return rows[0]?.respondida_en ?? null;
 }
 

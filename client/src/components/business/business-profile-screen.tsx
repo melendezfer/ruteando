@@ -33,6 +33,7 @@ import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { SeatingToggle } from "@/components/business/seating-toggle";
 import { MobilityToggle } from "@/components/business/mobility-toggle";
 import { LiveLocationToggle } from "@/components/business/live-location-toggle";
+import { SellingNowCard, SellingNowSuggestion } from "@/components/business/selling-now-card";
 import { LocationSlotsEditor } from "@/components/business/location-slots-editor";
 import { HygieneBadge } from "@/components/business/hygiene-badge";
 import { HygieneBadgeToggle } from "@/components/business/hygiene-badge-toggle";
@@ -133,6 +134,9 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
   // vendedor confirma mientras el consumidor sigue mirando la pantalla
   // (AvailabilityRequestButton#onConfirmed), el badge aparece de
   // inmediato sin depender de recargar la página.
+  // Ubicación en vivo encendida en esta pestaña (spec R5, DP-4): solo
+  // para sugerir "¿avisas también que estás vendiendo?".
+  const [liveLocationOn, setLiveLocationOn] = useState(false);
   const [availabilityConfirmedAt, setAvailabilityConfirmedAt] = useState<string | null>(
     profile.availabilityConfirmedAt ?? null,
   );
@@ -432,11 +436,25 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
+      {/* R5 — "Estoy vendiendo ahora" (docs/specs/r5-estoy-vendiendo.md):
+          solo con el negocio activo; el banner de estado de arriba ya
+          explica por qué no, si no lo está. */}
+      {isOwner && profile.id && profile.status === "active" && (
+        <div className="px-5 pb-4">
+          <SellingNowCard
+            businessId={profile.id}
+            confirmedAt={availabilityConfirmedAt}
+            onChange={setAvailabilityConfirmedAt}
+          />
+        </div>
+      )}
+
       {isOwner && profile.id && (
         <div className="px-5 pb-4">
           <VendorAvailabilityRequestsPanel
             businessId={profile.id}
             onConfirmed={setAvailabilityConfirmedAt}
+            onDeclined={() => setAvailabilityConfirmedAt(null)}
           />
         </div>
       )}
@@ -520,7 +538,15 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
           app abierta) y los puntos por hora (franjas del día). */}
       {isOwner && profile.id && mobility === "itinerant" && (
         <div className="flex flex-col gap-4 px-5 pb-4">
-          <LiveLocationToggle businessId={profile.id} />
+          <LiveLocationToggle businessId={profile.id} onChange={setLiveLocationOn} />
+          {profile.status === "active" && (
+            <SellingNowSuggestion
+              businessId={profile.id}
+              confirmedAt={availabilityConfirmedAt}
+              onChange={setAvailabilityConfirmedAt}
+              liveLocationOn={liveLocationOn}
+            />
+          )}
           <LocationSlotsEditor businessId={profile.id} />
         </div>
       )}

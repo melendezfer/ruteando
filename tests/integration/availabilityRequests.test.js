@@ -339,6 +339,33 @@ describe('PATCH /availability-requests/{requestId}/respond', () => {
     expect(perfil.body.availabilityConfirmedAt).toBeNull();
   });
 
+  // R5 (docs/specs/r5-estoy-vendiendo.md, sección 2): "el aviso más
+  // reciente manda". Un "no" a una segunda pregunta tiene que apagar el
+  // "sí" anterior de inmediato, aunque ese "sí" siga dentro de los 60 min.
+  it('un "no" posterior apaga un "sí" anterior todavía fresco (el aviso más reciente manda)', async () => {
+    const { vendor, negocio } = await crearVendorListo();
+    const preguntar = async () => {
+      const consumer = await registrar('consumer');
+      const res = await request(app)
+        .post(`/businesses/${negocio.id}/availability-requests`)
+        .set('Authorization', `Bearer ${consumer.accessToken}`);
+      return res.body;
+    };
+    const responder = (id, decision) =>
+      request(app)
+        .patch(`/availability-requests/${id}/respond`)
+        .set('Authorization', `Bearer ${vendor.accessToken}`)
+        .send({ decision });
+
+    const primera = await preguntar();
+    expect((await responder(primera.id, 'confirmed')).status).toBe(200);
+    const segunda = await preguntar();
+    expect((await responder(segunda.id, 'declined')).status).toBe(200);
+
+    const perfil = await request(app).get(`/businesses/${negocio.id}`);
+    expect(perfil.body.availabilityConfirmedAt).toBeNull();
+  });
+
   it('rechaza con 403 a quien no es el dueño del negocio', async () => {
     const { solicitud } = await crearSolicitud();
     const otroVendor = await registrar('vendor');

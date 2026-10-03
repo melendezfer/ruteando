@@ -5,6 +5,8 @@ import { Crosshair, Heart, MagnifyingGlass, UserCircle } from "@phosphor-icons/r
 import { SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { useKeyboardOpen } from "@/lib/ui/use-keyboard-open";
 import { FloatingActionStack } from "@/components/ui/floating-action-stack";
+import { NavegacionAncla } from "@/components/ancla/navegacion-ancla";
+import { useAnclaModo } from "@/components/ancla/proveedor-ancla";
 
 interface MainFloatingNavProps {
   /** Solo con el mapa visible: agrega "Ubicarme" (centrar en mi ubicación) al final de la columna. */
@@ -34,7 +36,13 @@ const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
  * integrar el botón-ancla, el ancla ocupa este mismo lugar y reemplaza la
  * columna (docs/integracion-ancla.md §5).
  */
-export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, compact = false }: MainFloatingNavProps) {
+export function MainFloatingNav(props: MainFloatingNavProps) {
+  // Botón-ancla (etapa I1, DI-08): encendido, ocupa el lugar de la columna.
+  if (useAnclaModo() !== "apagado") return <NavegacionAncla {...props} />;
+  return <ColumnaNavegacion {...props} />;
+}
+
+function ColumnaNavegacion({ onCenterMap, onBackToMap, onSearch, compact = false }: MainFloatingNavProps) {
   const router = useRouter();
   const tecladoAbierto = useKeyboardOpen();
 

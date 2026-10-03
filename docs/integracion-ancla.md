@@ -188,10 +188,10 @@ Decidido por el usuario y construido en la Etapa 1b del Perfil 2.0 (`docs/specs/
 
 - **Arriba** solo "Volver" y el título de la pantalla, donde haga falta. Sin íconos de acción.
 - **Costado derecho, zona media-baja** (alcance del pulgar): una sola columna de botones de 44 px, siempre en el mismo orden — Buscar, Favoritos, Perfil y el mapa ("Ubicarme" en el mapa, "Mapa" fuera de él). Con sesión, volver al mapa está siempre a un toque y en el mismo lugar (`client/e2e/acceso-al-mapa.spec.ts`). Sin letreros a la vista; el nombre aparece solo al mantener presionado (táctil) o al pasar el mouse (PC). Posición: a 12 px del borde derecho, borde inferior a `18vh` + área segura (`--columna-abajo`, `globals.css`).
-- **Franja reservada**: el contenido, las hojas inferiores y los avisos de las pantallas con columna dejan libre esa franja (`.reserva-columna`, 64 px), igual que HM-07 hace con el lado del ancla. El crédito de OpenStreetMap sigue siendo zona obligatoria (arriba a la derecha, no choca con la columna).
+- **Franja reservada**: el contenido, las hojas inferiores y los avisos de las pantallas con columna dejan libre esa franja (`.reserva-columna`, 72 px desde I1: el círculo activo del ancla, 64 px, a 8 px del borde), igual que HM-07 hace con el lado del ancla. El crédito de OpenStreetMap sigue siendo zona obligatoria (arriba a la derecha, no choca con la columna).
 - **Con una hoja o el teclado abiertos**, la columna queda en un solo botón ("Volver al mapa": en el mapa cierra la hoja).
 - **Al integrar el ancla, el ancla reemplaza la columna en el mismo lugar.** Como el contenido ya reserva esa franja, encender el ancla no mueve nada más de la pantalla. Esto reemplaza la posición "abajo a la derecha" de la navegación flotante citada arriba.
-- **Hipótesis sin verificar:** que `18vh` coincida con el alto de reposo del ancla; ajustar `--columna-abajo` al integrar si la demo usa otro.
+- **Resuelto en I1:** el ancla arranca a `ANCLA_ALTURA = 0.3` (el de fábrica es 0.44), la altura del centro de la columna; verificado con la app (`client/e2e/ancla-i1.spec.ts`).
 
 **[Verificado]** posiciones actuales: logo "Ruteando" abajo a la izquierda (`fixed bottom-6 left-6`), tarjeta de comparación de zonas **arriba** (`top-3`), `+/−` de Leaflet arriba a la izquierda, navegación flotante abajo a la derecha. El mapa chico del dueño (`location-pin-editor.tsx`) sí lleva su propio crédito OSM. Que R2 resuelva el choque es hipótesis sin verificar hasta probar la rama en celular.
 
@@ -218,7 +218,7 @@ Cada etapa termina con pruebas automáticas y **prueba manual en PC y celular** 
 | Etapa | Contenido | Criterio de salida |
 |---|---|---|
 | I0 | Prerrequisitos R1 a R5 y R8 (R6 y R7 en paralelo, porque bloquean el piloto, no la integración). **[Corregido]** R1 ya está hecho. **v0.3:** también R10 a R14; R14 es obligatorio antes de I1 | Cada uno fusionado con sus pruebas |
-| I1 | Infraestructura: dependencia (DI-01), bandera, proveedor, tokens, modos en Ajustes, respaldo con la navegación de hoy | Con el ancla apagada, RUTEANDO se ve y funciona igual que antes |
+| I1 | Infraestructura: dependencia (DI-01), bandera, proveedor, tokens, modos en Ajustes, respaldo con la navegación de hoy | Con el ancla apagada, RUTEANDO se ve y funciona igual que antes. **Hecha (2026-10-03, ver §7.1)** |
 | I2 | Mapa del consumidor, con capas, joystick y apuntar y elegir | Recorrido "buscar y llegar a un negocio" solo deslizando |
 | I3 | Perfil del negocio (visitante) | Contactar y llegar a un negocio sin salir del ancla |
 | I4 | Inicio del vendedor: estoy vendiendo, agotado, preguntas, ubicación en vivo, oferta | Un vendedor actualiza su estado con una mano |
@@ -226,6 +226,17 @@ Cada etapa termina con pruebas automáticas y **prueba manual en PC y celular** 
 | I6 | Pruebas con personas (vendedores y consumidores) y ajustes | Hallazgos registrados y resueltos |
 
 ---
+
+### 7.1 Etapa I1 — hecha (2026-10-03, rama `feature/ancla-i1`)
+
+- **Dependencia (DI-01 c):** `scripts/vendor-boton-ancla.sh <etiqueta>` copia `packages/core/src` y `packages/react/src` a `client/src/vendor/boton-ancla/` (con `VERSION` y `LICENSE`). Primera copia: **v0.3.1** (`8c70c6d`), no v0.3.0: es la etiqueta vigente del repo. Los nombres `@boton-ancla/core|react` se resuelven con `paths` de `client/tsconfig.json` (sin npm: los paquetes son privados y `react` depende de `core` por `"*"`, que npm buscaría en el registro). `src/vendor/**` fuera del lint; `react/env.d.ts` excluido (choca con los tipos de Node). No se edita a mano: los cambios van al repo del ancla con una etiqueta nueva.
+- **Bandera:** `NEXT_PUBLIC_ANCLA=1` (en `client/.env.local`; documentada en `client/.env.example`). Sin ella la app es la de siempre y la opción no aparece. En producción empieza sin la bandera.
+- **Modos (§0.2):** Cuenta → Configuración → "Botón para una mano": Completo (menú + mover el mapa + apuntar), Solo menú, Apagado (por defecto). Por dispositivo (`localStorage`), igual que la colocación que la persona elige al mover el ancla (Fase 3).
+- **Proveedor:** `components/ancla/proveedor-ancla.tsx`, con los tokens de RUTEANDO, `zIndex` 1050 (`--capa-ancla`, R14) y los íconos fijos en `ANCHOR_ICONS` (`semantic-icons.ts`). Con la bandera queda **siempre montado**: montarlo y desmontarlo al cambiar de modo volvía a montar toda la app (hallazgo con la app corriendo: Configuración perdía su pestaña). En Apagado ninguna pantalla se registra y el ancla no se dibuja ni escucha toques.
+- **Respaldo con la navegación de hoy (D-06, DI-08):** con el ancla encendida, `MainFloatingNav` registra la pantalla en vez de dibujar la columna, con las mismas opciones: en el mapa Mi ubicación (90°, inofensiva), Buscar, Favoritos y Perfil; fuera del mapa Atrás (90°), Buscar, Favoritos, Perfil y Mapa; con una hoja abierta en el mapa, Atrás la cierra. El centro muestra la sección según la ruta (`ANCHOR_SECTION_ICONS`).
+- **Lugar:** el mismo de la columna. `ANCLA_ALTURA = 0.3` y `MARGEN_LATERAL = 8` (centro a 8 + 32 px del borde): con el de fábrica (24 px) el ancla se metía 18 px en el contenido; por eso la franja reservada pasó de 64 a 72 px. No tapa el crédito de OpenStreetMap.
+- **Pruebas:** `client/e2e/ancla-i1.spec.ts` (apagado por defecto, Completo en el lugar de la columna y navegando, Solo menú, volver a Apagado sin reiniciar la pantalla). La suite completa (71) corre con la bandera encendida y el modo Apagado: es la prueba de que "con el ancla apagada RUTEANDO se ve y funciona igual". `next build` en verde.
+- **Pendiente antes de I2 (I0):** R2 (verificar en celular que el crédito OSM quedó arriba a la derecha), R8 (Limpiar búsqueda en /buscar), R10 (WhatsApp y Carta en la hoja resumen), R11 (lista del grupo de pines), R12 (frescura en los pines), R13 (zoom de un dedo). Con R13, DI-03: ocultar los `+/−` de Leaflet con el ancla encendida (en I1 siguen visibles: sin R13 serían el único zoom además de pellizcar).
 
 ## 8. Pruebas
 

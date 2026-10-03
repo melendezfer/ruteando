@@ -1,6 +1,17 @@
 import type { Icon } from "@phosphor-icons/react";
 import {
+  ArrowCounterClockwise,
+  ArrowLeft,
   BookOpen,
+  CaretDoubleDown,
+  ClipboardText,
+  FileText,
+  Gear,
+  HouseLine,
+  IdentificationCard,
+  MagnifyingGlass,
+  UserCircle,
+  X,
   Broadcast,
   CheckCircle,
   Clock,
@@ -72,3 +83,29 @@ export const MOBILITY_LABELS: Record<Mobility, string> = {
   street_stall: "Puesto en la calle",
   fixed: "Local",
 };
+
+/**
+ * Botón-ancla (docs/integracion-ancla.md, etapa I1). Opciones fijas que agrega
+ * el ancla (las pone la app, RNF-09) y el ícono de cada sección (lo que
+ * muestra su centro). Mismos significados que en el resto de la app: ArrowLeft
+ * = volver (BackButton), X = cerrar (hojas y modales).
+ */
+export const ANCHOR_ICONS = {
+  back: ArrowLeft,
+  undo: ArrowCounterClockwise,
+  close: X,
+  hideKeyboard: CaretDoubleDown,
+} as const;
+
+export const ANCHOR_SECTION_ICONS = {
+  map: MapTrifold,
+  search: MagnifyingGlass,
+  /** Tablero del día del vendedor ("Mi negocio hoy"). No Storefront (= modalidad local). */
+  vendorHome: HouseLine,
+  account: UserCircle,
+  /** Perfil de un negocio. No Storefront (= modalidad local). */
+  business: IdentificationCard,
+  businessSettings: Gear,
+  registration: ClipboardText,
+  legal: FileText,
+} as const;

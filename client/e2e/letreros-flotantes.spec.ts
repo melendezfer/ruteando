@@ -61,11 +61,15 @@ test.describe("celular", () => {
       await page.goto(ruta, { waitUntil: "networkidle" });
       await ningunLetreroVisible(page);
     }
-    // El aviso de la primera vez: uno solo; un toque lo cierra para siempre.
+    // El aviso de la primera vez: uno solo, pequeño, no bloquea; un toque en
+    // cualquier parte lo cierra para siempre.
     const aviso = page.locator("[data-floating-tip]");
     await expect(aviso).toHaveCount(1);
-    await expect(aviso).toContainText("Mantén presionado");
-    await aviso.click();
+    await expect(aviso).toContainText("Mantén pulsado");
+    expect(await aviso.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+    const caja = (await aviso.boundingBox())!;
+    expect(caja.width).toBeLessThanOrEqual(56);
+    await page.mouse.click(30, 300);
     await expect(aviso).toHaveCount(0);
     await page.goto("/mapa", { waitUntil: "networkidle" });
     await expect(page.locator("[data-floating-tip]")).toHaveCount(0);

@@ -7048,3 +7048,18 @@ Spec: `docs/specs/perfil-2.md` §8.1; lugar del ancla:
   desplazamiento (falla si se quita la franja: comprobado). El aviso de la
   primera vez tapa contenido hasta que se toca "Entendido" — las pruebas lo
   cierran antes de medir.
+
+**Ajustes tras la prueba del usuario (2026-10-03):**
+- **El mapa siempre a un toque y en el mismo lugar**: la columna mantiene
+  el orden Buscar · Favoritos · Perfil · mapa; el último es "Ubicarme" en
+  el mapa y "Mapa" en el resto (en el perfil del vendedor había
+  desaparecido). Se agregó la columna a Ajustes, al asistente de registro
+  y a los textos legales con sesión (`SessionNav`). Reducida a un botón,
+  queda en el mismo sitio. Prueba: `client/e2e/acceso-al-mapa.spec.ts`
+  recorre todas las rutas de `src/app` con consumidor, dueño y vendedor
+  nuevo; una ruta sin clasificar o sin el botón del mapa (o con él en otro
+  lugar) la hace fallar (comprobado quitando la columna de Ajustes).
+- **Aviso de la primera vez**: pequeño (52 px de ancho, dentro de la
+  franja), `pointer-events: none` y se cierra con cualquier toque
+  (`pointerdown` en el documento). `flotantes-no-tapan` ya no lo cierra y
+  falla si su caja se cruza con un texto o control.

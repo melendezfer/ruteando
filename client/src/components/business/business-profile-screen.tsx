@@ -14,7 +14,7 @@ import { formatRelativeTimeShort } from "@/lib/format/relative-time";
 import { MOBILITY_ICONS, MOBILITY_LABELS, SEMANTIC_ICONS } from "@/lib/icons/semantic-icons";
 import { logBusinessViewEvent, logContactClickEvent, logProductViewEvent } from "@/lib/api/events";
 import { useAuth } from "@/lib/auth/auth-context";
-import { MainFloatingNav } from "@/components/layout/main-floating-nav";
+import { SessionNav } from "@/components/layout/session-nav";
 import { BackButton } from "@/components/ui/back-button";
 import { FavoriteButton } from "@/components/business/favorite-button";
 import { BusinessStatusBanner } from "@/components/business/business-status-banner";
@@ -604,7 +604,7 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
 
       {/* Etapa 1b: la misma columna de navegación que el resto de la app
           (con sesión). Sin sesión (enlace compartido) queda solo "Volver". */}
-      {user && <MainFloatingNav />}
+      <SessionNav />
     </div>
   );
 }

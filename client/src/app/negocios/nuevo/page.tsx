@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { RequireAuth } from "@/components/auth/require-auth";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { BusinessRegistrationWizard } from "@/components/business/registration/business-registration-wizard";
 
 /**
@@ -15,6 +16,7 @@ export default function NewBusinessPage() {
         <Suspense fallback={null}>
           <BusinessRegistrationWizard />
         </Suspense>
+        <MainFloatingNav />
       </main>
     </RequireAuth>
   );

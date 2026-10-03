@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * Etapa 1b (pedido del usuario, 2026-10-03; docs/specs/perfil-2.md §8.1):
  * - arriba solo "Volver" y el título, sin íconos de acción;
  * - una columna de botones de 44 px al costado derecho, zona media-baja
- *   (Buscar, Favoritos, Perfil y, con el mapa visible, Ubicarme), sin
+ *   (Buscar, Favoritos, Perfil y, al final, Ubicarme en el mapa o Mapa fuera de él), sin
  *   letreros a la vista;
  * - con una hoja o el teclado abiertos, un solo botón;
  * - las hojas reservan la franja de la columna (nada debajo).
@@ -87,8 +87,8 @@ async function accionesArriba(page: Page, alto = 64) {
 }
 
 async function cerrarAviso(page: Page) {
-  const aviso = page.locator("[data-floating-tip]");
-  if (await aviso.isVisible()) await aviso.click();
+  // El aviso se cierra con cualquier toque.
+  await page.evaluate(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
 }
 
 for (const ancho of ANCHOS) {
@@ -138,14 +138,14 @@ for (const ancho of ANCHOS) {
       await page.goto("/buscar", { waitUntil: "networkidle" });
       await cerrarAviso(page);
       await expect(page.getByRole("heading", { level: 1, name: "Buscar" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Volver" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Volver", exact: true })).toBeVisible();
       expect(await accionesArriba(page)).toEqual([]);
-      expect((await columna(page)).map((b) => b.nombre)).toEqual(["Buscar", "Favoritos", "Perfil"]);
+      expect((await columna(page)).map((b) => b.nombre)).toEqual(["Buscar", "Favoritos", "Perfil", "Volver al mapa"]);
       // Teclado: en táctil, un campo de texto con el foco.
       await page.getByRole("textbox", { name: "Buscar" }).focus();
       await expect.poll(async () => (await columna(page)).map((b) => b.nombre)).toEqual(["Volver al mapa"]);
       await page.getByRole("textbox", { name: "Buscar" }).blur();
-      await expect.poll(async () => (await columna(page)).length).toBe(3);
+      await expect.poll(async () => (await columna(page)).length).toBe(4);
     });
 
     test("cuenta: arriba solo Volver y 'Mi cuenta'; cerrar sesión al final", async ({ page }) => {
@@ -167,7 +167,7 @@ for (const ancho of ANCHOS) {
       await expect(llegar).not.toHaveAttribute("data-floating-action");
       expect(await llegar.evaluate((el) => el.closest("[data-floating-action]") === null)).toBe(true);
       await expect(page.getByRole("button", { name: "Agregar a favoritos" })).toBeVisible();
-      expect((await columna(page)).map((b) => b.nombre)).toEqual(["Buscar", "Favoritos", "Perfil"]);
+      expect((await columna(page)).map((b) => b.nombre)).toEqual(["Buscar", "Favoritos", "Perfil", "Volver al mapa"]);
     });
   });
 }

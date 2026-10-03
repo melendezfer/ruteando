@@ -39,7 +39,7 @@ export function WizardShell({
 }: WizardShellProps) {
   return (
     <div className="flex flex-1 flex-col bg-background">
-      <div className="flex flex-col gap-3 border-b border-border bg-surface px-5 py-4">
+      <div className="reserva-columna flex flex-col gap-3 border-b border-border bg-surface py-4 pl-5">
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -74,7 +74,7 @@ export function WizardShell({
         <h1 className="font-heading text-title-1 font-bold text-text">{title}</h1>
       </div>
 
-      <div className="flex flex-1 flex-col px-5 py-6">{children}</div>
+      <div className="reserva-columna flex flex-1 flex-col py-6 pl-5">{children}</div>
     </div>
   );
 }

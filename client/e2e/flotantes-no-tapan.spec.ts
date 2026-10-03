@@ -9,8 +9,9 @@ import { expect, test, type Page } from "@playwright/test";
  * del desplazamiento. La prueba mira arriba, a la mitad y al final: para
  * cada texto o control visible pregunta al navegador qué elemento está
  * encima de su centro y de sus esquinas (`document.elementFromPoint`). Si
- * es un flotante, está tapado. Antes cierra el aviso de la primera vez
- * ("Mantén presionado…"), que se cierra con un toque.
+ * es un flotante, está tapado. El aviso de la primera vez no deja pasar
+ * toques por encima (no bloquea), así que además se compara su caja con la
+ * de cada texto o control: no debe cruzarse con ninguno.
  *
  * Requisitos: backend + frontend corriendo y `npm run seed:demo`.
  */
@@ -59,8 +60,7 @@ async function entrar(page: Page, email: string) {
 
 /** Baja hasta el final y devuelve los textos/controles que quedan bajo un flotante. */
 async function tapadosAlFinal(page: Page): Promise<string[]> {
-  const aviso = page.locator("[data-floating-tip]");
-  if (await aviso.isVisible()) await aviso.click();
+  // El aviso de la primera vez NO se cierra: tampoco debe tapar nada.
   const todos = new Set<string>();
   for (const fraccion of [0, 0.5, 1]) {
     await page.evaluate((f) => window.scrollTo(0, (document.documentElement.scrollHeight - window.innerHeight) * f), fraccion);
@@ -84,8 +84,16 @@ async function tapadosEnPantalla(page: Page): Promise<string[]> {
       return el.matches(interactivo) || conTexto;
     });
     const resultado: string[] = [];
+    const aviso = document.querySelector("[data-floating-tip]")?.getBoundingClientRect();
     for (const el of candidatos) {
       const r = el.getBoundingClientRect();
+      if (
+        aviso &&
+        r.width >= 2 &&
+        r.left < aviso.right && r.right > aviso.left && r.top < aviso.bottom && r.bottom > aviso.top
+      ) {
+        resultado.push(`<${el.tagName.toLowerCase()}> bajo el aviso`);
+      }
       if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
       const puntos = [
         [r.left + r.width / 2, r.top + r.height / 2],

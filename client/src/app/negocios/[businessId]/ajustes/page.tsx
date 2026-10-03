@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { RequireAuth } from "@/components/auth/require-auth";
+import { MainFloatingNav } from "@/components/layout/main-floating-nav";
 import { BusinessSettingsScreen } from "@/components/business/settings/business-settings-screen";
 
 /**
@@ -15,6 +16,7 @@ export default function BusinessSettingsPage() {
     <RequireAuth>
       <main className="flex flex-1 flex-col bg-background">
         <BusinessSettingsScreen businessId={businessId} />
+        <MainFloatingNav />
       </main>
     </RequireAuth>
   );

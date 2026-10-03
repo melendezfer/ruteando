@@ -13,7 +13,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
  * sesión del navegador: en el celular una pestaña o la PWA vive días con la
  * misma sesión (y el contador es distinto por dirección: localhost y la IP
  * de la red local cuentan aparte), así que en la práctica casi nunca pasaba
- * de 3 y los letreros tapaban media pantalla.
+ * de 3 y los letreros tapaban media pantalla. El aviso es pequeño, vive en la
+ * franja de la columna y se cierra con cualquier toque.
  */
 const PRESION_LARGA_MS = 450;
 const CLAVE_AVISO = "ruteando.flotantes.aviso-visto";
@@ -87,6 +88,16 @@ export function FloatingActionStack({ actions, showTip = true }: FloatingActionS
     if (tieneLetreros) setMostrarAviso(!avisoYaVisto());
   }, [tieneLetreros]);
 
+  useEffect(() => {
+    if (!mostrarAviso) return;
+    const cerrar = () => {
+      marcarAvisoVisto();
+      setMostrarAviso(false);
+    };
+    document.addEventListener("pointerdown", cerrar, { capture: true });
+    return () => document.removeEventListener("pointerdown", cerrar, { capture: true });
+  }, [mostrarAviso]);
+
   if (visible.length === 0) return null;
 
   return (
@@ -95,19 +106,17 @@ export function FloatingActionStack({ actions, showTip = true }: FloatingActionS
       className="pointer-events-none fixed z-40 flex flex-col items-end gap-2 *:pointer-events-auto"
       style={{ right: "var(--columna-borde)", bottom: "var(--columna-abajo)" }}
     >
+      {/* Aviso de la primera vez (pedido del usuario, 2026-10-03): pequeño,
+          dentro de la franja reservada (no tapa contenido), sin bloquear
+          toques, y se cierra con cualquier toque en la pantalla. */}
       {mostrarAviso && tieneLetreros && (
-        <button
-          type="button"
+        <p
           data-floating-tip
-          onClick={() => {
-            marcarAvisoVisto();
-            setMostrarAviso(false);
-          }}
-          className="max-w-56 rounded-card bg-text px-3 py-2 text-left font-sans text-body-sm text-white shadow-lg"
+          role="status"
+          className="pointer-events-none! w-13 rounded-card bg-text px-1 py-1 text-center font-sans text-[11px] leading-tight text-white shadow-md"
         >
-          Mantén presionado un botón para ver qué hace.{" "}
-          <span className="font-semibold underline">Entendido</span>
-        </button>
+          Mantén pulsado para ver el nombre
+        </p>
       )}
       {visible.map((action) => (
         <FloatingActionButton key={action.label} action={action} />

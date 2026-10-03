@@ -104,7 +104,7 @@ export function BusinessSettingsScreen({ businessId }: { businessId: string }) {
 
   if (load.kind === "loading") {
     return (
-      <div className="flex flex-col gap-3 px-5 py-6">
+      <div className="reserva-columna flex flex-col gap-3 py-6 pl-5">
         <Skeleton className="h-8 w-2/3" />
         {Array.from({ length: 6 }, (_, i) => (
           <Skeleton key={i} className="h-16 w-full rounded-card" />
@@ -193,7 +193,7 @@ function SettingsContent({ profile }: { profile: BusinessProfile }) {
   const isItinerant = business.mobility === "itinerant";
 
   return (
-    <div className="flex flex-col gap-3 px-5 pb-10 pt-4">
+    <div className="reserva-columna flex flex-col gap-3 pb-10 pl-5 pt-4">
       <header className="flex items-center gap-3 pb-2">
         <Link
           href={`/negocios/${businessId}`}

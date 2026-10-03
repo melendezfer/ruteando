@@ -26,7 +26,7 @@ const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
  * Navegación global (Etapa 1b, pedido del usuario 2026-10-03; reemplaza la
  * pila de círculos abajo a la derecha de CLAUDE.md §53/§54): una columna de
  * botones de 44 px al costado derecho, zona media-baja — Buscar, Favoritos,
- * Perfil y, con el mapa visible, Ubicarme. Arriba de cada pantalla solo van
+ * Perfil y, al final, Ubicarme (con el mapa visible) o Mapa (fuera de él). Arriba de cada pantalla solo van
  * "Volver" y el título (ScreenHeader), sin íconos de acción.
  *
  * Con una hoja o el teclado abiertos queda un solo botón: "Volver al mapa"
@@ -38,20 +38,15 @@ export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, compact = 
   const router = useRouter();
   const tecladoAbierto = useKeyboardOpen();
 
+  const mapa = {
+    icon: <ViewOnMapIcon size={22} weight="fill" />,
+    label: "Volver al mapa",
+    shortLabel: "Mapa",
+    onClick: onBackToMap ?? (() => router.push("/mapa")),
+  };
+
   if (compact || tecladoAbierto) {
-    return (
-      <FloatingActionStack
-        showTip={false}
-        actions={[
-          {
-            icon: <ViewOnMapIcon size={22} weight="fill" />,
-            label: "Volver al mapa",
-            shortLabel: "Mapa",
-            onClick: onBackToMap ?? (() => router.push("/mapa")),
-          },
-        ]}
-      />
-    );
+    return <FloatingActionStack showTip={false} actions={[mapa]} />;
   }
 
   return (
@@ -77,9 +72,14 @@ export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, compact = 
           shortLabel: "Perfil",
           onClick: () => router.push("/perfil"),
         },
+        // Siempre el mismo orden y el mismo lugar (pedido del usuario,
+        // 2026-10-03): el último botón es el mapa — "Ubicarme" con el mapa
+        // visible, "Mapa" en cualquier otra pantalla. Volver al mapa está
+        // siempre a un toque y en el mismo sitio, también reducido a un
+        // solo botón (queda abajo, donde estaba este).
         onCenterMap
           ? { icon: <Crosshair size={22} weight="fill" />, label: "Mi ubicación", shortLabel: "Ubicarme", onClick: onCenterMap }
-          : null,
+          : mapa,
       ]}
     />
   );

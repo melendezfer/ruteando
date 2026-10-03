@@ -27,7 +27,7 @@ export function DoneStep({ businessName, businessId, contactPhone }: DoneStepPro
   const [phoneVerified, setPhoneVerified] = useState(false);
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+    <div className="reserva-columna flex flex-1 flex-col items-center justify-center gap-4 text-center">
       <CheckCircle size={56} weight="fill" className="text-verde" />
       <h1 className="font-heading text-title-1 font-bold text-text">¡Listo, {businessName}!</h1>
       <p className="max-w-sm font-sans text-body text-text-muted">

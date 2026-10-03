@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
+import { SessionNav } from "@/components/layout/session-nav";
 
 /**
  * Páginas legales (aviso de privacidad / términos) — públicas, sin
@@ -15,7 +16,7 @@ import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex flex-1 flex-col bg-background">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-6 py-10">
+      <div className="reserva-columna mx-auto flex w-full max-w-2xl flex-col gap-6 py-10 pl-6">
         <Link
           href="/"
           className="flex items-center gap-1.5 font-sans text-body-sm font-medium text-text-muted hover:text-text"
@@ -25,6 +26,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         </Link>
         {children}
       </div>
+      <SessionNav />
     </main>
   );
 }

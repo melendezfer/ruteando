@@ -44,6 +44,7 @@ Rama `feature/perfil-2-ajustes` (sale de R5, `feature/r5-estoy-vendiendo`, con `
 | 19 | Desplázate en Buscar, Mi cuenta y el perfil de un negocio | Ningún texto ni botón queda debajo de la columna: el contenido deja libre esa franja. |
 | 20 | Mapa → Buscar (o toca una tarjeta) | Con la hoja abierta queda un solo botón (mapa) que la cierra. La hoja no pasa por debajo del botón. |
 | 21 | Buscar → toca el campo de texto | Con el teclado abierto queda un solo botón. Al cerrar el teclado vuelven los demás. |
+| 22a | Todas las pantallas con sesión (tu negocio, Ajustes, registro, Buscar, Cuenta, textos legales) | El último botón de la columna es siempre el mapa, en el mismo lugar. El aviso de la primera vez es pequeño, no tapa nada y se cierra tocando cualquier parte. |
 | 22 | Perfil de un negocio como cliente | Arriba solo "Volver". El corazón está junto al nombre; "Cómo llegar" y "WhatsApp" son botones dentro de la página. En Mi cuenta, "Cerrar sesión" está al final. |
 
 Al terminar, `npm run seed:demo` deja los datos de demo como estaban.

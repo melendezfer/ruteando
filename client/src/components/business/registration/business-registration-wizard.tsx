@@ -100,7 +100,7 @@ export function BusinessRegistrationWizard() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+    <div className="reserva-columna flex flex-1 flex-col items-center justify-center gap-3 bg-background pl-6 text-center">
       <h1 className="font-heading text-title-1 font-bold text-text">Necesitas una cuenta de vendedor</h1>
       <p className="max-w-sm font-sans text-body text-text-muted">
         Para registrar tu propio negocio en Ruteando, tu cuenta debe estar marcada como vendedor. Si un

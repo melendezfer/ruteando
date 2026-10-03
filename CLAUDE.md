@@ -1830,6 +1830,9 @@ peticiones de red de cualquier tipo. El código de `auth-context.tsx` es
 correcto — confirmado corriendo exactamente el mismo código, por la
 misma IP, en modo producción, sin ningún cambio.
 
+**Corregido después (§63, 2026-10-02)**: la causa real era
+`allowedDevOrigins` de Next, no la red; lo de abajo queda como registro.
+
 **Sin fix de aplicación posible**: si React nunca hidrata, ningún JS del
 lado del cliente llega a ejecutarse — no hay ningún `setTimeout` de
 rescate ni lógica de respaldo que pueda escribirse en código de la app
@@ -6953,3 +6956,53 @@ quedar pegado tras un toque (hipótesis sin verificar en un celular real).
 Prueba: `client/e2e/letreros-flotantes.spec.ts`, que falla con la regla
 vieja (comprobado reconstruyendo con el archivo anterior) y pasa con la
 nueva. e2e completas: 31/31.
+
+### Correcciones tras la segunda prueba (puntos 1 a 3, 2026-10-02)
+
+Guía: filas 13–17 de `docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+- **Ubicación sin trampa**: en el celular por http el navegador niega la
+  ubicación y el paso 2 solo tenía latitud/longitud a mano (vacías,
+  `Number("")` = 0 → "fuera de Cundinamarca"). Ahora `LocationStep` tiene un
+  mapa con pin arrastrable o que se mueve tocando el mapa
+  (`DraggablePinMap`, arranca en `CIUDAD_VERDE_CENTER`,
+  `lib/geo/ciudad-verde.ts`); las coordenadas quedan plegadas como opción
+  avanzada; `placed` evita guardar el centro que nadie eligió, y el mensaje
+  sin ubicar es "Falta ubicar tu negocio…".
+- **"Guardar y terminar después"** en todos los pasos (`WizardShell`):
+  guarda en el servidor lo que el paso permite sin mostrar errores, deja el
+  resto como borrador en este navegador (`lib/registration/draft.ts`,
+  `localStorage` por usuario) y sale al inicio. Se retoma desde "Continuar
+  mi registro" (`RegisterBusinessCard`) o desde el aviso "Tu registro no
+  está completo" del perfil del dueño (`/negocios/nuevo?negocio=<id>`, que
+  también reconstruye los pasos desde el servidor en otro dispositivo).
+- **HTTPS en la red local** (`scripts/dev-lan.sh` + `scripts/https-lan-proxy.cjs`,
+  pm2 `ruteando-https`, puerto 3443, certificado de mkcert para la IP; el
+  certificado raíz se copia a Descargas de Windows para instalarlo en el
+  celular). La API y las fotos van por la misma dirección de la página
+  (`NEXT_PUBLIC_API_BASE_URL=/api`, `STORAGE_PUBLIC_URL=/media`, rewrites en
+  `client/next.config.ts`): sin contenido mixto ni CORS. En el render del
+  servidor una ruta relativa no sirve: `client.ts` usa `API_INTERNAL_URL`.
+  Fotos subidas antes guardaron `http://IP:9000` y siguen así.
+- **Causa real del bug de §24 ("Cargando sesión…" por la IP con `next
+  dev`)**: no era la red de WSL. Next 16 rechaza el socket `/_next/hmr` si
+  el origen no está en `allowedDevOrigins` (handshake: 101 con
+  `Origin: localhost`, rechazo con la IP; el log de Next lo pedía). Se
+  agregó `allowedDevOrigins` desde `DEV_LAN_HOST` (lo escribe `dev-lan.sh`
+  en `client/.env.local`). Verificado con Playwright (Pixel 7): hidrata por
+  `http://IP:3001` y por `https://IP:3443`, y por https el navegador da la
+  ubicación. `--prod-frontend` deja de ser necesario para el celular (se
+  conserva).
+- **Pantallas angostas**: `min-w-0`/`shrink-0` en la barra de búsqueda (el
+  botón se salía de la hoja), X de cerrar de 44 px dentro de la hoja, las
+  hojas sobre el mapa dejan sitio abajo (`pb-24`) y con una hoja abierta la
+  navegación flotante queda en un solo círculo (`MainFloatingNav#compact`,
+  sin el aviso de letreros); horas del horario lado a lado.
+  Prueba: `client/e2e/sin-desbordes.spec.ts` (360/390/412 px; falla con el
+  código anterior: "Cerrar búsqueda se sale…").
+- **Carrusel**: `snap-start` + `scroll-px-3` (antes `snap-center`: la
+  primera tarjeta alineada a la izquierda y las demás centradas). Prueba:
+  `client/e2e/carrusel-alineado.spec.ts` (falla con el código anterior: 39
+  px de desfase).
+
+e2e completas: 43/43.

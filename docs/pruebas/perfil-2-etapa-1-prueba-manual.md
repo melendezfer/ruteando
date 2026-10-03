@@ -5,7 +5,8 @@ Rama `feature/perfil-2-ajustes` (sale de R5, `feature/r5-estoy-vendiendo`, con `
 ## Preparar
 
 - **PC:** ya está corriendo. Abre `http://localhost:3001`.
-- **Celular (Nubia):** en la terminal, `bash scripts/dev-lan.sh --prod-frontend` y abre `http://<IP que muestra el script>:3001`.
+- **Celular (Nubia):** en la terminal, `bash scripts/dev-lan.sh` (ya no hace falta `--prod-frontend`: con recarga en vivo también carga en el celular). Abre **`https://<IP que muestra el script>:3443`** — por https el celular sí entrega su ubicación.
+  - **Solo la primera vez:** instala en el celular el certificado local que el script deja en Descargas de Windows (`ruteando-certificado-local.crt`): pásalo por WhatsApp a ti mismo, y en Ajustes > Seguridad > Encriptación y credenciales > Instalar un certificado > **Certificado de CA**. Sin él, Chrome muestra "La conexión no es privada".
 - Cuenta de vendedor: `demo-arepas-dona-rosa@ruteando.test` / `password123`. Cuenta ajena para comparar: `demo-perros-el-parche@ruteando.test`.
 
 ## Qué revisar (PC y celular)
@@ -24,6 +25,16 @@ Rama `feature/perfil-2-ajustes` (sale de R5, `feature/r5-estoy-vendiendo`, con `
 | 10 | Entra como Perros El Parche y abre `/negocios/<id de Arepas>/ajustes` | "Solo el dueño del negocio puede cambiar sus ajustes." |
 | 11 | Crea una cuenta nueva como vendedor (Crear cuenta → "Tengo un negocio") | Al entrar ves **Registra tu negocio** destacado; el botón abre el asistente. Al terminar el registro, cada vez que entras aterrizas en tu negocio (aunque esté pendiente de aprobación). Con dos negocios, aterrizas en el que tiene horario ahora. |
 | 12 | Botones flotantes (en cualquier pantalla) | Solo íconos, sin letreros. La primera vez aparece un aviso pequeño "Mantén presionado un botón para ver qué hace" que se cierra con un toque y no vuelve. Mantén presionado un botón: aparece su nombre y no se activa. En PC, al pasar el mouse. |
+
+### Arreglos tras tu primera prueba (puntos 1 a 3)
+
+| # | Dónde | Qué debe pasar |
+|---|---|---|
+| 13 | Celular por `https://…:3443` | La app carga (no se queda en "Cargando sesión…") y, al pedirlo, el celular da su ubicación. Las fotos se ven. |
+| 14 | Cuenta nueva de vendedor → Registrar mi negocio → paso 2 (Ubicación), **sin** dar permiso de ubicación | Hay un mapa con un pin en Ciudad Verde. Arrastras el pin o tocas el mapa donde vendes. Latitud/longitud quedan plegadas en "Opciones avanzadas". Si tocas Continuar sin ubicar: "Falta ubicar tu negocio…" (ya no "fuera de Cundinamarca"). |
+| 15 | Cualquier paso del registro | Arriba, **Guardar y terminar después**. Te lleva al inicio: si el negocio ya existía, tu perfil muestra "Tu registro no está completo… **Terminar registro**", que te devuelve al paso donde ibas. Si te fuiste en el paso 1, el botón de inicio dice **Continuar mi registro** y conserva lo que escribiste. |
+| 16 | Pantallas angostas (360–412 px): mapa, hoja de Buscar, Buscar, Cuenta, perfil del dueño y Ajustes | Nada se sale de su caja (el botón de buscar, la X de cerrar). Con una hoja abierta sobre el mapa, abajo queda un solo botón (volver al mapa) y no tapa nada de la hoja. Horario del registro: apertura y cierre caben lado a lado. |
+| 17 | Carrusel "Disponibles ahora" del mapa | Al deslizar, cada tarjeta queda alineada en el mismo lugar que la primera (antes la primera empezaba a la izquierda y las demás se centraban). |
 
 Al terminar, `npm run seed:demo` deja los datos de demo como estaban.
 

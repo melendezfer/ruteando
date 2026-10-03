@@ -445,6 +445,23 @@ export function BusinessProfileScreen({ profile, categoryName, catalogType }: Bu
         </div>
       )}
 
+      {/* Registro sin terminar ("Guardar y terminar después", o se cerró el
+          asistente a mitad): falta la ubicación o el horario. */}
+      {isOwner && profile.id && (!location || !(profile.schedule?.length ?? 0)) && (
+        <div className="px-5 pb-4">
+          <Link
+            href={`/negocios/nuevo?negocio=${profile.id}`}
+            className="flex items-center justify-between gap-3 rounded-card border border-terracota-100 bg-terracota-50 px-4 py-3 font-sans text-body-sm text-text"
+          >
+            <span>
+              <span className="font-semibold">Tu registro no está completo.</span>{" "}
+              {!location ? "Falta ubicar tu negocio en el mapa." : "Falta tu horario."}
+            </span>
+            <span className="shrink-0 font-semibold text-terracota underline">Terminar registro</span>
+          </Link>
+        </div>
+      )}
+
       {isOwner && !phoneVerified && profile.id && (
         <div className="px-5 pb-4">
           <Link

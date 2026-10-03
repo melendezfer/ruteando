@@ -35,6 +35,12 @@ interface MainFloatingNavProps {
   onSearch?: () => void;
   /** `false` en el mapa (no se desplaza): ver FloatingActionStack#reserveSpace. */
   reserveSpace?: boolean;
+  /**
+   * Solo el círculo principal (pantallas angostas, 2026-09-29): con una
+   * hoja abierta sobre el mapa, la pila completa tapaba los controles de
+   * la hoja (la X de cerrar, resultados).
+   */
+  compact?: boolean;
 }
 
 const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
@@ -55,7 +61,13 @@ const ViewOnMapIcon = SEMANTIC_ICONS.viewOnMap;
  * documentado para este componente (CLAUDE.md, "no expone un estado
  * activo distinto"); no se pidió agregarlo.
  */
-export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, reserveSpace = true }: MainFloatingNavProps) {
+export function MainFloatingNav({
+  onCenterMap,
+  onBackToMap,
+  onSearch,
+  reserveSpace = true,
+  compact = false,
+}: MainFloatingNavProps) {
   const router = useRouter();
 
   const mapAction: FloatingAction = onCenterMap
@@ -94,5 +106,5 @@ export function MainFloatingNav({ onCenterMap, onBackToMap, onSearch, reserveSpa
     },
   ];
 
-  return <FloatingActionStack actions={actions} reserveSpace={reserveSpace} />;
+  return <FloatingActionStack actions={compact ? [mapAction] : actions} reserveSpace={reserveSpace} showTip={!compact} />;
 }

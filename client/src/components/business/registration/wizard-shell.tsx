@@ -10,6 +10,13 @@ interface WizardShellProps {
   /** 0-1. Solo se dibuja la barra si viene junto con stepLabel. */
   progress?: number;
   onClose: () => void;
+  /**
+   * "Guardar y terminar después" (pedido del usuario, 2026-09-29): siempre
+   * visible, en todos los pasos — nunca atrapar al vendedor en un paso que
+   * no puede completar en ese momento.
+   */
+  onSaveForLater?: () => void;
+  savingForLater?: boolean;
   children: ReactNode;
 }
 
@@ -21,7 +28,15 @@ interface WizardShellProps {
  * (✕) en vez de la navegación Inicio/Mapa, para no competir con el
  * objetivo de la pantalla actual.
  */
-export function WizardShell({ title, stepLabel, progress, onClose, children }: WizardShellProps) {
+export function WizardShell({
+  title,
+  stepLabel,
+  progress,
+  onClose,
+  onSaveForLater,
+  savingForLater = false,
+  children,
+}: WizardShellProps) {
   return (
     <div className="flex flex-1 flex-col bg-background">
       <div className="flex flex-col gap-3 border-b border-border bg-surface px-5 py-4">
@@ -30,12 +45,22 @@ export function WizardShell({ title, stepLabel, progress, onClose, children }: W
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-background hover:text-text"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-text-muted hover:bg-background hover:text-text"
           >
             <X size={20} weight="bold" />
           </button>
-          {stepLabel && <span className="font-sans text-body-sm font-medium text-text-muted">{stepLabel}</span>}
+          {onSaveForLater && (
+            <button
+              type="button"
+              onClick={onSaveForLater}
+              disabled={savingForLater}
+              className="min-h-11 rounded-input px-2 font-sans text-body-sm font-semibold text-terracota hover:bg-terracota-50 disabled:opacity-60"
+            >
+              {savingForLater ? "Guardando…" : "Guardar y terminar después"}
+            </button>
+          )}
         </div>
+        {stepLabel && <span className="font-sans text-body-sm font-medium text-text-muted">{stepLabel}</span>}
 
         {progress !== undefined && (
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">

@@ -166,12 +166,15 @@ function DiscoveryBusinessCarousel({
 
   if (businesses.length === 0) return null;
 
+  // snap-start + scroll-px-3 (2026-09-29): todas las tarjetas se alinean
+  // igual que la primera, a 12 px del borde izquierdo. Antes (snap-center)
+  // la primera empezaba pegada a la izquierda y las siguientes se centraban.
   return (
     <div
       ref={containerRef}
       onPointerDown={pauseAutoAdvance}
       onWheel={handleWheel}
-      className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex snap-x snap-mandatory scroll-px-3 gap-3 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {businesses.map((business) => {
         if (!business.id) return null;
@@ -185,7 +188,7 @@ function DiscoveryBusinessCarousel({
               else cardRefs.current.delete(business.id!);
             }}
             data-business-id={business.id}
-            className={`w-72 shrink-0 snap-center rounded-card border bg-background transition-colors ${
+            className={`w-72 shrink-0 snap-start rounded-card border bg-background transition-colors ${
               isActive ? "border-terracota" : "border-border"
             }`}
           >
@@ -205,7 +208,7 @@ function DiscoveryBusinessCarousel({
           (`FilteredListSheet`), como última tarjeta del carrusel en vez
           de una fila/ícono propio arriba (petición directa del usuario:
           más espacio vertical para el mapa). */}
-      <div className="flex w-20 shrink-0 snap-center items-center justify-center">
+      <div className="flex w-20 shrink-0 snap-end items-center justify-center">
         <button
           type="button"
           onClick={() => {

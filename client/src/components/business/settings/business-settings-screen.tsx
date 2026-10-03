@@ -25,11 +25,7 @@ import { SettingsFamily } from "@/components/business/settings/settings-family";
 import { IdentitySettings } from "@/components/business/settings/identity-settings";
 import { ContactPhoneSettings } from "@/components/business/settings/contact-phone-settings";
 import { ScheduleSettings } from "@/components/business/settings/schedule-settings";
-import {
-  DAYS,
-  DEFAULT_WEEK_SCHEDULE,
-  type WeekSchedule,
-} from "@/components/business/registration/schedule-step";
+import { DAYS, scheduleFromRows, type WeekSchedule } from "@/components/business/registration/schedule-step";
 import { PhotoUploadControl } from "@/components/business/photo-upload-control";
 import { OwnDeliveryToggle } from "@/components/business/own-delivery-toggle";
 import { SeatingToggle } from "@/components/business/seating-toggle";
@@ -163,7 +159,7 @@ function SettingsContent({ profile }: { profile: BusinessProfile }) {
   useEffect(() => {
     let ignore = false;
     api.GET("/businesses/{businessId}/schedule", { params: { path: { businessId } } }).then(({ data }) => {
-      if (!ignore) setSchedule(toWeekSchedule(data ?? []));
+      if (!ignore) setSchedule(scheduleFromRows(data ?? []));
     });
     return () => {
       ignore = true;
@@ -386,18 +382,4 @@ function todayInBogota(): Day {
     .format(new Date())
     .toLowerCase();
   return weekday as Day;
-}
-
-/** GET .../schedule trae solo los días guardados; el que falta, cerrado. */
-function toWeekSchedule(rows: components["schemas"]["ScheduleDay"][]): WeekSchedule {
-  const week: WeekSchedule = structuredClone(DEFAULT_WEEK_SCHEDULE);
-  for (const { value } of DAYS) week[value] = { ...week[value], closed: true };
-  for (const row of rows) {
-    week[row.day] = {
-      openTime: (row.openTime ?? "08:00").slice(0, 5),
-      closeTime: (row.closeTime ?? "18:00").slice(0, 5),
-      closed: Boolean(row.closed) || !row.openTime || !row.closeTime,
-    };
-  }
-  return week;
 }

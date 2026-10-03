@@ -75,6 +75,8 @@ interface FloatingActionStackProps {
    * no existe.
    */
   reserveSpace?: boolean;
+  /** `false` para no mostrar el aviso de la primera vez (ej. con una hoja abierta encima). */
+  showTip?: boolean;
 }
 
 /** Distancia del stack al borde inferior (`bottom-6`) más un respiro. */
@@ -84,12 +86,12 @@ const MARGEN_INFERIOR_PX = 24 + 16;
  * Ver CLAUDE.md, sección "FloatingActionStack" — esta es la única fuente
  * de verdad de su especificación (props, tamaños, colores).
  */
-export function FloatingActionStack({ actions, reserveSpace = true }: FloatingActionStackProps) {
+export function FloatingActionStack({ actions, reserveSpace = true, showTip = true }: FloatingActionStackProps) {
   const visible = actions.filter((action): action is FloatingAction => action != null);
   const stackRef = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
   const [mostrarAviso, setMostrarAviso] = useState(false);
-  const tieneLetreros = visible.some((action) => action.shortLabel);
+  const tieneLetreros = showTip && visible.some((action) => action.shortLabel);
 
   useEffect(() => {
     // Se lee en el cliente (no en el render) para no desalinear la hidratación.
@@ -118,7 +120,7 @@ export function FloatingActionStack({ actions, reserveSpace = true }: FloatingAc
         {visible.map((action, index) => (
           <FloatingActionButton key={action.label} action={action} principal={index === 0} />
         ))}
-        {mostrarAviso && (
+        {mostrarAviso && tieneLetreros && (
           <button
             type="button"
             data-floating-tip

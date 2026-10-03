@@ -231,7 +231,7 @@ export function FilteredListSheet({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-3">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-24">
       {/*
         Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
         arriba sigue usable): así la hoja nunca sube hasta la franja de

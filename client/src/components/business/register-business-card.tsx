@@ -1,4 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth/auth-context";
+import { loadDraft } from "@/lib/registration/draft";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
 
 /**
@@ -8,6 +13,14 @@ import { Storefront } from "@phosphor-icons/react/dist/ssr";
  * un vendedor nuevo quedaba en el mapa sin ninguna forma de registrarlo.
  */
 export function RegisterBusinessCard() {
+  const { user } = useAuth();
+  // Borrador guardado con "Guardar y terminar después" (lib/registration/draft.ts).
+  const [hasDraft, setHasDraft] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- se lee en el cliente para no desalinear la hidratación
+    if (user?.id) setHasDraft(loadDraft(user.id) !== null);
+  }, [user?.id]);
+
   return (
     <section className="flex flex-col gap-3 rounded-card border border-terracota-100 bg-terracota-50 p-5">
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-terracota">
@@ -21,7 +34,7 @@ export function RegisterBusinessCard() {
         href="/negocios/nuevo"
         className="flex h-btn items-center justify-center rounded-input bg-terracota px-6 font-sans text-button font-semibold text-white hover:bg-terracota-dark"
       >
-        Registrar mi negocio
+        {hasDraft ? "Continuar mi registro" : "Registrar mi negocio"}
       </Link>
     </section>
   );

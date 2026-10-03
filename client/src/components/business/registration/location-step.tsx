@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import dynamic from "next/dynamic";
 import { Crosshair } from "@phosphor-icons/react/dist/ssr";
+import { Skeleton } from "@/components/discovery/skeleton";
+import { CIUDAD_VERDE_CENTER } from "@/lib/geo/ciudad-verde";
 import { TextField } from "@/components/ui/text-field";
 import { Button } from "@/components/ui/button";
 import { useConsumerGeolocation } from "@/lib/geo/use-geolocation";
@@ -15,7 +18,21 @@ export interface BusinessLocationValues {
   latitude: string;
   longitude: string;
   showExactLocation: boolean;
+  /**
+   * Si el vendedor ya ubicó su negocio (ubicación del celular, arrastrar o
+   * tocar el mapa, o coordenadas a mano). Sin esto, el pin arranca en el
+   * centro de Ciudad Verde y se guardaría un punto que nadie eligió.
+   */
+  placed: boolean;
 }
+
+const DraggablePinMap = dynamic(
+  () => import("@/components/business/draggable-pin-map").then((mod) => mod.DraggablePinMap),
+  { ssr: false, loading: () => <Skeleton className="h-56 w-full rounded-card" /> },
+);
+
+export const MISSING_LOCATION_MESSAGE =
+  "Falta ubicar tu negocio: arrastra el pin o toca el mapa donde vendes, o usa tu ubicación actual.";
 
 interface LocationStepProps {
   initialValues: BusinessLocationValues;
@@ -24,6 +41,8 @@ interface LocationStepProps {
   fieldErrors: Record<string, string>;
   onSubmit: (values: BusinessLocationValues) => void;
   onBack: () => void;
+  /** Cada cambio, para "Guardar y terminar después" (lo guarda el asistente). */
+  onValuesChange?: (values: BusinessLocationValues) => void;
 }
 
 // Mismo orden que tipo_ubicacion en CLAUDE.md (sección 5): fija | movil |
@@ -43,12 +62,11 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
  * paso llama PUT /businesses/{id}/location, un endpoint aparte de
  * POST /businesses.
  *
- * Sin selector de mapa interactivo a propósito: sección 17 de CLAUDE.md
- * pide expandir en el mismo lugar antes que construir pantallas nuevas,
- * pero un picker de mapa arrastrable es una pieza nueva por completo, no
- * una expansión — se reutiliza en cambio useConsumerGeolocation (ya
- * construido en la Épica F2/F3) como atajo, con los campos numéricos
- * siempre editables a mano para corregir la posición exacta del puesto.
+ * Mapa con pin arrastrable (pedido del usuario, 2026-09-29): antes solo
+ * había latitud/longitud a mano, y en el celular por la red local (sin
+ * HTTPS) el navegador bloquea la ubicación, así que el vendedor quedaba
+ * atrapado. La ubicación del celular es un atajo; las coordenadas quedan
+ * plegadas como opción avanzada.
  *
  * "Mostrar dirección exacta" vs. "zona aproximada" (ver CLAUDE.md) —
  * default `showExactLocation: false` en EMPTY_LOCATION
@@ -58,7 +76,15 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
  * el perfil del negocio (business-profile-screen.tsx) sin volver a
  * pasar por este formulario completo.
  */
-export function LocationStep({ initialValues, submitting, error, fieldErrors, onSubmit, onBack }: LocationStepProps) {
+export function LocationStep({
+  initialValues,
+  submitting,
+  error,
+  fieldErrors,
+  onSubmit,
+  onBack,
+  onValuesChange,
+}: LocationStepProps) {
   const geolocation = useConsumerGeolocation();
   const hasAutoFilled = useRef(false);
 
@@ -67,6 +93,24 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
   const [latitude, setLatitude] = useState(initialValues.latitude);
   const [longitude, setLongitude] = useState(initialValues.longitude);
   const [showExactLocation, setShowExactLocation] = useState(initialValues.showExactLocation);
+  const [placed, setPlaced] = useState(initialValues.placed);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onValuesChange?.({ type, referenceAddress, latitude, longitude, showExactLocation, placed });
+  }, [type, referenceAddress, latitude, longitude, showExactLocation, placed, onValuesChange]);
+
+  const latNum = Number(latitude);
+  const lngNum = Number(longitude);
+  const hasCoords = latitude !== "" && longitude !== "" && !Number.isNaN(latNum) && !Number.isNaN(lngNum);
+  const pin = hasCoords ? { lat: latNum, lng: lngNum } : CIUDAD_VERDE_CENTER;
+
+  function movePin(next: { lat: number; lng: number }) {
+    setLatitude(next.lat.toFixed(6));
+    setLongitude(next.lng.toFixed(6));
+    setPlaced(true);
+    setLocalError(null);
+  }
 
   useEffect(() => {
     if (hasAutoFilled.current) return;
@@ -84,6 +128,7 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
       hasAutoFilled.current = true;
       setLatitude(coords.lat.toFixed(6));
       setLongitude(coords.lng.toFixed(6));
+      setPlaced(true);
     });
     return () => {
       ignore = true;
@@ -97,8 +142,7 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
 
   function handleUseCurrentLocation() {
     if (geolocation.status === "granted" && geolocation.coords) {
-      setLatitude(geolocation.coords.lat.toFixed(6));
-      setLongitude(geolocation.coords.lng.toFixed(6));
+      movePin(geolocation.coords);
       return;
     }
     geolocation.retry();
@@ -106,7 +150,11 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onSubmit({ type, referenceAddress, latitude, longitude, showExactLocation });
+    if (!placed || !hasCoords) {
+      setLocalError(MISSING_LOCATION_MESSAGE);
+      return;
+    }
+    onSubmit({ type, referenceAddress, latitude, longitude, showExactLocation, placed });
   }
 
   return (
@@ -176,6 +224,16 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
         </p>
       )}
 
+      <div className="flex flex-col gap-2">
+        <p className="font-sans text-body-sm font-medium text-text">Tu punto en el mapa</p>
+        <p className="font-sans text-body-sm text-text-muted">
+          {placed
+            ? "Si no quedó justo donde vendes, arrastra el pin o toca el mapa."
+            : "Arrastra el pin o toca el mapa donde vendes."}
+        </p>
+        <DraggablePinMap pin={pin} onPinChange={movePin} label="Mapa para ubicar tu negocio" />
+      </div>
+
       <Button
         type="button"
         variant="secondary"
@@ -186,39 +244,49 @@ export function LocationStep({ initialValues, submitting, error, fieldErrors, on
         <Crosshair size={18} weight="bold" />
         Usar mi ubicación actual
       </Button>
-      {geolocation.status === "denied" && (
+      {(geolocation.status === "denied" || geolocation.status === "unavailable") && (
         <p className="font-sans text-body-sm text-text-muted">
-          No pudimos acceder a tu ubicación. Ingresa las coordenadas a mano abajo.
+          Tu celular no nos dio la ubicación. No pasa nada: ubica el pin en el mapa.
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <TextField
-          label="Latitud"
-          type="number"
-          inputMode="decimal"
-          step="any"
-          min={-90}
-          max={90}
-          required
-          value={latitude}
-          onChange={(event) => setLatitude(event.target.value)}
-          error={fieldErrors.latitude}
-        />
-        <TextField
-          label="Longitud"
-          type="number"
-          inputMode="decimal"
-          step="any"
-          min={-180}
-          max={180}
-          required
-          value={longitude}
-          onChange={(event) => setLongitude(event.target.value)}
-          error={fieldErrors.longitude}
-        />
-      </div>
+      <details className="rounded-card border border-border px-4 py-3">
+        <summary className="cursor-pointer font-sans text-body-sm font-medium text-text-muted">
+          Opciones avanzadas: coordenadas
+        </summary>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <TextField
+            label="Latitud"
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min={-90}
+            max={90}
+            value={latitude}
+            onChange={(event) => {
+              setLatitude(event.target.value);
+              setPlaced(true);
+            }}
+            error={fieldErrors.latitude}
+          />
+          <TextField
+            label="Longitud"
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min={-180}
+            max={180}
+            value={longitude}
+            onChange={(event) => {
+              setLongitude(event.target.value);
+              setPlaced(true);
+            }}
+            error={fieldErrors.longitude}
+          />
+        </div>
+      </details>
 
+      {localError && <p className="font-sans text-body-sm text-rojo">{localError}</p>}
       {error && <p className="font-sans text-body-sm text-rojo">{error}</p>}
 
       <div className="mt-auto flex gap-3 pt-2">

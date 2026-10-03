@@ -1,5 +1,6 @@
 "use client";
 
+import { CIUDAD_VERDE_CENTER } from "@/lib/geo/ciudad-verde";
 import { useCategories } from "@/lib/categories/use-categories";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,7 +33,7 @@ type OfferType = components["schemas"]["OfferType"];
 // Centro de Ciudad Verde (A6, fix/pulido-visual). Antes (4.578, -74.217): el
 // centroide de todo el municipio de Soacha, el mismo error que ya se había
 // corregido en los datos de demo (CLAUDE.md §25) pero no acá.
-const DEFAULT_CENTER = { lat: 4.6083, lng: -74.2188 };
+const DEFAULT_CENTER = CIUDAD_VERDE_CENTER;
 const MAP_RESULTS_LIMIT = 50;
 const DEFAULT_MAP_RADIUS_KM = 5;
 const LOCATE_ME_ZOOM = 16;
@@ -719,6 +720,7 @@ export function MapScreen({ initialBusinessId, initialListFilter }: MapScreenPro
         <MainFloatingNav
           onCenterMap={showMap ? handleLocateMe : undefined}
           onBackToMap={!showMap ? handleBackToMap : undefined}
+          compact={!showMap}
           onSearch={handleToggleSearchSheet}
           reserveSpace={false}
         />

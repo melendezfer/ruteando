@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { TextField } from "@/components/ui/text-field";
 import { Button } from "@/components/ui/button";
 import type { components } from "@/lib/api/schema";
@@ -24,6 +24,8 @@ interface DetailsStepProps {
   error: string | null;
   fieldErrors: Record<string, string>;
   onSubmit: (values: BusinessDetailsValues) => void;
+  /** Cada cambio, para "Guardar y terminar después" (lo guarda el asistente). */
+  onValuesChange?: (values: BusinessDetailsValues) => void;
 }
 
 /**
@@ -54,6 +56,7 @@ export function DetailsStep({
   error,
   fieldErrors,
   onSubmit,
+  onValuesChange,
 }: DetailsStepProps) {
   const [name, setName] = useState(initialValues.name);
   const [description, setDescription] = useState(initialValues.description);
@@ -61,6 +64,10 @@ export function DetailsStep({
   const [contactPhone, setContactPhone] = useState(initialValues.contactPhone);
   const [ownDelivery, setOwnDelivery] = useState(initialValues.ownDelivery);
   const [seatingAvailable, setSeatingAvailable] = useState(initialValues.seatingAvailable);
+
+  useEffect(() => {
+    onValuesChange?.({ name, description, categoryId, contactPhone, ownDelivery, seatingAvailable });
+  }, [name, description, categoryId, contactPhone, ownDelivery, seatingAvailable, onValuesChange]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();

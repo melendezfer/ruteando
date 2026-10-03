@@ -73,7 +73,8 @@ describe('POST /businesses/{businessId}/photos', () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ businessId: negocio.id, productId: null, type: 'business' });
-    expect(res.body.url).toMatch(/^https?:\/\//);
+    // Absoluta (R2/B2/MinIO) o relativa a la página ("/media/...", red local por HTTPS: scripts/dev-lan.sh).
+    expect(res.body.url).toMatch(/^(https?:\/\/|\/)/);
 
     const { rows } = await pool.query('SELECT * FROM fotos WHERE id = $1', [res.body.id]);
     expect(rows).toHaveLength(1);

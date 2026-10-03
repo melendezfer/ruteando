@@ -3,15 +3,15 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * A1 (fix/pulido-visual): ningún botón flotante tapa texto ni un control.
  *
- * Los botones flotantes (`[data-floating-action]`, FloatingActionStack) van
- * fijos en la esquina: al desplazarse, el contenido pasa por debajo — eso
- * es normal. Lo que NO puede pasar es que algo quede debajo para siempre,
- * es decir, tapado incluso con la página desplazada hasta el final. Por
- * eso cada pantalla reserva espacio al final igual a la altura de sus
- * flotantes, y esta prueba lo comprueba: baja hasta el final y, para cada
- * texto o control visible, pregunta al navegador qué elemento está encima
- * de su centro y de sus esquinas (`document.elementFromPoint`). Si es un
- * flotante, está tapado.
+ * Etapa 1b: los flotantes son una columna fija al costado derecho, zona
+ * media-baja (`[data-floating-action]`), y el contenido reserva esa franja
+ * (`.reserva-columna`), así que NADA debe quedar debajo en ninguna posición
+ * del desplazamiento. La prueba mira arriba, a la mitad y al final: para
+ * cada texto o control visible pregunta al navegador qué elemento está
+ * encima de su centro y de sus esquinas (`document.elementFromPoint`). Si
+ * es un flotante, está tapado. El aviso de la primera vez no deja pasar
+ * toques por encima (no bloquea), así que además se compara su caja con la
+ * de cada texto o control: no debe cruzarse con ninguno.
  *
  * Requisitos: backend + frontend corriendo y `npm run seed:demo`.
  */
@@ -60,8 +60,17 @@ async function entrar(page: Page, email: string) {
 
 /** Baja hasta el final y devuelve los textos/controles que quedan bajo un flotante. */
 async function tapadosAlFinal(page: Page): Promise<string[]> {
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await page.waitForTimeout(400);
+  // El aviso de la primera vez NO se cierra: tampoco debe tapar nada.
+  const todos = new Set<string>();
+  for (const fraccion of [0, 0.5, 1]) {
+    await page.evaluate((f) => window.scrollTo(0, (document.documentElement.scrollHeight - window.innerHeight) * f), fraccion);
+    await page.waitForTimeout(400);
+    for (const t of await tapadosEnPantalla(page)) todos.add(t);
+  }
+  return [...todos];
+}
+
+async function tapadosEnPantalla(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const flotantes = [...document.querySelectorAll("[data-floating-action]")];
     if (flotantes.length === 0) return [];
@@ -75,8 +84,16 @@ async function tapadosAlFinal(page: Page): Promise<string[]> {
       return el.matches(interactivo) || conTexto;
     });
     const resultado: string[] = [];
+    const aviso = document.querySelector("[data-floating-tip]")?.getBoundingClientRect();
     for (const el of candidatos) {
       const r = el.getBoundingClientRect();
+      if (
+        aviso &&
+        r.width >= 2 &&
+        r.left < aviso.right && r.right > aviso.left && r.top < aviso.bottom && r.bottom > aviso.top
+      ) {
+        resultado.push(`<${el.tagName.toLowerCase()}> bajo el aviso`);
+      }
       if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
       const puntos = [
         [r.left + r.width / 2, r.top + r.height / 2],
@@ -115,7 +132,7 @@ for (const pantalla of PANTALLAS) {
       // A2: el dueño no ve las acciones del cliente sobre su propio negocio.
       await expect(page.getByRole("link", { name: "Contactar por WhatsApp" })).toHaveCount(0);
       await expect(page.getByRole("link", { name: "Cómo llegar" })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Volver al mapa" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Buscar" })).toBeVisible();
       expect(await tapadosAlFinal(page)).toEqual([]);
     });
 

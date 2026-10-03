@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,16 @@ import { logBusinessRegisteredEvent } from "@/lib/api/events";
 import type { components } from "@/lib/api/schema";
 import { WizardShell } from "@/components/business/registration/wizard-shell";
 import { DetailsStep, type BusinessDetailsValues } from "@/components/business/registration/details-step";
-import { LocationStep, type BusinessLocationValues } from "@/components/business/registration/location-step";
+import {
+  LocationStep,
+  MISSING_LOCATION_MESSAGE,
+  type BusinessLocationValues,
+} from "@/components/business/registration/location-step";
+import { clearDraft, loadDraft, saveDraft, type DraftStep } from "@/lib/registration/draft";
 import {
   ScheduleStep,
   DEFAULT_WEEK_SCHEDULE,
+  scheduleFromRows,
   type WeekSchedule,
 } from "@/components/business/registration/schedule-step";
 import { DoneStep } from "@/components/business/registration/done-step";
@@ -52,6 +58,7 @@ const EMPTY_LOCATION: BusinessLocationValues = {
   // "Zona aproximada" por defecto — pedido explícito del usuario, ver
   // CLAUDE.md: protege por defecto a un vendedor que opera desde su casa.
   showExactLocation: false,
+  placed: false,
 };
 
 /**
@@ -93,7 +100,7 @@ export function BusinessRegistrationWizard() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+    <div className="reserva-columna flex flex-1 flex-col items-center justify-center gap-3 bg-background pl-6 text-center">
       <h1 className="font-heading text-title-1 font-bold text-text">Necesitas una cuenta de vendedor</h1>
       <p className="max-w-sm font-sans text-body text-text-muted">
         Para registrar tu propio negocio en Ruteando, tu cuenta debe estar marcada como vendedor. Si un
@@ -114,6 +121,14 @@ interface FlowProps {
 
 function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const resumeBusinessId = searchParams.get("negocio");
+  // Retomar (borrador local o, si no hay, lo ya guardado en el servidor)
+  // antes de mostrar el primer paso: los pasos leen sus valores iniciales
+  // una sola vez al montarse.
+  const [ready, setReady] = useState(false);
+  const [savingForLater, setSavingForLater] = useState(false);
 
   const [step, setStep] = useState<SelfStep>("details");
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -126,6 +141,120 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Lo último que el vendedor escribió en cada paso, guardado o no — para
+  // "Guardar y terminar después". Ref (no estado): no redibuja nada.
+  const live = useRef({ details: EMPTY_DETAILS, location: EMPTY_LOCATION, schedule: DEFAULT_WEEK_SCHEDULE });
+  const onDetailsChange = useCallback((v: BusinessDetailsValues) => {
+    live.current.details = v;
+  }, []);
+  const onLocationChange = useCallback((v: BusinessLocationValues) => {
+    live.current.location = v;
+  }, []);
+  const onScheduleChange = useCallback((v: WeekSchedule) => {
+    live.current.schedule = v;
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let ignore = false;
+    (async () => {
+      const draft = loadDraft(user.id!);
+      if (draft && (!resumeBusinessId || draft.businessId === resumeBusinessId)) {
+        live.current = { details: draft.details, location: draft.location, schedule: draft.schedule };
+        setDetailsValues(draft.details);
+        setLocationValues(draft.location);
+        setScheduleValues(draft.schedule);
+        setBusinessId(draft.businessId);
+        setBusinessName(draft.details.name);
+        setStep(draft.businessId ? draft.step : "details");
+      } else if (resumeBusinessId) {
+        const [{ data: business }, { data: rows }] = await Promise.all([
+          api.GET("/businesses/{businessId}", { params: { path: { businessId: resumeBusinessId } } }),
+          api.GET("/businesses/{businessId}/schedule", { params: { path: { businessId: resumeBusinessId } } }),
+        ]);
+        if (ignore) return;
+        if (business && business.ownerId === user.id) {
+          const details: BusinessDetailsValues = {
+            name: business.name ?? "",
+            description: business.description ?? "",
+            categoryId: business.categoryId ?? "",
+            contactPhone: business.contactPhone ?? "",
+            ownDelivery: Boolean(business.ownDelivery),
+            seatingAvailable: Boolean(business.seatingAvailable),
+          };
+          const loc = business.location;
+          const location: BusinessLocationValues = loc
+            ? {
+                type: loc.type ?? "fixed",
+                referenceAddress: loc.referenceAddress ?? "",
+                latitude: loc.latitude != null ? String(loc.latitude) : "",
+                longitude: loc.longitude != null ? String(loc.longitude) : "",
+                showExactLocation: Boolean(loc.showExactLocation),
+                placed: true,
+              }
+            : EMPTY_LOCATION;
+          const schedule = rows && rows.length > 0 ? scheduleFromRows(rows) : DEFAULT_WEEK_SCHEDULE;
+          live.current = { details, location, schedule };
+          setDetailsValues(details);
+          setLocationValues(location);
+          setScheduleValues(schedule);
+          setBusinessId(business.id ?? null);
+          setBusinessName(details.name);
+          setStep(loc ? "schedule" : "location");
+        }
+      }
+      if (!ignore) setReady(true);
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id, resumeBusinessId]);
+
+  /**
+   * "Guardar y terminar después": guarda en el servidor lo que el paso
+   * actual ya permite guardar (sin mostrar errores de validación: el
+   * vendedor se va, no está enviando), deja el resto como borrador en este
+   * navegador y sale al inicio, donde su negocio (si ya existe) le ofrece
+   * "Terminar registro".
+   */
+  async function handleSaveForLater() {
+    if (!user?.id || step === "done") return;
+    setSavingForLater(true);
+    const { details, location, schedule } = live.current;
+    let id = businessId;
+    try {
+      if (step === "details" && details.name.trim() && details.categoryId !== "") {
+        const body = {
+          name: details.name.trim(),
+          categoryId: details.categoryId,
+          description: details.description.trim() ? details.description.trim() : undefined,
+          contactPhone: details.contactPhone.trim() ? details.contactPhone.trim() : undefined,
+          ownDelivery: details.ownDelivery,
+          seatingAvailable: details.seatingAvailable,
+        };
+        const { data } = id
+          ? await api.PATCH("/businesses/{businessId}", { params: { path: { businessId: id } }, body })
+          : await api.POST("/businesses", { body });
+        if (data?.id) id = data.id;
+      } else if (step === "location" && id && location.placed && location.latitude && location.longitude) {
+        await api.PUT("/businesses/{businessId}/location", {
+          params: { path: { businessId: id } },
+          body: {
+            type: location.type,
+            referenceAddress: location.referenceAddress.trim() ? location.referenceAddress.trim() : undefined,
+            latitude: Number(location.latitude),
+            longitude: Number(location.longitude),
+            showExactLocation: location.showExactLocation,
+          },
+        });
+      }
+    } catch {
+      // Red caída: queda igual el borrador local.
+    }
+    saveDraft(user.id, { businessId: id, step: step as DraftStep, details, location, schedule });
+    router.push("/");
+  }
 
   function resetSubmitState() {
     setError(null);
@@ -175,6 +304,11 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
   async function handleLocationSubmit(values: BusinessLocationValues) {
     if (!businessId) return;
 
+    // Vacíos: Number("") es 0 y el servidor respondía "fuera de Cundinamarca".
+    if (!values.placed || values.latitude.trim() === "" || values.longitude.trim() === "") {
+      setError(MISSING_LOCATION_MESSAGE);
+      return;
+    }
     const latitude = Number(values.latitude);
     const longitude = Number(values.longitude);
     if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
@@ -243,6 +377,7 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
 
     setScheduleValues(values);
     logBusinessRegisteredEvent(businessId);
+    if (user?.id) clearDraft(user.id);
     setStep("done");
   }
 
@@ -254,6 +389,10 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
       if (!confirmLeave) return;
     }
     router.push("/");
+  }
+
+  if (!ready) {
+    return <div className="flex flex-1 items-center justify-center font-sans text-body text-text-muted">Cargando…</div>;
   }
 
   if (step === "done" && businessId) {
@@ -273,8 +412,11 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
         stepLabel={`Paso ${SELF_STEP_NUMBER.location} de ${SELF_STEP_TOTAL}`}
         progress={SELF_STEP_NUMBER.location / SELF_STEP_TOTAL}
         onClose={handleClose}
+        onSaveForLater={handleSaveForLater}
+        savingForLater={savingForLater}
       >
         <LocationStep
+          onValuesChange={onLocationChange}
           initialValues={locationValues}
           submitting={submitting}
           error={error}
@@ -296,8 +438,11 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
         stepLabel={`Paso ${SELF_STEP_NUMBER.schedule} de ${SELF_STEP_TOTAL}`}
         progress={SELF_STEP_NUMBER.schedule / SELF_STEP_TOTAL}
         onClose={handleClose}
+        onSaveForLater={handleSaveForLater}
+        savingForLater={savingForLater}
       >
         <ScheduleStep
+          onValuesChange={onScheduleChange}
           initialValues={scheduleValues}
           submitting={submitting}
           error={error}
@@ -317,8 +462,11 @@ function SelfRegistrationFlow({ categories, categoriesLoading }: FlowProps) {
       stepLabel={`Paso ${SELF_STEP_NUMBER.details} de ${SELF_STEP_TOTAL}`}
       progress={SELF_STEP_NUMBER.details / SELF_STEP_TOTAL}
       onClose={handleClose}
+      onSaveForLater={handleSaveForLater}
+      savingForLater={savingForLater}
     >
       <DetailsStep
+        onValuesChange={onDetailsChange}
         categories={categories}
         categoriesLoading={categoriesLoading}
         initialValues={detailsValues}

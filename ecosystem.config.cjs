@@ -46,5 +46,18 @@ module.exports = {
       autorestart: true,
       max_restarts: 10,
     },
+    // HTTPS en la red local para el celular (scripts/dev-lan.sh, que pasa
+    // las rutas del certificado de mkcert por el entorno).
+    {
+      name: "ruteando-https",
+      cwd: __dirname,
+      script: "scripts/https-lan-proxy.cjs",
+      env: {
+        HTTPS_CERT: process.env.RUTEANDO_HTTPS_CERT,
+        HTTPS_KEY: process.env.RUTEANDO_HTTPS_KEY,
+      },
+      autorestart: true,
+      max_restarts: 10,
+    },
   ],
 };

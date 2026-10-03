@@ -111,7 +111,7 @@ export function VendorAvailabilityRequestsPanel({
                   onClick={() => handleRespond(req.id!, "declined")}
                   disabled={respondingId === req.id}
                   aria-label="Declinar — no estoy vendiendo ahora"
-                  className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-rojo transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-11 w-11 items-center justify-center rounded-input border border-border text-text transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <XCircle size={16} weight="bold" />
                 </button>
@@ -120,7 +120,7 @@ export function VendorAvailabilityRequestsPanel({
                   onClick={() => handleRespond(req.id!, "confirmed")}
                   disabled={respondingId === req.id}
                   aria-label="Confirmar que sigo vendiendo"
-                  className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-verde transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-11 w-11 items-center justify-center rounded-input border border-border bg-verde-suave text-verde-texto transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ConfirmedSellingIcon size={16} weight="bold" />
                 </button>

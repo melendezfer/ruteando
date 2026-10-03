@@ -9,7 +9,16 @@ import { getAccessToken } from "@/lib/auth/token-store";
  * antes de `dev`/`build` (scripts predev/prebuild en package.json), así
  * nunca queda desactualizado respecto al contrato real del backend.
  */
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+// En el navegador: NEXT_PUBLIC_API_BASE_URL. En la red local vale "/api"
+// (scripts/dev-lan.sh): la misma dirección que la página, reenviada al
+// backend por Next (rewrites en next.config.ts) — así, por HTTPS, no hay
+// contenido mixto ni CORS. En el servidor (render del perfil) una ruta
+// relativa no sirve: ahí se usa API_INTERNAL_URL.
+const browserBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+const baseUrl =
+  typeof window === "undefined" && browserBaseUrl.startsWith("/")
+    ? (process.env.API_INTERNAL_URL ?? "http://localhost:3000")
+    : browserBaseUrl;
 
 export const api = createClient<paths>({ baseUrl });
 

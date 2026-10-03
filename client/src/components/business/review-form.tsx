@@ -87,7 +87,7 @@ export function ReviewForm({ businessId, catalogType }: ReviewFormProps) {
 
   if (stage === "submitted") {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-card border border-verde/30 bg-verde/10 px-4 py-6 text-center">
+      <div className="flex flex-col items-center gap-2 rounded-card border border-verde/30 bg-verde-suave px-4 py-6 text-center">
         <HandHeart size={28} weight="fill" className="text-verde" />
         <p className="font-sans text-body font-medium text-text">
           Gracias por tu aporte — ayudas a que los vendedores de tu barrio mejoren.

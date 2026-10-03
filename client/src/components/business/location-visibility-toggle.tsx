@@ -6,6 +6,8 @@ import { api } from "@/lib/api/client";
 interface LocationVisibilityToggleProps {
   businessId: string;
   initialShowExactLocation: boolean;
+  /** Avisa el valor ya guardado (Ajustes del negocio lo usa para el resumen de su familia). */
+  onChange?: (value: boolean) => void;
 }
 
 /**
@@ -19,6 +21,7 @@ interface LocationVisibilityToggleProps {
 export function LocationVisibilityToggle({
   businessId,
   initialShowExactLocation,
+  onChange,
 }: LocationVisibilityToggleProps) {
   const [showExact, setShowExact] = useState(initialShowExactLocation);
   const [saving, setSaving] = useState(false);
@@ -42,6 +45,7 @@ export function LocationVisibilityToggle({
     }
 
     setShowExact(next);
+    onChange?.(next);
   }
 
   return (

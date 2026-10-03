@@ -49,20 +49,12 @@ export function ProfileScreen({ user }: ProfileScreenProps) {
   const { logout } = useAuth();
 
   return (
-    <div className="flex flex-1 flex-col gap-5 bg-background px-5 py-6 pb-24">
+    <div className="reserva-columna flex flex-1 flex-col gap-5 bg-background py-6 pl-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="font-heading text-title-1 font-bold text-text">{user.fullName}</h1>
+          <h2 className="font-heading text-title-1 font-bold text-text">{user.fullName}</h2>
           <p className="font-sans text-body-sm text-text-muted">{user.email}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => logout()}
-          aria-label="Cerrar sesión"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface hover:text-text"
-        >
-          <SignOut size={20} weight="bold" />
-        </button>
       </div>
 
       <div
@@ -95,6 +87,17 @@ export function ProfileScreen({ user }: ProfileScreenProps) {
         {tab === "reviews" && <ReviewsTab />}
         {tab === "settings" && <SettingsTab user={user} />}
       </div>
+
+      {/* Etapa 1b: arriba ya no hay íconos de acción; cerrar sesión va al
+          final de la cuenta, con texto. */}
+      <button
+        type="button"
+        onClick={() => logout()}
+        className="flex min-h-11 items-center justify-center gap-2 self-start rounded-input border border-border bg-surface px-4 font-sans text-body font-semibold text-text hover:bg-background"
+      >
+        <SignOut size={20} weight="bold" />
+        Cerrar sesión
+      </button>
     </div>
   );
 }

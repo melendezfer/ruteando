@@ -26,6 +26,26 @@ const nextConfig: NextConfig = {
   // estado de esta pantalla. Sin impacto en producción (`next build`/
   // `next start`): este indicador nunca existió ahí.
   devIndicators: false,
+  // Celular por la red local con `next dev` (scripts/dev-lan.sh escribe
+  // DEV_LAN_HOST en client/.env.local): sin esto Next rechaza el socket de
+  // recarga en vivo (/_next/hmr) por venir de otro origen, React nunca
+  // hidrata y la app queda en "Cargando sesión…". Era la causa real del
+  // bug de CLAUDE.md §24, no la red de WSL (verificado 2026-10-02: el
+  // handshake devolvía error con Origin de la IP y 101 con localhost).
+  allowedDevOrigins: process.env.DEV_LAN_HOST ? [process.env.DEV_LAN_HOST] : [],
+  // Red local por HTTPS (scripts/dev-lan.sh): el navegador llama a la API y
+  // a las fotos por la MISMA dirección de la página (/api, /media), y Next
+  // las reenvía al backend y a MinIO. Un solo puerto HTTPS, sin contenido
+  // mixto (Chrome bloquea http:// dentro de una página https://) ni CORS.
+  // En producción no se usan: la API y las fotos tienen su propio dominio.
+  async rewrites() {
+    const api = process.env.API_INTERNAL_URL ?? "http://localhost:3000";
+    const media = process.env.MEDIA_INTERNAL_URL ?? "http://localhost:9000";
+    return [
+      { source: "/api/:path*", destination: `${api}/:path*` },
+      { source: "/media/:path*", destination: `${media}/:path*` },
+    ];
+  },
 };
 
 export default nextConfig;

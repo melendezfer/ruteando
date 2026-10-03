@@ -182,6 +182,17 @@ Entrada (`/login`, `/register`, recuperar), textos legales y panel de administra
 
 Con el ancla apagada, la navegación flotante vuelve a su lugar; su choque con el crédito OSM ya queda resuelto por R2.
 
+### 5.1 Columna de navegación: el lugar del ancla (DI-08, 2026-10-03)
+
+Decidido por el usuario y construido en la Etapa 1b del Perfil 2.0 (`docs/specs/perfil-2.md` §8.1, CLAUDE.md §63):
+
+- **Arriba** solo "Volver" y el título de la pantalla, donde haga falta. Sin íconos de acción.
+- **Costado derecho, zona media-baja** (alcance del pulgar): una sola columna de botones de 44 px, siempre en el mismo orden — Buscar, Favoritos, Perfil y el mapa ("Ubicarme" en el mapa, "Mapa" fuera de él). Con sesión, volver al mapa está siempre a un toque y en el mismo lugar (`client/e2e/acceso-al-mapa.spec.ts`). Sin letreros a la vista; el nombre aparece solo al mantener presionado (táctil) o al pasar el mouse (PC). Posición: a 12 px del borde derecho, borde inferior a `18vh` + área segura (`--columna-abajo`, `globals.css`).
+- **Franja reservada**: el contenido, las hojas inferiores y los avisos de las pantallas con columna dejan libre esa franja (`.reserva-columna`, 64 px), igual que HM-07 hace con el lado del ancla. El crédito de OpenStreetMap sigue siendo zona obligatoria (arriba a la derecha, no choca con la columna).
+- **Con una hoja o el teclado abiertos**, la columna queda en un solo botón ("Volver al mapa": en el mapa cierra la hoja).
+- **Al integrar el ancla, el ancla reemplaza la columna en el mismo lugar.** Como el contenido ya reserva esa franja, encender el ancla no mueve nada más de la pantalla. Esto reemplaza la posición "abajo a la derecha" de la navegación flotante citada arriba.
+- **Hipótesis sin verificar:** que `18vh` coincida con el alto de reposo del ancla; ajustar `--columna-abajo` al integrar si la demo usa otro.
+
 **[Verificado]** posiciones actuales: logo "Ruteando" abajo a la izquierda (`fixed bottom-6 left-6`), tarjeta de comparación de zonas **arriba** (`top-3`), `+/−` de Leaflet arriba a la izquierda, navegación flotante abajo a la derecha. El mapa chico del dueño (`location-pin-editor.tsx`) sí lleva su propio crédito OSM. Que R2 resuelva el choque es hipótesis sin verificar hasta probar la rama en celular.
 
 ---
@@ -237,6 +248,7 @@ Cada etapa termina con pruebas automáticas y **prueba manual en PC y celular** 
 | DI-05 | ¿Ancla en el panel de administrador? | No en esta integración; revisar con el panel terminado | **De acuerdo.** El panel nuevo todavía no tiene ningún módulo (`ADMIN_MODULES = []`); no hay nada que agregarle. | **De acuerdo** con la opinión. |
 | DI-06 | Ícono de "Estoy vendiendo ahora" | Elegirlo al construir R5 | **Usar `SealCheck`.** Ya está registrado como `confirmedSelling` ("el vendedor confirmó que está vendiendo"), que es justo el hecho que produce R5. Usar otro ícono para lo mismo rompería "un ícono, un significado". | **`SealCheck`.** |
 | DI-07 | ¿El vendedor con ancla apagada ve "Estoy vendiendo ahora" como botón fijo? | Sí: la función debe existir sin el ancla (principio 1) | **De acuerdo.** Un matiz: R5 necesita backend (ver el detalle de R5). Hay que decidir si la confirmación propia cuenta igual que responder una pregunta en `availabilityConfirmedAt` (misma frescura de 60 min), para no tener dos "confirmado hace X" distintos. | **De acuerdo.** La confirmación propia cuenta igual que responder una pregunta en `availabilityConfirmedAt` (misma frescura de 60 min). Especificación: `docs/specs/r5-estoy-vendiendo.md` (rama `docs/r5-estoy-vendiendo`). |
+| DI-08 | ¿Dónde va la navegación sin ancla, y dónde el ancla? | (Pedido del usuario, 2026-10-03) | — | **Columna derecha, zona media-baja**, botones de 44 px; arriba solo "Volver" + título; el contenido reserva la franja; un solo botón con hoja o teclado; el ancla la reemplaza en el mismo lugar (§5.1). |
 
 ---
 

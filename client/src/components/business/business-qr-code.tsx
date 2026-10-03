@@ -86,7 +86,8 @@ export function BusinessQrCode({ businessId, businessName }: BusinessQrCodeProps
         <p className="font-sans text-body-sm text-rojo">{error}</p>
       ) : (
         <div className="flex justify-center rounded-input bg-white p-3">
-          <canvas ref={canvasRef} />
+          {/* max-w-full: en pantallas angostas el QR se achica con su caja (la imagen descargada conserva su tamaño). */}
+          <canvas ref={canvasRef} className="h-auto! max-w-full!" />
         </div>
       )}
 

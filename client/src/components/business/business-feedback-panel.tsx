@@ -88,7 +88,7 @@ export function BusinessFeedbackPanel({ businessId }: BusinessFeedbackPanelProps
                   {item.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full bg-terracota/10 px-2.5 py-1 font-sans text-caption font-medium text-terracota"
+                      className="rounded-full bg-terracota-50 px-2.5 py-1 font-sans text-caption font-medium text-terracota"
                     >
                       {REVIEW_TAG_LABELS[tag]}
                     </span>

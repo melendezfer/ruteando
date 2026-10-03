@@ -11,6 +11,8 @@ interface SeatingToggleProps {
   categoryId: number;
   contactPhone: string | null;
   initialSeatingAvailable: boolean;
+  /** Avisa el valor ya guardado (Ajustes del negocio lo usa para el resumen de su familia). */
+  onChange?: (value: boolean) => void;
 }
 
 /**
@@ -31,6 +33,7 @@ export function SeatingToggle({
   categoryId,
   contactPhone,
   initialSeatingAvailable,
+  onChange,
 }: SeatingToggleProps) {
   const [seatingAvailable, setSeatingAvailable] = useState(initialSeatingAvailable);
   const [saving, setSaving] = useState(false);
@@ -60,6 +63,7 @@ export function SeatingToggle({
     }
 
     setSeatingAvailable(next);
+    onChange?.(next);
   }
 
   return (

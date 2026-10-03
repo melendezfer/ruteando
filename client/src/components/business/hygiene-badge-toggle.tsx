@@ -12,6 +12,8 @@ interface HygieneBadgeToggleProps {
   categoryId: number;
   contactPhone: string | null;
   initialHygieneSelfDeclared: boolean;
+  /** Avisa el valor ya guardado (Ajustes del negocio lo usa para el resumen de su familia). */
+  onChange?: (value: boolean) => void;
 }
 
 /**
@@ -41,6 +43,7 @@ export function HygieneBadgeToggle({
   categoryId,
   contactPhone,
   initialHygieneSelfDeclared,
+  onChange,
 }: HygieneBadgeToggleProps) {
   const [enabled, setEnabled] = useState(initialHygieneSelfDeclared);
   const [saving, setSaving] = useState(false);
@@ -71,6 +74,7 @@ export function HygieneBadgeToggle({
     }
 
     setEnabled(next);
+    onChange?.(next);
   }
 
   return (

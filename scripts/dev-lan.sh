@@ -22,6 +22,15 @@
 # Uso: bash scripts/dev-lan.sh
 #      bash scripts/dev-lan.sh --prod-frontend
 #
+# HTTPS en la red local (2026-09-29): Chrome solo da la ubicación del
+# celular en HTTPS. Si encuentra mkcert (~/.local/bin/mkcert), el script
+# genera un certificado local para la IP de la red, levanta
+# scripts/https-lan-proxy.cjs en :3443 (pm2, "ruteando-https") y copia el
+# certificado raíz a Descargas de Windows para instalarlo en el celular.
+# La API y las fotos van por la misma dirección que la página (/api,
+# /media: rewrites de client/next.config.ts), así que no hay contenido
+# mixto ni hace falta otro puerto.
+#
 # --prod-frontend: el frontend corre compilado (next build + next
 # start) en vez de next dev — sin socket de HMR. Existe por un bug real
 # encontrado probando por LAN (ver CLAUDE.md sección 24): el handshake
@@ -48,7 +57,7 @@ fi
 # la app desde el celular, ver CLAUDE.md) — sin reenviar/permitir este
 # puerto también, reescribir STORAGE_PUBLIC_URL a la IP de LAN no
 # serviría de nada: el celular nunca llegaría hasta MinIO.
-LAN_PORTS=(3000 3001 9000)
+LAN_PORTS=(3000 3001 9000 3443)
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33m!! %s\033[0m\n' "$1"; }
@@ -124,14 +133,24 @@ log "Aplicando migraciones pendientes"
 if [ -n "$LAN_IP" ]; then
   log "Apuntando client/.env.local y CORS_ORIGIN a $LAN_IP"
 
-  API_LINE="NEXT_PUBLIC_API_BASE_URL=http://$LAN_IP:3000"
+  # "/api": misma dirección que la página (rewrite de next.config.ts) —
+  # sirve igual por http://localhost, por http://IP y por https://IP:3443.
+  API_LINE="NEXT_PUBLIC_API_BASE_URL=/api"
   if [ -f client/.env.local ] && grep -q '^NEXT_PUBLIC_API_BASE_URL=' client/.env.local; then
     sed -i "s#^NEXT_PUBLIC_API_BASE_URL=.*#$API_LINE#" client/.env.local
   else
     echo "$API_LINE" >>client/.env.local
   fi
 
-  CORS_LINE="CORS_ORIGIN=http://localhost:3001,http://$LAN_IP:3001"
+  # Origen permitido para el socket de recarga en vivo de next dev
+  # (allowedDevOrigins en client/next.config.ts).
+  if grep -q '^DEV_LAN_HOST=' client/.env.local 2>/dev/null; then
+    sed -i "s#^DEV_LAN_HOST=.*#DEV_LAN_HOST=$LAN_IP#" client/.env.local
+  else
+    echo "DEV_LAN_HOST=$LAN_IP" >>client/.env.local
+  fi
+
+  CORS_LINE="CORS_ORIGIN=http://localhost:3001,http://$LAN_IP:3001,https://$LAN_IP:3443"
   if grep -q '^CORS_ORIGIN=' .env.development; then
     sed -i "s#^CORS_ORIGIN=.*#$CORS_LINE#" .env.development
   else
@@ -152,12 +171,43 @@ if [ -n "$LAN_IP" ]; then
   # LAN_PORTS (ver arriba) para que el reenvío/Firewall del paso 6 lo
   # cubra, o el celular nunca llegaría hasta MinIO aunque la URL ya
   # apunte bien.
-  STORAGE_LINE="STORAGE_PUBLIC_URL=http://$LAN_IP:9000"
+  # "/media" (rewrite de next.config.ts hacia MinIO): misma dirección que
+  # la página, así las fotos también cargan por HTTPS. Las fotos subidas
+  # antes con http://IP:9000 siguen con esa dirección guardada.
+  STORAGE_LINE="STORAGE_PUBLIC_URL=/media"
   if grep -q '^STORAGE_PUBLIC_URL=' .env.development; then
     sed -i "s#^STORAGE_PUBLIC_URL=.*#$STORAGE_LINE#" .env.development
   else
     echo "$STORAGE_LINE" >>.env.development
   fi
+fi
+
+# ---------------------------------------------------------------------
+# 4b. Certificado HTTPS local (mkcert) para la IP de la red
+# ---------------------------------------------------------------------
+HTTPS_OK=0
+MKCERT="$(command -v mkcert || true)"
+[ -z "$MKCERT" ] && [ -x "$HOME/.local/bin/mkcert" ] && MKCERT="$HOME/.local/bin/mkcert"
+if [ -n "$LAN_IP" ] && [ -n "$MKCERT" ]; then
+  log "Certificado HTTPS local para $LAN_IP (mkcert)"
+  CERT_DIR="$HOME/.config/ruteando/certs"
+  mkdir -p "$CERT_DIR"
+  export RUTEANDO_HTTPS_CERT="$CERT_DIR/lan-$LAN_IP.pem"
+  export RUTEANDO_HTTPS_KEY="$CERT_DIR/lan-$LAN_IP-key.pem"
+  if [ ! -f "$RUTEANDO_HTTPS_CERT" ]; then
+    "$MKCERT" -cert-file "$RUTEANDO_HTTPS_CERT" -key-file "$RUTEANDO_HTTPS_KEY" "$LAN_IP" localhost 127.0.0.1
+  fi
+  CA_PEM="$("$MKCERT" -CAROOT)/rootCA.pem"
+  # El certificado RAÍZ (sin la llave) es lo único que el celular necesita
+  # instalar; se deja en Descargas de Windows para pasarlo por WhatsApp o USB.
+  WIN_DOWNLOADS="$(powershell.exe -NoProfile -Command '[Environment]::GetFolderPath("UserProfile") + "\Downloads"' 2>/dev/null | tr -d '\r')"
+  if [ -n "$WIN_DOWNLOADS" ] && CA_DEST="$(wslpath -u "$WIN_DOWNLOADS" 2>/dev/null)"; then
+    cp "$CA_PEM" "$CA_DEST/ruteando-certificado-local.crt" && CA_COPIED="$WIN_DOWNLOADS\ruteando-certificado-local.crt"
+  fi
+  HTTPS_OK=1
+elif [ -n "$LAN_IP" ]; then
+  warn "Sin mkcert: el celular solo podrá entrar por http (sin ubicación del celular). Para instalarlo:"
+  echo '    mkdir -p ~/.local/bin && curl -sSL -o ~/.local/bin/mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64 && chmod +x ~/.local/bin/mkcert'
 fi
 
 # ---------------------------------------------------------------------
@@ -179,6 +229,11 @@ if [ "$PROD_FRONTEND" -eq 1 ]; then
 else
   pm2 delete ruteando-frontend-prod >/dev/null 2>&1 || true
   pm2 startOrReload ecosystem.config.cjs --only ruteando-backend,ruteando-frontend
+fi
+if [ "$HTTPS_OK" -eq 1 ]; then
+  pm2 startOrReload ecosystem.config.cjs --only ruteando-https --update-env
+else
+  pm2 delete ruteando-https >/dev/null 2>&1 || true
 fi
 pm2 save >/dev/null
 
@@ -236,7 +291,7 @@ if [ -n "$LAN_IP" ]; then
       echo "New-NetFirewallRule -DisplayName 'Ruteando dev (LAN)' -Direction Inbound -Protocol TCP -LocalPort $(IFS=,; echo "${LAN_PORTS[*]}") -Action Allow | Out-Null"
       echo "netsh interface portproxy show v4tov4"
       echo "Write-Host ''"
-      echo "Write-Host 'Listo. Desde el celular: http://$LAN_IP:3001'"
+      echo "Write-Host 'Listo. Desde el celular: https://$LAN_IP:3443 (o http://$LAN_IP:3001)'"
     } >"$WIN_SCRIPT_WSL_PATH"
     echo "Script generado en: $WIN_SCRIPT_WIN_PATH"
   fi
@@ -282,7 +337,16 @@ pm2 list
 echo ""
 echo "En este computador:      http://localhost:3001"
 if [ -n "$LAN_IP" ]; then
-  if [ "$PORTPROXY_OK" -eq 1 ]; then
+  if [ "$PORTPROXY_OK" -eq 1 ] && [ "$HTTPS_OK" -eq 1 ]; then
+    echo "Desde el celular (LAN):  https://$LAN_IP:3443   <- con ubicación del celular"
+    echo "                         http://$LAN_IP:3001    (sin ubicación del celular)"
+    echo ""
+    echo "Solo la primera vez, en el celular: instalar el certificado local."
+    echo "  1. Pasa al celular el archivo ${CA_COPIED:-$CA_PEM} (WhatsApp a ti mismo o USB)."
+    echo "  2. Ajustes > Seguridad > Encriptación y credenciales > Instalar un certificado > Certificado de CA."
+    echo "     (En algunos Android: Ajustes > Contraseñas y seguridad > Privacidad > Más ajustes de seguridad.)"
+    echo "  3. Acepta el aviso y elige el archivo. Luego abre https://$LAN_IP:3443 en Chrome."
+  elif [ "$PORTPROXY_OK" -eq 1 ]; then
     echo "Desde el celular (LAN):  http://$LAN_IP:3001"
   else
     echo "Desde el celular (LAN):  http://$LAN_IP:3001  (pendiente de aprobar el permiso de Windows — ver arriba)"

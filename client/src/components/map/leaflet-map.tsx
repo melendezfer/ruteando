@@ -163,7 +163,7 @@ export function LeafletMap({
       <MarkerClusterGroup
         iconCreateFunction={(cluster) =>
           L.divIcon({
-            html: `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:9999px;background:var(--color-terracota);color:#fff;font-family:var(--font-sans, sans-serif);font-weight:600;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3);">${cluster.getChildCount()}</div>`,
+            html: `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:9999px;background:var(--color-surface);color:var(--color-terracota);font-family:var(--font-sans, sans-serif);font-weight:700;font-size:14px;border:2px solid var(--color-terracota);box-shadow:0 1px 4px rgba(0,0,0,.3);">${cluster.getChildCount()}</div>`,
             className: "f3-cluster-icon",
             iconSize: L.point(40, 40),
           })
@@ -211,8 +211,7 @@ export function LeafletMap({
       {/* Rastro de un ambulante compartiendo en vivo: por dónde pasó en los
           últimos 15 minutos (el servidor no guarda más). Fuera del
           MarkerClusterGroup a propósito — una línea no se agrupa; debajo
-          de los pines (overlayPane < markerPane). Mismo color de la
-          categoría que su pin. */}
+          de los pines (overlayPane < markerPane). Mismo morado que su pin. */}
       {businesses.map((business) => {
         const trail = business.liveLocation?.trail ?? [];
         if (trail.length < 2) return null;

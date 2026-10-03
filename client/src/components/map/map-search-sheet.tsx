@@ -71,7 +71,7 @@ export function MapSearchSheet({
   onClose,
 }: MapSearchSheetProps) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end px-3 pb-3">
+    <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 z-[1000] flex flex-col justify-end reserva-columna pb-3 pl-3">
       {/*
         Contenedor de top-8 a bottom-0, sin capturar toques (el mapa de
         arriba sigue usable): así la hoja nunca sube hasta la franja de
@@ -79,19 +79,19 @@ export function MapSearchSheet({
         (fix/credito-osm-visible, e2e/credito-osm.spec.ts). La hoja misma
         mide como mucho min(<alto de siempre>, 100% de este contenedor).
       */}
-      <div className="pointer-events-auto relative flex max-h-[min(75vh,100%)] flex-col rounded-card border border-border bg-surface shadow-lg">
+      <div data-search-sheet className="pointer-events-auto relative flex max-h-[min(75vh,100%)] flex-col rounded-card border border-border bg-surface shadow-lg">
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar búsqueda"
-          className="absolute -top-3 -right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
+          className="absolute -top-3 right-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow"
         >
           <X size={16} weight="bold" />
         </button>
 
         <div className="flex flex-col gap-3 p-4 pb-3">
           <div className="flex items-end gap-2">
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <SearchBar key={searchKey} onSearch={onSearch} userFirstName={userFirstName} />
             </div>
             {query && (

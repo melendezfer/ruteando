@@ -1207,6 +1207,14 @@ ruta — ver la nota bajo esa tabla.
 
 ## 20. Componente FloatingActionStack
 
+> **Vigente desde la Etapa 1b (§63, 2026-10-03):** el componente es ahora
+> la **columna de navegación** del costado derecho, zona media-baja:
+> botones uniformes de 44 px de arriba hacia abajo (sin círculo grande),
+> `actions` + `showTip`, sin `reserveSpace` (el contenido reserva la
+> franja con `.reserva-columna`). Ya no lo usa el perfil de negocio
+> (WhatsApp/Cómo llegar pasaron al contenido); solo `MainFloatingNav`. Lo
+> de abajo queda como registro de la versión anterior.
+
 `client/src/components/ui/floating-action-stack.tsx` — reemplaza, para
 cualquier pantalla que lo necesite, el patrón de "dos botones horizontales
 fijos" que describía originalmente el Documento 08 (ej. WhatsApp/Cómo
@@ -1829,6 +1837,9 @@ red). Cuando eso pasa, React nunca llega a hidratar — ningún efecto de
 peticiones de red de cualquier tipo. El código de `auth-context.tsx` es
 correcto — confirmado corriendo exactamente el mismo código, por la
 misma IP, en modo producción, sin ningún cambio.
+
+**Corregido después (§63, 2026-10-02)**: la causa real era
+`allowedDevOrigins` de Next, no la red; lo de abajo queda como registro.
 
 **Sin fix de aplicación posible**: si React nunca hidrata, ningún JS del
 lado del cliente llega a ejecutarse — no hay ningún `setTimeout` de
@@ -6848,3 +6859,207 @@ activa la acción) o al pasar el mouse (PC, `group-hover`, que en Tailwind
 4 solo aplica con puntero real). El `aria-label` no cambia nunca. Sin
 almacenamiento disponible, cada carga cuenta como primera visita (se ven).
 Prueba: `client/e2e/letreros-flotantes.spec.ts`.
+
+## 63. Perfil 2.0 — Etapa 1: Ajustes del negocio (C3) y paleta morada (Parte B)
+
+Spec: `docs/specs/perfil-2.md` (§2 paleta, §5 C3). Rama
+`feature/perfil-2-ajustes`, que sale de `feature/r5-estoy-vendiendo` (el
+usuario prueba R5 y el Perfil 2.0 juntos) con `develop` mezclado. Guía:
+`docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+**Ajustes del negocio** (`/negocios/[businessId]/ajustes`,
+`components/business/settings/`): seis familias plegables
+(`SettingsFamily`: `button` con `aria-expanded`/`aria-controls`, línea de
+resumen con la familia cerrada, contenido montado solo al abrir porque
+Leaflet no mide bien dentro de un bloque oculto). Los controles que ya
+existían se movieron sin cambiar su lógica; lo nuevo:
+- **Identidad** editable después del registro (R7): nombre, categoría,
+  descripción con contador (120 visibles, 500 máximo en esta pantalla; el
+  backend admite 2000).
+- **WhatsApp** editable. Cambiarlo ya quitaba la verificación en el backend
+  (`negocios.repository.js#actualizar`, verificado leyendo; la hipótesis de
+  que no lo hacía era falsa); la UI ahora lo avisa antes de guardar.
+- **Horario** editable (R7), reusando `ScheduleStep` del asistente
+  (`onBack` opcional, `submitLabel`).
+- **Referencia junto al mapa** en `LocationPinEditor` y aviso al mover el
+  pin más de `REFERENCE_PROMPT_THRESHOLD_METERS` (30 m) sin tocar la
+  referencia: "Moviste tu punto X m. ¿Cambió tu referencia?" (Guardar /
+  Sigue igual).
+- La pantalla pide el perfil en el navegador (con el token del dueño) para
+  recibir la ubicación exacta; otra persona ve "Solo el dueño…".
+- Los interruptores que usan `PATCH /businesses/{id}` reciben SIEMPRE los
+  valores vigentes (`patchBase`): si no, cambiar el nombre y después un
+  interruptor devolvía el nombre viejo (prueba e2e de regresión). Los
+  interruptores ganaron `onChange` opcional para mantener los resúmenes.
+
+**Perfil del dueño**: ya no apila los ajustes. Quedan la franja "Así ven tu
+negocio tus clientes" + botón **Ajustes del negocio** (el engranaje también
+lleva ahí; `/cuenta` queda al final de Ajustes como "Mi cuenta"), el estado
+del negocio, "Estoy vendiendo ahora" (R5), las preguntas de clientes, un
+aviso corto si falta verificar el teléfono (enlaza a Ajustes, donde
+Confianza abre sola) y la carta. Las acciones del día pasan al Tablero en
+la Etapa 2.
+
+**Paleta (Parte B)**: tokens `terracota-50`, `terracota-100` (solo fondos
+sin texto y bordes: 4.48:1), `verde-suave`, `rojo-suave`, `rojo-texto`,
+con sus pares en `tests/unit/contrasteTokens.test.js`. Botón secundario =
+grado 2 (borde y texto morados). `CategoryIcon` = ícono morado sobre
+`terracota-50`; pines del mapa morados con ícono blanco
+(`CATEGORY_PIN_COLOR` en `category-icons.ts`, único lugar para volver a un
+tinte por familia si las pruebas con personas lo piden — P2-01);
+`categorias.color` se conserva sin uso. Grupos de pines blancos con borde y
+número morados. Estados en versión suave: "Abierto ahora" (verde suave),
+"Cerrado ahora" (ámbar suave), destructivos en rojo suave; "No estoy
+vendiendo" dejó de ser rojo (no es destructivo). Botones de editar/eliminar
+producto y de responder preguntas pasaron de 36 a 44 px (spec §8).
+
+**Decisión**: medios de pago y zona/costo de domicilio (spec §7.3) necesitan
+migración y endpoints; se dejan para la Etapa 3, donde se muestran en
+"Cómo comprar" del perfil del cliente. "Cómo comprar" de Ajustes tiene por
+ahora WhatsApp, domicilios y bancas.
+
+**Hallazgo**: el `schema.ts` del cliente (generado, no versionado) había
+quedado sin las rutas de R5 tras mezclar ramas: `npm run generate:api`.
+El seed tiene dos "Arepas Doña Rosa" con dueños distintos; las pruebas
+buscan el negocio por `GET /users/me/businesses`, no por nombre.
+
+**Verificado**: backend 719/719; e2e 30/30 (7 nuevas en
+`client/e2e/ajustes-negocio.spec.ts`: perfil corto, familias y resúmenes,
+editar identidad sin que un interruptor pise el nombre, aviso al mover el
+pin >30 m y referencia guardada, solo referencia sin aviso, horario, otra
+persona sin acceso, 320 px sin desplazamiento horizontal); capturas a
+390 px del perfil del dueño, Ajustes y el mapa.
+
+### Correcciones tras la primera prueba de la Etapa 1 (2026-09-29)
+
+**Página principal del vendedor** (reemplaza el criterio de §38/§43).
+Causa, verificada leyendo el código y reproducida con una cuenta nueva: el
+único acceso al asistente ("Registrar negocio") vivía en `AppHeader`, que
+desapareció con la navegación flotante (§53), y solo se aterrizaba en
+negocios **activos**. Un vendedor recién registrado, sin negocio o con uno
+pendiente de aprobación, caía al mapa sin salida. Ahora
+(`lib/vendor/use-vendor-home-business.ts`, usado por `/` y `/perfil`):
+- sin negocio (o solo cerrados): `RegisterBusinessCard` destacada
+  ("Registra tu negocio" → `/negocios/nuevo`), en `/` y arriba de `/perfil`;
+- con negocio en cualquier estado salvo cerrado: su perfil de dueño (en la
+  Etapa 2, el tablero);
+- con varios: `pickCurrentBusiness` — el que su horario cubre ahora (turno
+  nocturno incluido, misma regla que el backend), si no el que abre más
+  pronto hoy, si no el primero activo. El selector "¿Cuál de tus negocios?"
+  (`VendorBusinessPicker`) se eliminó. En la Etapa 2 la decisión pasa al
+  servidor (spec §7.5).
+Prueba: `client/e2e/vendedor-inicio.spec.ts` (cuenta nueva por la pantalla
+de registro; el negocio abierto es el más viejo, para que no gane por orden).
+
+**Letreros de los flotantes**: NUNCA se muestran solos; solo al mantener
+presionado (táctil), al pasar el mouse o con foco de teclado (PC). La
+primera vez aparece un único aviso ("Mantén presionado un botón para ver
+qué hace. Entendido") que se cierra con un toque (`localStorage`
+`ruteando.flotantes.aviso-visto`). Por qué fallaba "primeras 3 visitas":
+contaba sesiones del navegador, y en el celular una pestaña o la PWA vive
+días con la misma sesión (además, `localhost` y la IP de la red local
+cuentan aparte), así que casi nunca pasaba de 3. El hover ya no es CSS
+(`group-hover`) sino `pointerType === "mouse"`: en táctil el `:hover` puede
+quedar pegado tras un toque (hipótesis sin verificar en un celular real).
+Prueba: `client/e2e/letreros-flotantes.spec.ts`, que falla con la regla
+vieja (comprobado reconstruyendo con el archivo anterior) y pasa con la
+nueva. e2e completas: 31/31.
+
+### Correcciones tras la segunda prueba (puntos 1 a 3, 2026-10-02)
+
+Guía: filas 13–17 de `docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+- **Ubicación sin trampa**: en el celular por http el navegador niega la
+  ubicación y el paso 2 solo tenía latitud/longitud a mano (vacías,
+  `Number("")` = 0 → "fuera de Cundinamarca"). Ahora `LocationStep` tiene un
+  mapa con pin arrastrable o que se mueve tocando el mapa
+  (`DraggablePinMap`, arranca en `CIUDAD_VERDE_CENTER`,
+  `lib/geo/ciudad-verde.ts`); las coordenadas quedan plegadas como opción
+  avanzada; `placed` evita guardar el centro que nadie eligió, y el mensaje
+  sin ubicar es "Falta ubicar tu negocio…".
+- **"Guardar y terminar después"** en todos los pasos (`WizardShell`):
+  guarda en el servidor lo que el paso permite sin mostrar errores, deja el
+  resto como borrador en este navegador (`lib/registration/draft.ts`,
+  `localStorage` por usuario) y sale al inicio. Se retoma desde "Continuar
+  mi registro" (`RegisterBusinessCard`) o desde el aviso "Tu registro no
+  está completo" del perfil del dueño (`/negocios/nuevo?negocio=<id>`, que
+  también reconstruye los pasos desde el servidor en otro dispositivo).
+- **HTTPS en la red local** (`scripts/dev-lan.sh` + `scripts/https-lan-proxy.cjs`,
+  pm2 `ruteando-https`, puerto 3443, certificado de mkcert para la IP; el
+  certificado raíz se copia a Descargas de Windows para instalarlo en el
+  celular). La API y las fotos van por la misma dirección de la página
+  (`NEXT_PUBLIC_API_BASE_URL=/api`, `STORAGE_PUBLIC_URL=/media`, rewrites en
+  `client/next.config.ts`): sin contenido mixto ni CORS. En el render del
+  servidor una ruta relativa no sirve: `client.ts` usa `API_INTERNAL_URL`.
+  Fotos subidas antes guardaron `http://IP:9000` y siguen así.
+- **Causa real del bug de §24 ("Cargando sesión…" por la IP con `next
+  dev`)**: no era la red de WSL. Next 16 rechaza el socket `/_next/hmr` si
+  el origen no está en `allowedDevOrigins` (handshake: 101 con
+  `Origin: localhost`, rechazo con la IP; el log de Next lo pedía). Se
+  agregó `allowedDevOrigins` desde `DEV_LAN_HOST` (lo escribe `dev-lan.sh`
+  en `client/.env.local`). Verificado con Playwright (Pixel 7): hidrata por
+  `http://IP:3001` y por `https://IP:3443`, y por https el navegador da la
+  ubicación. `--prod-frontend` deja de ser necesario para el celular (se
+  conserva).
+- **Pantallas angostas**: `min-w-0`/`shrink-0` en la barra de búsqueda (el
+  botón se salía de la hoja), X de cerrar de 44 px dentro de la hoja, las
+  hojas sobre el mapa dejan sitio abajo (`pb-24`) y con una hoja abierta la
+  navegación flotante queda en un solo círculo (`MainFloatingNav#compact`,
+  sin el aviso de letreros); horas del horario lado a lado.
+  Prueba: `client/e2e/sin-desbordes.spec.ts` (360/390/412 px; falla con el
+  código anterior: "Cerrar búsqueda se sale…").
+- **Carrusel**: `snap-start` + `scroll-px-3` (antes `snap-center`: la
+  primera tarjeta alineada a la izquierda y las demás centradas). Prueba:
+  `client/e2e/carrusel-alineado.spec.ts` (falla con el código anterior: 39
+  px de desfase).
+
+e2e completas: 43/43.
+
+### Etapa 1b — navegación: "Volver" + título arriba y columna derecha (2026-10-03)
+
+Pedido del usuario (cambia el punto 4: nada de barra de íconos arriba).
+Spec: `docs/specs/perfil-2.md` §8.1; lugar del ancla:
+`docs/integracion-ancla.md` §5.1 (DI-08). Guía: filas 18–22 de
+`docs/pruebas/perfil-2-etapa-1-prueba-manual.md`.
+
+- **Arriba**: `ScreenHeader` (`components/layout/screen-header.tsx`) con
+  solo "Volver" y el título en Buscar, Mi cuenta y Mi perfil (Ajustes ya lo
+  tenía). Sin íconos de acción arriba: en el perfil del negocio se fueron el
+  corazón (ahora junto al nombre) y el engranaje (ya estaba "Ajustes del
+  negocio" con texto); "Cerrar sesión" pasó al final de la cuenta.
+- **Columna** (`FloatingActionStack` reescrito, `MainFloatingNav`): 44 px,
+  a 12 px del borde derecho, borde inferior en `--columna-abajo` (`18vh` +
+  área segura), orden Buscar · Favoritos · Perfil · Ubicarme (solo con el
+  mapa visible). Contenedor `pointer-events-none` (sus huecos no bloquean
+  toques). Con hoja o teclado abiertos (`lib/ui/use-keyboard-open.ts`:
+  campo de texto con foco en táctil o `visualViewport` encogido >150 px),
+  un solo botón "Volver al mapa". Sin sesión, la columna no aparece.
+- **Franja reservada**: utilidad `.reserva-columna` (64 px, `globals.css`)
+  en el contenido de Buscar, Cuenta, Perfil, inicio del vendedor sin
+  negocio y perfil del negocio (no en su portada), en las tres hojas del
+  mapa y en la tarjeta de zonas. Las X de cerrar de las hojas pasaron a
+  44 px dentro de la hoja.
+- **Perfil del negocio**: WhatsApp y Cómo llegar dejan de ser flotantes;
+  van como dos botones en el contenido (adelanto de "Cómo comprar").
+- **Pruebas**: `client/e2e/columna-navegacion.spec.ts` (nueva, 360/390/412
+  px: posición, tamaño, orden, sin letreros, un botón con hoja y con
+  teclado, la hoja no pasa por la franja, arriba solo "Volver" y título);
+  `flotantes-no-tapan.spec.ts` ahora mira arriba, a la mitad y al final del
+  desplazamiento (falla si se quita la franja: comprobado). El aviso de la
+  primera vez tapa contenido hasta que se toca "Entendido" — las pruebas lo
+  cierran antes de medir.
+
+**Ajustes tras la prueba del usuario (2026-10-03):**
+- **El mapa siempre a un toque y en el mismo lugar**: la columna mantiene
+  el orden Buscar · Favoritos · Perfil · mapa; el último es "Ubicarme" en
+  el mapa y "Mapa" en el resto (en el perfil del vendedor había
+  desaparecido). Se agregó la columna a Ajustes, al asistente de registro
+  y a los textos legales con sesión (`SessionNav`). Reducida a un botón,
+  queda en el mismo sitio. Prueba: `client/e2e/acceso-al-mapa.spec.ts`
+  recorre todas las rutas de `src/app` con consumidor, dueño y vendedor
+  nuevo; una ruta sin clasificar o sin el botón del mapa (o con él en otro
+  lugar) la hace fallar (comprobado quitando la columna de Ajustes).
+- **Aviso de la primera vez**: pequeño (52 px de ancho, dentro de la
+  franja), `pointer-events: none` y se cierra con cualquier toque
+  (`pointerdown` en el documento). `flotantes-no-tapan` ya no lo cierra y
+  falla si su caja se cruza con un texto o control.

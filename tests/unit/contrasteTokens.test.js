@@ -65,6 +65,12 @@ const PARES = [
   ['estrella marcada sobre surface (calificar)', () => T('estrella'), () => T('surface'), GRAFICO],
   ['estrella vacía sobre surface (calificar)', () => T('borde-control'), () => T('surface'), GRAFICO],
   ['ícono de oferta mostaza sobre mostaza/15', () => T('estrella'), () => mezcla(T('mostaza'), BLANCO, 0.15), GRAFICO],
+  // Perfil 2.0, Parte B (docs/specs/perfil-2.md §2.3)
+  ['terracota sobre terracota-50 (grado 2, íconos de categoría)', () => T('terracota'), () => T('terracota-50'), TEXTO],
+  ['verde-texto sobre verde-suave (vendiendo, abierto)', () => T('verde-texto'), () => T('verde-suave'), TEXTO],
+  ['rojo-texto sobre rojo-suave (destructivo)', () => T('rojo-texto'), () => T('rojo-suave'), TEXTO],
+  ['rojo-texto sobre surface', () => T('rojo-texto'), () => T('surface'), TEXTO],
+  ['terracota sobre terracota-100 (solo íconos y bordes: 4.48:1, nunca texto)', () => T('terracota'), () => T('terracota-100'), GRAFICO],
 ];
 
 describe('contraste AA de los tokens de color (globals.css)', () => {

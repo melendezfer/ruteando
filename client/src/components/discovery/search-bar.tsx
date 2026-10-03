@@ -37,7 +37,8 @@ export function SearchBar({ onSearch, userFirstName }: SearchBarProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex items-end gap-2">
-      <div className="flex-1">
+      {/* min-w-0: sin esto el campo no se encoge y empuja el botón fuera de la hoja en pantallas angostas. */}
+      <div className="min-w-0 flex-1">
         <TextField
           label="Buscar"
           placeholder={userFirstName ? `¿Qué buscas, ${userFirstName}?` : "Nombre del negocio, producto o servicio"}
@@ -45,7 +46,7 @@ export function SearchBar({ onSearch, userFirstName }: SearchBarProps) {
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
-      <Button type="submit" aria-label="Buscar">
+      <Button type="submit" aria-label="Buscar" className="shrink-0 px-4">
         <MagnifyingGlass size={20} weight="bold" />
       </Button>
     </form>

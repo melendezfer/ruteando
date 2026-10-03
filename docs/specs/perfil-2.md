@@ -112,7 +112,7 @@ Ruta: `/negocios/[id]` (sigue siendo SSR por la vista previa de WhatsApp, CLAUDE
 
 ### 3.1 Encabezado (visible sin desplazar en 390×844)
 
-1. **Portada baja**, ~1/3 de la pantalla (260 px en 844). Sin foto: el ícono de categoría grande sobre `terracota-50`. Encima, fijos: **Volver** (arriba a la izquierda) y **Favorito** (arriba a la derecha; sin sesión no aparece).
+1. **Portada baja**, ~1/3 de la pantalla (260 px en 844). Sin foto: el ícono de categoría grande sobre `terracota-50`. Encima, fijo: solo **Volver** (arriba a la izquierda). **Favorito** va junto al nombre (sin sesión no aparece) — arriba no hay íconos de acción (§8.1).
 2. **Estado**, una línea, en este orden de prioridad:
    - "Vendiendo ahora · confirmado hace X" (`SealCheck`, verde suave) — R5;
    - ambulante dentro de una franja: "Ahora por: Salida del colegio" (`ShoppingCartSimple`);
@@ -159,7 +159,7 @@ Presupuesto vertical en 390×844 (sin la barra del navegador): portada 260 + est
 
 ### 3.5 Reglas
 
-- **Sin botones flotantes en el perfil**: sus acciones ya están en "Cómo comprar". "Volver al mapa" pasa a ser el botón Volver.
+- **Sin botones de acción flotantes en el perfil**: sus acciones ya están en "Cómo comprar". "Volver al mapa" pasa a ser el botón Volver. Con sesión queda la columna de navegación de toda la app (§8.1).
 - **Visitante sin sesión:** sin Favorito, sin "¿Está vendiendo ahora?" y sin calificar (ver "Inicia sesión" dentro del acordeón).
 - **El dueño que abre su propio perfil** ve la vista de cliente con una franja arriba: "Así ven tu negocio tus clientes · Volver a mi tablero".
 
@@ -171,7 +171,7 @@ Ruta: la de hoy para el vendedor con negocio activo (CLAUDE.md §38/§43), `/neg
 
 ### 4.1 Encabezado
 
-"Domingo 28 · 6:30 p. m." — "Mis negocios de hoy" — engranaje (`Gear`) → Ajustes del negocio.
+"Domingo 28 · 6:30 p. m." — "Mis negocios de hoy". **Ajustes del negocio** va como botón con texto dentro del contenido (no un engranaje arriba: §8.1).
 
 ### 4.2 Varios negocios: AHORA y DESPUÉS
 
@@ -299,6 +299,18 @@ Todo con migración versionada, `openapi.yaml`, validación en servidor y autori
 
 ---
 
+### 8.1 Navegación: encabezado y columna derecha (Etapa 1b, 2026-10-03)
+
+Pedido del usuario; el mismo lugar que ocupará el botón-ancla (`docs/integracion-ancla.md` §5.1, DI-08).
+
+- **Arriba** solo "Volver" y el título (`ScreenHeader`), donde haga falta: Buscar, Mi cuenta, Mi perfil, Ajustes. El mapa no lleva encabezado (carrusel arriba); el perfil del negocio, solo "Volver" sobre la portada. Ningún ícono de acción arriba: Favorito va junto al nombre, Ajustes del negocio como botón con texto, Cerrar sesión al final de la cuenta.
+- **Columna derecha, zona media-baja**, siempre en el mismo orden: Buscar, Favoritos, Perfil y, al final, **el mapa** — "Ubicarme" en el mapa, "Mapa" en cualquier otra pantalla. Regla (2026-10-03): con sesión, volver al mapa está siempre a un toque y en el mismo lugar, en todas las pantallas del consumidor y del vendedor (incluidos Ajustes, el asistente de registro y los textos legales). Botones de 44 px, a 12 px del borde, borde inferior a `18vh` + área segura. Sin letreros a la vista: el nombre aparece al mantener presionado (táctil) o al pasar el mouse (PC).
+- **Aviso de la primera vez**: pequeño ("Mantén pulsado para ver el nombre"), dentro de la franja reservada encima de la columna, no tapa contenido ni bloquea toques, y se cierra con cualquier toque en la pantalla.
+- **Franja reservada** (`.reserva-columna`, 64 px): el contenido, las hojas del mapa y los avisos (tarjeta de zonas) la dejan libre; nada queda debajo de la columna en ninguna posición del desplazamiento. Excepción: la portada del perfil (foto, sin texto ni controles).
+- **Hoja o teclado abiertos**: un solo botón, "Volver al mapa", en el mismo lugar que el último de la columna (en el mapa cierra la hoja).
+- **Sin sesión** (enlace compartido): solo "Volver"; la columna no aparece.
+- **WhatsApp y Cómo llegar** dejan de ser flotantes: van en el contenido del perfil, debajo de las insignias (adelanto de "Cómo comprar", §3.1).
+
 ## 9. Pruebas
 
 - **Backend:** secciones (CRUD, orden, autorización 401/403/404), destacados (tope 3, concurrencia), medios de pago (validación del ENUM), estadísticas (conteos correctos, comparación de semanas, sin datos personales, 403 a otro vendedor, plan de ejecución con índice), negocios de hoy (orden AHORA/DESPUÉS con horarios nocturnos).
@@ -338,11 +350,16 @@ Cada entrega: su rama desde `develop`, pruebas, guía de prueba manual y **prueb
 
 ---
 
+## 11.1 Avance
+
+- **Etapa 1 (2026-09-29, `feature/perfil-2-ajustes`)**: paleta (entrega 1) y C3 Ajustes con R7 (identidad y horario), WhatsApp editable y referencia junto al mapa. Medios de pago y zona/costo de domicilio pasan a la Etapa 3 (con C1). Detalle: CLAUDE.md §63.
+- **Etapa 1b (2026-10-03, misma rama)**: navegación §8.1 (encabezado "Volver" + título, columna derecha, franja reservada, un solo botón con hoja o teclado). Pruebas a 360, 390 y 412 px: `client/e2e/columna-navegacion.spec.ts` y `flotantes-no-tapan.spec.ts`.
+
 ## 12. Decisiones pendientes
 
 | ID | Pregunta | Propuesta |
 |---|---|---|
-| P2-01 | ¿Pines morados o con tinte por familia? | Morados (§2.4); revisar en I6 |
+| P2-01 | ¿Pines morados o con tinte por familia? | Morados (§2.4), **aplicado en la Etapa 1**; revisar en I6 |
 | P2-02 | ¿Ruta del tablero? | `/tablero`; `/perfil` sigue llevando ahí al vendedor |
 | P2-03 | ¿Las secciones de la carta son libres o de una lista? | Libres (texto del vendedor), con sugerencias según la categoría |
 | P2-04 | ¿Medio de pago por defecto? | `efectivo`, para no dejar el recuadro vacío |

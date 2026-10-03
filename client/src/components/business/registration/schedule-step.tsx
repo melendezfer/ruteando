@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import type { components } from "@/lib/api/schema";
 
@@ -19,10 +19,14 @@ interface ScheduleStepProps {
   submitting: boolean;
   error: string | null;
   onSubmit: (values: WeekSchedule) => void;
-  onBack: () => void;
+  /** Sin él no hay botón "Atrás" (Ajustes del negocio reusa este editor fuera del asistente). */
+  onBack?: () => void;
+  submitLabel?: string;
+  /** Cada cambio, para "Guardar y terminar después" (lo guarda el asistente). */
+  onValuesChange?: (values: WeekSchedule) => void;
 }
 
-const DAYS: { value: Day; label: string }[] = [
+export const DAYS: { value: Day; label: string }[] = [
   { value: "monday", label: "Lunes" },
   { value: "tuesday", label: "Martes" },
   { value: "wednesday", label: "Miércoles" },
@@ -38,6 +42,23 @@ export const DEFAULT_WEEK_SCHEDULE: WeekSchedule = DAYS.reduce((acc, { value }) 
 }, {} as WeekSchedule);
 
 /**
+ * GET .../schedule trae solo los días guardados; el que falta, cerrado.
+ * Horas "HH:MM" (el backend puede devolver segundos).
+ */
+export function scheduleFromRows(rows: components["schemas"]["ScheduleDay"][]): WeekSchedule {
+  const week = {} as WeekSchedule;
+  for (const { value } of DAYS) week[value] = { openTime: "08:00", closeTime: "18:00", closed: true };
+  for (const row of rows) {
+    week[row.day] = {
+      openTime: (row.openTime ?? "08:00").slice(0, 5),
+      closeTime: (row.closeTime ?? "18:00").slice(0, 5),
+      closed: Boolean(row.closed) || !row.openTime || !row.closeTime,
+    };
+  }
+  return week;
+}
+
+/**
  * Paso 3 del asistente (RF-008): horario por día de la semana, usado
  * después para calcular "abierto ahora" en la Épica 4. El backend permite
  * turnos que cruzan medianoche (closeTime < openTime, ej. 18:00–02:00) —
@@ -46,9 +67,21 @@ export const DEFAULT_WEEK_SCHEDULE: WeekSchedule = DAYS.reduce((acc, { value }) 
  * antes de enviar es esa misma igualdad, para no hacer un viaje redondo
  * al servidor por un error que ya se puede detectar en el cliente.
  */
-export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBack }: ScheduleStepProps) {
+export function ScheduleStep({
+  initialValues,
+  submitting,
+  error,
+  onSubmit,
+  onBack,
+  submitLabel = "Finalizar registro",
+  onValuesChange,
+}: ScheduleStepProps) {
   const [schedule, setSchedule] = useState<WeekSchedule>(initialValues);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onValuesChange?.(schedule);
+  }, [schedule, onValuesChange]);
 
   function updateDay(day: Day, patch: Partial<DaySchedule>) {
     setSchedule((prev) => ({ ...prev, [day]: { ...prev[day], ...patch } }));
@@ -93,8 +126,8 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
                 </label>
               </div>
               {!day.closed && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="flex flex-col gap-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex min-w-0 flex-col gap-1">
                     <span className="font-sans text-caption font-medium uppercase tracking-wide text-text-muted">
                       Apertura
                     </span>
@@ -103,10 +136,10 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
                       required
                       value={day.openTime}
                       onChange={(event) => updateDay(value, { openTime: event.target.value })}
-                      className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                      className="w-full min-w-0 rounded-input border border-borde-control px-2 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1">
+                  <label className="flex min-w-0 flex-col gap-1">
                     <span className="font-sans text-caption font-medium uppercase tracking-wide text-text-muted">
                       Cierre
                     </span>
@@ -115,7 +148,7 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
                       required
                       value={day.closeTime}
                       onChange={(event) => updateDay(value, { closeTime: event.target.value })}
-                      className="rounded-input border border-borde-control px-3 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                      className="w-full min-w-0 rounded-input border border-borde-control px-2 py-2 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
                     />
                   </label>
                 </div>
@@ -130,11 +163,13 @@ export function ScheduleStep({ initialValues, submitting, error, onSubmit, onBac
       )}
 
       <div className="mt-auto flex gap-3 pt-2">
-        <Button type="button" variant="secondary" onClick={onBack} className="flex-1">
-          Atrás
-        </Button>
+        {onBack && (
+          <Button type="button" variant="secondary" onClick={onBack} className="flex-1">
+            Atrás
+          </Button>
+        )}
         <Button type="submit" loading={submitting} className="flex-1">
-          Finalizar registro
+          {submitLabel}
         </Button>
       </div>
     </form>

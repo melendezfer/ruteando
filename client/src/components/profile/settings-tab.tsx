@@ -353,7 +353,7 @@ export function SettingsTab({ user }: SettingsTabProps) {
         </section>
       )}
 
-      <section className="flex flex-col gap-3 rounded-card border border-rojo/30 bg-rojo/5 px-4 py-4">
+      <section className="flex flex-col gap-3 rounded-card border border-rojo-texto/30 bg-rojo-suave px-4 py-4">
         <h2 className="font-heading text-title-2 font-semibold text-text">Eliminar cuenta</h2>
 
         {deletionRequest ? (
@@ -376,7 +376,7 @@ export function SettingsTab({ user }: SettingsTabProps) {
               type="button"
               variant="secondary"
               onClick={() => setShowDeletionModal(true)}
-              className="w-full justify-center gap-2 border-rojo text-rojo hover:bg-rojo/10"
+              className="w-full justify-center gap-2 border-rojo-texto bg-surface text-rojo-texto hover:bg-rojo-suave"
             >
               <Warning size={18} weight="bold" />
               Solicitar eliminación de mi cuenta y mis datos

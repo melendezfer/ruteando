@@ -116,7 +116,7 @@ export function ProductRow({
   // Lookup directo contra la tabla (regla react-hooks/static-components).
   const OfferIcon = (offerTypeIcon && OFFER_TYPE_ICON_BY_NAME[offerTypeIcon]) || DEFAULT_OFFER_TYPE_ICON;
   const offerBadge = product.validFrom && (
-    <span className="inline-flex items-center gap-1 rounded-full bg-terracota/10 px-2 py-1 font-sans text-caption font-medium text-terracota">
+    <span className="inline-flex items-center gap-1 rounded-full bg-terracota-50 px-2 py-1 font-sans text-caption font-medium text-terracota">
       <OfferIcon size={12} weight="bold" />
       {offerTypeName ?? "Oferta"}
     </span>
@@ -176,7 +176,7 @@ export function ProductRow({
                 type="button"
                 onClick={() => onEdit(product)}
                 aria-label={`Editar ${product.name ?? "ítem"}`}
-                className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-text-muted transition-colors hover:bg-background"
+                className="flex h-11 w-11 items-center justify-center rounded-input border border-border text-text-muted transition-colors hover:bg-background"
               >
                 <PencilSimple size={16} weight="bold" />
               </button>
@@ -185,7 +185,7 @@ export function ProductRow({
                 onClick={handleDelete}
                 disabled={deleting}
                 aria-label={`Eliminar ${product.name ?? "ítem"}`}
-                className="flex h-9 w-9 items-center justify-center rounded-input border border-border text-rojo transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-11 w-11 items-center justify-center rounded-input border border-rojo-texto/30 bg-rojo-suave text-rojo-texto transition-colors hover:bg-rojo-suave disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash size={16} weight="bold" />
               </button>

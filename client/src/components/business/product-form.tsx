@@ -211,7 +211,7 @@ export function ProductForm({
             maxLength={2000}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+            className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
           />
         </div>
 
@@ -249,7 +249,7 @@ export function ProductForm({
                 id="product-offer-type"
                 value={offerTypeId ?? ""}
                 onChange={(event) => setOfferTypeId(event.target.value ? Number(event.target.value) : null)}
-                className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+                className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
               >
                 <option value="">Sin tipo</option>
                 {offerTypes.map((type) => (

@@ -90,7 +90,7 @@ export function DetailsStep({
           value={categoryId}
           onChange={(event) => setCategoryId(event.target.value ? Number(event.target.value) : "")}
           className={`rounded-input border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40 ${
-            fieldErrors.categoryId ? "border-rojo" : "border-border"
+            fieldErrors.categoryId ? "border-rojo" : "border-borde-control"
           }`}
         >
           <option value="">{categoriesLoading ? "Cargando categorías…" : "Selecciona una categoría"}</option>
@@ -115,7 +115,7 @@ export function DetailsStep({
           maxLength={2000}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
-          className="rounded-input border border-border px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
+          className="rounded-input border border-borde-control px-4 py-3 font-sans text-body text-text outline-none focus:ring-2 focus:ring-terracota/40"
         />
       </div>
 

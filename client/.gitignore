@@ -45,3 +45,11 @@ next-env.d.ts
 # ../openapi.yaml — nunca se comitea, se regenera solo (ver scripts
 # predev/prebuild en package.json).
 src/lib/api/schema.ts
+
+# playwright (e2e/)
+/test-results/
+/playwright-report/
+
+# Playwright
+/test-results/
+/playwright-report/
